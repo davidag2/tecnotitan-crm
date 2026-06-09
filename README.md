@@ -20,6 +20,8 @@ El proyecto incluye:
 - Scoring para inversionistas.
 - Interfaz web local.
 - Prototipo desktop con Electron.
+- Proyecto Supabase cloud separado de Copiloto Pyme.
+- API serverless en Vercel para dashboard, leads y busqueda Apollo.
 
 ## Seguridad
 
@@ -31,9 +33,14 @@ Usa `.env.example` como plantilla:
 APOLLO_API_KEY=pon_tu_api_key_aqui
 APOLLO_BASE_URL=https://api.apollo.io
 DATABASE_URL=postgresql://usuario:password@127.0.0.1:5432/tecnotitan_crm
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=solo_en_backend_o_vercel
+CRM_ADMIN_TOKEN=token_privado_para_uso_interno
 ```
 
 La base `copiloto_pyme` no debe tocarse.
+
+Para Vercel, `SUPABASE_SERVICE_ROLE_KEY`, `APOLLO_API_KEY` y `CRM_ADMIN_TOKEN` deben configurarse como variables privadas. No deben aparecer en `public/`, ni en codigo frontend, ni en commits.
 
 ## Ejecutar Backend Web Local
 
@@ -68,4 +75,9 @@ dist\Tecnotitan CRM 0.1.0.exe
 
 ## Siguiente Enfoque
 
-El proyecto se va a evolucionar hacia software web desplegable, manteniendo la integracion con Apollo y PostgreSQL.
+El proyecto ahora evoluciona hacia CRM web cloud:
+
+- Vercel sirve la interfaz desde `public/`.
+- Vercel Functions vive en `api/`.
+- Supabase guarda empresas, contactos, oportunidades y busquedas.
+- Apollo Search se ejecuta desde backend serverless para proteger la API key.

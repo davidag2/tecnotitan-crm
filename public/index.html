@@ -29,36 +29,26 @@
           <h1>Tecnotitan CRM</h1>
           <p>Prospeccion B2B para consultoria e inversionistas con Apollo.io.</p>
         </div>
-        <span class="environment">Preview Web</span>
+        <span class="environment">Web Cloud</span>
       </header>
 
       <section class="notice">
-        <strong>Version desplegable en Vercel</strong>
-        <p>Esta version no usa tu PostgreSQL local ni expone la API key de Apollo. La conexion cloud se hara con variables seguras y una base PostgreSQL remota.</p>
+        <strong id="system-status">Cargando estado del sistema...</strong>
+        <p>La web usa funciones seguras en Vercel para llamar Apollo y guardar leads en Supabase.</p>
       </section>
 
-      <section class="metrics" id="dashboard">
-        <article>
-          <span>Mercados consultoria</span>
-          <strong>10</strong>
-          <small>LATAM prioritario</small>
-        </article>
-        <article>
-          <span>Regiones inversion</span>
-          <strong>3</strong>
-          <small>USA, LATAM, Europa</small>
-        </article>
-        <article>
-          <span>Plantillas Apollo</span>
-          <strong>4</strong>
-          <small>Listas para integrar</small>
-        </article>
-        <article>
-          <span>Estado</span>
-          <strong>MVP</strong>
-          <small>Web preview</small>
-        </article>
+      <section class="panel compact-auth">
+        <div class="panel-title">
+          <h2>Acceso interno</h2>
+          <p>Token privado del CRM para operar la API web.</p>
+        </div>
+        <div class="auth-row">
+          <input id="token-input" type="password" placeholder="CRM_ADMIN_TOKEN">
+          <button id="save-token" type="button">Conectar</button>
+        </div>
       </section>
+
+      <section class="metrics" id="metrics"></section>
 
       <section class="panel" id="apollo">
         <div class="panel-title">
@@ -66,6 +56,20 @@
           <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
         </div>
         <div class="template-grid" id="templates"></div>
+        <div class="action-row">
+          <button id="run-search" type="button">Buscar 10 leads</button>
+          <span id="search-status"></span>
+        </div>
+      </section>
+
+      <section class="panel" id="dashboard">
+        <div class="panel-title">
+          <h2>Leads recientes</h2>
+          <p>Contactos guardados en Supabase despues de buscar en Apollo.</p>
+        </div>
+        <div class="lead-list" id="leads">
+          <p class="empty">Conecta el token interno para cargar leads.</p>
+        </div>
       </section>
 
       <section class="panel" id="pipeline">
@@ -105,11 +109,11 @@
           <p>Para convertir el preview en CRM web funcional.</p>
         </div>
         <ul class="roadmap">
-          <li>Crear backend serverless para Apollo Search.</li>
-          <li>Conectar PostgreSQL cloud, no la base local.</li>
+          <li>Agregar login real con Supabase Auth.</li>
+          <li>Crear vistas de detalle para contacto, empresa y oportunidad.</li>
           <li>Agregar autenticacion interna.</li>
-          <li>Guardar API key de Apollo en Vercel Environment Variables.</li>
-          <li>Construir tabla real de leads y pipelines.</li>
+          <li>Construir tabla avanzada con filtros, notas y seguimiento.</li>
+          <li>Agregar importacion CSV y campañas de seguimiento.</li>
         </ul>
       </section>
     </main>
