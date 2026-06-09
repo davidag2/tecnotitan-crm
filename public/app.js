@@ -1,6 +1,6 @@
 const state = {
   token: sessionStorage.getItem("tecnotitan_crm_session") || "",
-  username: localStorage.getItem("tecnotitan_crm_username") || "david",
+  username: "",
   templates: [],
   users: [],
   searches: [],
@@ -806,11 +806,10 @@ async function login() {
       headers: { Authorization: "" },
     });
     state.token = payload.token;
-    state.username = payload.username;
     state.currentUser = payload.user;
     sessionStorage.setItem("tecnotitan_crm_session", state.token);
-    localStorage.setItem("tecnotitan_crm_username", state.username);
     elements.passwordInput.value = "";
+    elements.usernameInput.value = "";
     showApp();
     setStatus("Sesion iniciada.", "ok");
     await loadPrivateData();
@@ -838,7 +837,8 @@ function logout() {
   setLoginStatus("Sesion cerrada.", "ok");
 }
 
-elements.usernameInput.value = state.username;
+localStorage.removeItem("tecnotitan_crm_username");
+elements.usernameInput.value = "";
 elements.loginButton.addEventListener("click", login);
 elements.passwordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") login();
