@@ -472,11 +472,14 @@ function renderLeadDetail(detail) {
   elements.detailSubtitle.textContent = `${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} · ${opportunity.target_region}`;
   elements.detailContact.innerHTML = [
     line("Cargo", contact.title),
+    line("Senioridad", contact.seniority),
     line("Email", contact.email),
+    line("Estado email", contact.email_status),
     line("Telefono", contact.mobile_phone || contact.phone),
     line("LinkedIn", contact.linkedin_url),
-    line("Ubicacion", [contact.city, contact.country].filter(Boolean).join(", ")),
+    line("Ubicacion", [contact.city, contact.state, contact.country].filter(Boolean).join(", ")),
     line("Enriquecimiento", contact.apollo_enrichment_status),
+    line("Actualizado Apollo", contact.apollo_enriched_at ? new Date(contact.apollo_enriched_at).toLocaleString("es-CO") : ""),
   ].join("");
   elements.detailCompany.innerHTML = [
     line("Empresa", company.name),
@@ -781,11 +784,19 @@ async function enrichLead(opportunityId, button) {
   button.disabled = true;
   button.textContent = "Obteniendo...";
   try {
-    await api("/api/apollo-enrich", {
+    const result = await api("/api/apollo-enrich", {
       method: "POST",
       body: JSON.stringify({ opportunity_id: opportunityId }),
     });
     await loadPrivateData();
+    await openLeadDetail(opportunityId);
+    if (result.has_email || result.has_phone) {
+      setStatus("Detalles Apollo actualizados.", "ok");
+    } else if (result.enriched) {
+      setStatus("Apollo enriquecio el lead, pero no devolvio email ni telefono disponible.", "warning");
+    } else {
+      setStatus("Apollo no encontro detalles adicionales para este lead.", "warning");
+    }
   } catch (error) {
     setStatus(error.message, "warning");
   } finally {
