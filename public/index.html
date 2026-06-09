@@ -41,6 +41,7 @@
         <nav>
           <a class="active" href="#dashboard">Dashboard</a>
           <a href="#apollo">Apollo</a>
+          <a class="admin-only" href="#busquedas">Busquedas</a>
           <a class="admin-only" href="#usuarios">Usuarios</a>
           <a href="#pipeline">Pipeline</a>
           <a href="#roadmap">Roadmap</a>
@@ -118,6 +119,17 @@
             <button id="get-investor-leads" type="button">Obtener 25 leads de inversionista</button>
             <span id="search-status"></span>
           </div>
+        </section>
+
+        <section class="panel admin-only" id="busquedas">
+          <div class="panel-title">
+            <h2>Historial Apollo</h2>
+            <p>Consulta las busquedas guardadas, filtros usados y leads obtenidos.</p>
+          </div>
+          <div class="search-history" id="search-history">
+            <p class="empty">Inicia sesion para cargar historial.</p>
+          </div>
+          <div class="search-results hidden" id="search-results"></div>
         </section>
 
         <section class="panel" id="dashboard">

@@ -3,6 +3,7 @@ const state = {
   username: localStorage.getItem("tecnotitan_crm_username") || "david",
   templates: [],
   users: [],
+  searches: [],
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
 };
@@ -17,6 +18,8 @@ const elements = {
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
   templates: document.querySelector("#templates"),
+  searchHistory: document.querySelector("#search-history"),
+  searchResults: document.querySelector("#search-results"),
   leads: document.querySelector("#leads"),
   userList: document.querySelector("#user-list"),
   leadSearch: document.querySelector("#lead-search"),
@@ -169,6 +172,121 @@ function renderFollowups(data) {
   renderFollowupList(elements.followupsOverdue, data.overdue || []);
   renderFollowupList(elements.followupsToday, data.today || []);
   renderFollowupList(elements.followupsUpcoming, data.upcoming || []);
+}
+
+function leadTypeLabel(type) {
+  return type === "investor" ? "Inversionista" : "Consultoria";
+}
+
+function regionLabel(region) {
+  const labels = { latam: "LATAM", usa: "USA", europe: "Europa" };
+  return labels[region] || region || "Region";
+}
+
+function readableFilters(filters) {
+  const data = filters || {};
+  const pieces = [];
+  if (Array.isArray(data.person_titles) && data.person_titles.length) {
+    pieces.push(`Cargos: ${data.person_titles.slice(0, 4).join(", ")}`);
+  }
+  if (Array.isArray(data.organization_locations) && data.organization_locations.length) {
+    pieces.push(`Ubicaciones: ${data.organization_locations.slice(0, 4).join(", ")}`);
+  }
+  if (Array.isArray(data.person_locations) && data.person_locations.length) {
+    pieces.push(`Personas: ${data.person_locations.slice(0, 4).join(", ")}`);
+  }
+  if (Array.isArray(data.organization_num_employees_ranges) && data.organization_num_employees_ranges.length) {
+    pieces.push(`Empleados: ${data.organization_num_employees_ranges.join(", ")}`);
+  }
+  return pieces.length ? pieces.join(" | ") : "Filtros base de la plantilla";
+}
+
+function renderSearchResults(results) {
+  if (!elements.searchResults) return;
+  if (!results.length) {
+    elements.searchResults.classList.remove("hidden");
+    elements.searchResults.innerHTML = `<p class="empty">Esta busqueda no tiene resultados guardados.</p>`;
+    return;
+  }
+
+  elements.searchResults.classList.remove("hidden");
+  elements.searchResults.innerHTML = `
+    <div class="search-results-title">
+      <h3>Leads de la busqueda seleccionada</h3>
+      <span>${results.length} resultados</span>
+    </div>
+    <div class="search-result-list">
+      ${results
+        .map((row) => {
+          const opportunity = row.opportunities || {};
+          const contact = opportunity.contacts || {};
+          const company = opportunity.companies || {};
+          return `
+            <article class="search-result-row">
+              <div>
+                <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+                <span>${contact.title || "Cargo no disponible"}</span>
+                <small>${company.name || "Empresa no disponible"} | ${contact.country || company.country || "Sin pais"}</small>
+              </div>
+              <div>
+                <strong>${leadTypeLabel(opportunity.lead_type)}</strong>
+                <span>${regionLabel(opportunity.target_region)} | ${opportunity.pipeline_status || "nuevo"}</span>
+                <small>Score ${opportunity.score ?? "-"} ${opportunity.score_label || ""}</small>
+              </div>
+              <button class="secondary" type="button" data-open-detail="${opportunity.id || ""}">Ver detalle</button>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+
+  elements.searchResults.querySelectorAll("[data-open-detail]").forEach((button) => {
+    if (!button.dataset.openDetail) {
+      button.disabled = true;
+      return;
+    }
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+}
+
+function renderSearchHistory(searches) {
+  if (!elements.searchHistory) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.searchHistory.innerHTML = "";
+    if (elements.searchResults) elements.searchResults.classList.add("hidden");
+    return;
+  }
+
+  if (!searches.length) {
+    elements.searchHistory.innerHTML = `<p class="empty">Todavia no hay busquedas Apollo guardadas.</p>`;
+    if (elements.searchResults) elements.searchResults.classList.add("hidden");
+    return;
+  }
+
+  elements.searchHistory.innerHTML = searches
+    .map(
+      (search) => `
+        <article class="search-card">
+          <div>
+            <strong>${search.name}</strong>
+            <span>${leadTypeLabel(search.lead_type)} | ${regionLabel(search.target_region)} | ${search.search_template}</span>
+            <small>${readableFilters(search.filters)}</small>
+          </div>
+          <div class="search-card-stats">
+            <span>${search.results_saved || 0} guardados</span>
+            <span>${search.total_entries || 0} posibles</span>
+            <span>${new Date(search.created_at).toLocaleString("es-CO")}</span>
+          </div>
+          <button class="secondary" type="button" data-open-search="${search.id}">Ver leads</button>
+        </article>
+      `
+    )
+    .join("");
+
+  elements.searchHistory.querySelectorAll("[data-open-search]").forEach((button) => {
+    button.addEventListener("click", () => openSearchResults(button.dataset.openSearch));
+  });
 }
 
 function applyRoleVisibility() {
@@ -505,17 +623,20 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
       api("/api/followups"),
+      api("/api/leads?mode=search_history").catch(() => ({ searches: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
+    state.searches = searchHistory.searches || [];
     renderMetrics(dashboard);
     renderFollowups(followups);
     renderUsers();
+    renderSearchHistory(state.searches);
     renderLeads(leads.leads || []);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
@@ -524,6 +645,15 @@ async function loadPrivateData() {
     sessionStorage.removeItem("tecnotitan_crm_session");
     showLogin();
     setLoginStatus(error.message, "warning");
+  }
+}
+
+async function openSearchResults(searchId) {
+  try {
+    const data = await api(`/api/leads?search_id=${encodeURIComponent(searchId)}`);
+    renderSearchResults(data.results || []);
+  } catch (error) {
+    setStatus(error.message, "warning");
   }
 }
 
@@ -695,11 +825,14 @@ function logout() {
   state.token = "";
   state.currentUser = null;
   state.users = [];
+  state.searches = [];
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.metrics.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";
+  elements.searchHistory.innerHTML = `<p class="empty">Inicia sesion para cargar historial.</p>`;
+  elements.searchResults.classList.add("hidden");
   renderSessionUser();
   showLogin();
   setLoginStatus("Sesion cerrada.", "ok");

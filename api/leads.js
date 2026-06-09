@@ -34,11 +34,54 @@ function matchesCountry(lead, country) {
   return [contact.country, company.country].some((value) => textIncludes(value, country));
 }
 
+async function listSearches() {
+  const query = [
+    "select=id,name,lead_type,target_region,search_template,filters,status,total_entries,pages_requested,results_saved,created_at",
+    "order=created_at.desc",
+    "limit=30",
+  ].join("&");
+  const { payload } = await supabaseFetch(`/lead_searches?${query}`);
+  return payload || [];
+}
+
+async function listSearchResults(id) {
+  const query = [
+    "select=id,page,position,created_at,opportunities(id,lead_type,target_region,pipeline_status,score,score_label,contacts(full_name,title,email,country,city),companies(name,domain,industry,country))",
+    `lead_search_id=eq.${encodeURIComponent(id)}`,
+    "order=position.asc",
+    "limit=100",
+  ].join("&");
+  const { payload } = await supabaseFetch(`/lead_search_results?${query}`);
+  return payload || [];
+}
+
+function requireAdminView(user, res) {
+  if (user.role === "admin") return true;
+  res.status(403).json({ error: "Solo el usuario maestro puede ver el historial Apollo." });
+  return false;
+}
+
 module.exports = async function handler(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
 
   try {
+    const mode = param(req, "mode");
+    const leadSearchId = param(req, "search_id");
+    if (mode === "search_history") {
+      if (!requireAdminView(user, res)) return;
+      const searches = await listSearches();
+      res.status(200).json({ searches, count: searches.length });
+      return;
+    }
+
+    if (leadSearchId) {
+      if (!requireAdminView(user, res)) return;
+      const results = await listSearchResults(leadSearchId);
+      res.status(200).json({ results, count: results.length });
+      return;
+    }
+
     const leadType = param(req, "lead_type");
     const targetRegion = param(req, "target_region");
     const scoreLabel = param(req, "score_label");

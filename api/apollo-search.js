@@ -121,7 +121,8 @@ async function savePerson(person, template, leadSearchId, position, page) {
 }
 
 module.exports = async function handler(req, res) {
-  if (!requireAdmin(req, res)) return;
+  const user = requireAdmin(req, res);
+  if (!user) return;
   if (req.method !== "POST") {
     res.status(405).json({ error: "Metodo no permitido." });
     return;
@@ -146,6 +147,7 @@ module.exports = async function handler(req, res) {
       total_entries: apollo.total_entries || null,
       pages_requested: 1,
       results_saved: people.length,
+      created_by: user.db_user_id || null,
     });
 
     const saved = [];
