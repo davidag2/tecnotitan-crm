@@ -50,6 +50,7 @@ const elements = {
   detailFollowupType: document.querySelector("#detail-followup-type"),
   saveDetail: document.querySelector("#save-detail"),
   detailNotesList: document.querySelector("#detail-notes-list"),
+  detailPipelineEvents: document.querySelector("#detail-pipeline-events"),
   detailNoteInput: document.querySelector("#detail-note-input"),
   addDetailNote: document.querySelector("#add-detail-note"),
 };
@@ -261,7 +262,9 @@ function renderLeads(leads) {
             <span>${lead.target_region}</span>
           </div>
           <div class="lead-meta">
-            <strong>${lead.pipeline_status}</strong>
+            <select data-pipeline-status="${lead.id}">
+              ${pipelineStatusOptions(lead.pipeline_status)}
+            </select>
             <span>${new Date(lead.created_at).toLocaleDateString("es-CO")}</span>
           </div>
           <div class="score ${lead.score_label}">
@@ -283,6 +286,22 @@ function renderLeads(leads) {
   elements.leads.querySelectorAll("[data-open-detail]").forEach((button) => {
     button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
   });
+  elements.leads.querySelectorAll("[data-pipeline-status]").forEach((select) => {
+    select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
+  });
+}
+
+function pipelineStatusOptions(current) {
+  const statuses = [
+    ["nuevo", "Nuevo"],
+    ["calificado", "Calificado"],
+    ["contactado", "Contactado"],
+    ["reunion_agendada", "Reunion agendada"],
+    ["propuesta_enviada", "Propuesta enviada"],
+    ["ganado", "Ganado"],
+    ["perdido", "Perdido"],
+  ];
+  return statuses.map(([value, label]) => `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function line(label, value) {
@@ -336,6 +355,18 @@ function renderLeadDetail(detail) {
         )
         .join("")
     : `<p class="empty">No hay notas todavia.</p>`;
+  elements.detailPipelineEvents.innerHTML = detail.events?.length
+    ? detail.events
+        .map(
+          (event) => `
+            <article class="note-row">
+              <p>${event.from_status || "inicio"} → ${event.to_status}</p>
+              <small>${event.users?.name || "Usuario"} · ${new Date(event.changed_at).toLocaleString("es-CO")}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay cambios de pipeline todavia.</p>`;
 }
 
 async function openLeadDetail(opportunityId) {
@@ -372,6 +403,26 @@ async function saveLeadDetail() {
     setStatus("Detalle actualizado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
+  }
+}
+
+async function changePipelineStatus(opportunityId, pipelineStatus) {
+  try {
+    await api("/api/pipeline", {
+      method: "POST",
+      body: JSON.stringify({
+        opportunity_id: opportunityId,
+        pipeline_status: pipelineStatus,
+      }),
+    });
+    await reloadLeadsOnly();
+    if (activeOpportunityId === opportunityId) {
+      await openLeadDetail(opportunityId);
+    }
+    setStatus("Estado de pipeline actualizado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+    await reloadLeadsOnly();
   }
 }
 

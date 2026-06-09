@@ -429,6 +429,11 @@ button.secondary {
   text-transform: capitalize;
 }
 
+.lead-meta select {
+  width: 100%;
+  max-width: 170px;
+}
+
 .lead-actions {
   display: flex;
   gap: 8px;

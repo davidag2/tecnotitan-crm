@@ -27,10 +27,15 @@ async function loadNotes(id, user) {
   const opportunity = await loadOpportunity(id, user);
   if (!opportunity) return { opportunity: null, notes: [] };
 
-  const { payload } = await supabaseFetch(
+  const [{ payload: notes }, { payload: events }] = await Promise.all([
+    supabaseFetch(
     `/notes?select=id,body,created_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&deleted_at=is.null&order=created_at.desc&limit=20`
-  );
-  return { opportunity, notes: payload || [] };
+    ),
+    supabaseFetch(
+      `/pipeline_events?select=id,from_status,to_status,note,changed_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&order=changed_at.desc&limit=20`
+    ),
+  ]);
+  return { opportunity, notes: notes || [], events: events || [] };
 }
 
 async function addNote(id, body, user) {
@@ -61,6 +66,7 @@ async function updateOpportunity(id, body, user) {
   if (!opportunity) throw new Error("No se encontro el lead o no tienes acceso.");
 
   const patch = { updated_at: new Date().toISOString() };
+  const fromStatus = opportunity.pipeline_status;
   if (body.pipeline_status) patch.pipeline_status = body.pipeline_status;
   if (body.next_follow_up_at !== undefined) patch.next_follow_up_at = body.next_follow_up_at || null;
   if (body.next_follow_up_type !== undefined) patch.next_follow_up_type = body.next_follow_up_type || null;
@@ -69,6 +75,15 @@ async function updateOpportunity(id, body, user) {
   if (body.investment_thesis !== undefined) patch.investment_thesis = body.investment_thesis || null;
 
   await updateRows("opportunities", patch, `id=eq.${encodeURIComponent(id)}`);
+  if (body.pipeline_status && body.pipeline_status !== fromStatus) {
+    await insertRow("pipeline_events", {
+      opportunity_id: id,
+      from_status: fromStatus,
+      to_status: body.pipeline_status,
+      changed_by: user.db_user_id || null,
+      note: body.pipeline_note || null,
+    });
+  }
 }
 
 module.exports = async function handler(req, res) {
