@@ -47,6 +47,15 @@ async function insertRow(table, row) {
   return payload?.[0] || null;
 }
 
+async function updateRows(table, row, filter) {
+  const { payload } = await supabaseFetch(`/${table}?${filter}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(row),
+  });
+  return payload || [];
+}
+
 async function upsertRow(table, row, conflictColumns) {
   const conflict = encodeURIComponent(conflictColumns.join(","));
   const { payload } = await supabaseFetch(`/${table}?on_conflict=${conflict}`, {
@@ -57,4 +66,4 @@ async function upsertRow(table, row, conflictColumns) {
   return payload?.[0] || null;
 }
 
-module.exports = { countRows, insertRow, supabaseFetch, upsertRow };
+module.exports = { countRows, insertRow, supabaseFetch, updateRows, upsertRow };

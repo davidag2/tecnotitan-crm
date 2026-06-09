@@ -2,6 +2,8 @@ const state = {
   token: sessionStorage.getItem("tecnotitan_crm_session") || "",
   username: localStorage.getItem("tecnotitan_crm_username") || "david",
   templates: [],
+  users: [],
+  currentUser: null,
   selectedTemplate: "consulting_client:latam",
 };
 
@@ -17,7 +19,8 @@ const elements = {
   passwordInput: document.querySelector("#password-input"),
   loginButton: document.querySelector("#login-button"),
   logoutButton: document.querySelector("#logout-button"),
-  runSearch: document.querySelector("#run-search"),
+  getConsultingLeads: document.querySelector("#get-consulting-leads"),
+  getInvestorLeads: document.querySelector("#get-investor-leads"),
   searchStatus: document.querySelector("#search-status"),
 };
 
@@ -62,6 +65,7 @@ function showLogin() {
 }
 
 function renderMetrics(data) {
+  state.currentUser = data.user || state.currentUser;
   elements.metrics.innerHTML = [
     ["Empresas", data.companies ?? "-"],
     ["Contactos", data.contacts ?? "-"],
@@ -79,6 +83,13 @@ function renderMetrics(data) {
       `
     )
     .join("");
+}
+
+function applyRoleVisibility() {
+  const isAdmin = state.currentUser?.role === "admin";
+  document.querySelectorAll(".admin-only").forEach((node) => {
+    node.classList.toggle("hidden", !isAdmin);
+  });
 }
 
 function renderTemplates() {
@@ -118,6 +129,15 @@ function renderLeads(leads) {
             <strong>${contact.full_name || "Contacto sin nombre"}</strong>
             <span>${contact.title || "Cargo no disponible"}</span>
             <small>${company.name || "Empresa no disponible"} · ${contact.country || company.country || "Sin pais"}</small>
+            <div class="lead-actions admin-only">
+              <select data-assign="${lead.id}">
+                <option value="">Asignar a...</option>
+                ${state.users
+                  .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
+                  .join("")}
+              </select>
+              <button type="button" data-enrich="${lead.id}">Obtener detalles</button>
+            </div>
           </div>
           <div class="score ${lead.score_label}">
             <strong>${lead.score}</strong>
@@ -127,6 +147,14 @@ function renderLeads(leads) {
       `;
     })
     .join("");
+
+  applyRoleVisibility();
+  elements.leads.querySelectorAll("[data-assign]").forEach((select) => {
+    select.addEventListener("change", () => assignLead(select.dataset.assign, select.value));
+  });
+  elements.leads.querySelectorAll("[data-enrich]").forEach((button) => {
+    button.addEventListener("click", () => enrichLead(button.dataset.enrich, button));
+  });
 }
 
 async function loadPublicData() {
@@ -155,9 +183,16 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads] = await Promise.all([api("/api/dashboard"), api("/api/leads")]);
+    const [dashboard, leads, users] = await Promise.all([
+      api("/api/dashboard"),
+      api("/api/leads"),
+      api("/api/users").catch(() => ({ users: [] })),
+    ]);
+    state.currentUser = dashboard.user;
+    state.users = users.users || [];
     renderMetrics(dashboard);
     renderLeads(leads.leads || []);
+    applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
     state.token = "";
@@ -167,29 +202,66 @@ async function loadPrivateData() {
   }
 }
 
-async function runApolloSearch() {
+async function getLeads(templateKey) {
   if (!state.token) {
     setStatus("Inicia sesion primero.", "warning");
     return;
   }
 
-  elements.runSearch.disabled = true;
-  elements.searchStatus.textContent = "Buscando en Apollo y guardando en Supabase...";
+  if (state.currentUser?.role !== "admin") {
+    setStatus("Solo el usuario maestro puede obtener leads.", "warning");
+    return;
+  }
+
+  elements.getConsultingLeads.disabled = true;
+  elements.getInvestorLeads.disabled = true;
+  elements.searchStatus.textContent = "Obteniendo leads desde Apollo...";
 
   try {
     const result = await api("/api/apollo-search", {
       method: "POST",
       body: JSON.stringify({
-        template_key: state.selectedTemplate,
+        template_key: templateKey,
         per_page: 10,
       }),
     });
-    elements.searchStatus.textContent = `Listo: ${result.saved} leads guardados.`;
+    elements.searchStatus.textContent = `Listo: ${result.saved} leads guardados sin revelar detalles.`;
     await loadPrivateData();
   } catch (error) {
     elements.searchStatus.textContent = error.message;
   } finally {
-    elements.runSearch.disabled = false;
+    elements.getConsultingLeads.disabled = false;
+    elements.getInvestorLeads.disabled = false;
+  }
+}
+
+async function assignLead(opportunityId, userId) {
+  if (!userId) return;
+  try {
+    await api("/api/assign-lead", {
+      method: "POST",
+      body: JSON.stringify({ opportunity_id: opportunityId, owner_user_id: userId }),
+    });
+    await loadPrivateData();
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function enrichLead(opportunityId, button) {
+  button.disabled = true;
+  button.textContent = "Obteniendo...";
+  try {
+    await api("/api/apollo-enrich", {
+      method: "POST",
+      body: JSON.stringify({ opportunity_id: opportunityId }),
+    });
+    await loadPrivateData();
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Obtener detalles";
   }
 }
 
@@ -206,6 +278,7 @@ async function login() {
     });
     state.token = payload.token;
     state.username = payload.username;
+    state.currentUser = payload.user;
     sessionStorage.setItem("tecnotitan_crm_session", state.token);
     localStorage.setItem("tecnotitan_crm_username", state.username);
     elements.passwordInput.value = "";
@@ -234,7 +307,8 @@ elements.passwordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") login();
 });
 elements.logoutButton.addEventListener("click", logout);
-elements.runSearch.addEventListener("click", runApolloSearch);
+elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
+elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
 
 showLogin();
 loadPublicData()

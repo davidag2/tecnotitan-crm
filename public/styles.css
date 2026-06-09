@@ -267,6 +267,16 @@ input {
   background: #ffffff;
 }
 
+select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--text);
+  background: #ffffff;
+}
+
 .auth-row input {
   min-width: 280px;
   flex: 1;
@@ -365,6 +375,18 @@ button.secondary {
 .lead-row span,
 .lead-row small {
   display: block;
+}
+
+.lead-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.lead-actions button {
+  min-height: 36px;
 }
 
 .score {

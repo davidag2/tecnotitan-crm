@@ -9,14 +9,16 @@ module.exports = async function handler(req, res) {
 
   try {
     const { username, password } = await readJsonBody(req);
-    if (!verifyCredentials(username, password)) {
+    const user = verifyCredentials(username, password);
+    if (!user) {
       res.status(401).json({ error: "Usuario o contrasena incorrectos." });
       return;
     }
 
     res.status(200).json({
-      token: createSession(username),
-      username,
+      token: createSession(user),
+      user,
+      username: user.username,
       expires_in_seconds: 43200,
     });
   } catch (error) {
