@@ -1,0 +1,36 @@
+{
+  "name": "tecnotitan-crm-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CRM interno de Tecnotitan como aplicacion local de escritorio.",
+  "main": "desktop/main.js",
+  "scripts": {
+    "desktop": "electron desktop/main.js",
+    "build:portable": "electron-builder --win portable",
+    "build:dir": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "com.tecnotitan.crm",
+    "productName": "Tecnotitan CRM",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.js"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "asar": true
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.2"
+  }
+}

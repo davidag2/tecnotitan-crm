@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: tecnotitan-crm-postgres
+    environment:
+      POSTGRES_DB: tecnotitan_crm
+      POSTGRES_USER: tecnotitan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tecnotitan -d tecnotitan_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

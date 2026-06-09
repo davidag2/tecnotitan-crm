@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tecnotitan CRM</title>
+    <link rel="stylesheet" href="/frontend/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navegacion principal">
+        <div class="brand">
+          <div class="brand-mark">TT</div>
+          <div>
+            <strong>Tecnotitan</strong>
+            <span>CRM Interno</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <a class="active" href="#dashboard">Dashboard</a>
+          <a href="#search">Apollo Search</a>
+          <a href="#leads">Leads</a>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>CRM interno</h1>
+            <p>Clientes de consultoria e inversionistas, alimentados por Apollo.</p>
+          </div>
+          <div class="status-pill" id="dbStatus">DB</div>
+        </header>
+
+        <section class="metrics-grid" id="dashboard" aria-label="Metricas principales">
+          <article class="metric">
+            <span>Total oportunidades</span>
+            <strong id="metricTotal">0</strong>
+          </article>
+          <article class="metric">
+            <span>Consultoria</span>
+            <strong id="metricConsulting">0</strong>
+          </article>
+          <article class="metric">
+            <span>Inversionistas</span>
+            <strong id="metricInvestors">0</strong>
+          </article>
+          <article class="metric">
+            <span>Warm / Hot</span>
+            <strong id="metricPriority">0</strong>
+          </article>
+        </section>
+
+        <section class="panel search-panel" id="search">
+          <div class="panel-heading">
+            <div>
+              <h2>Buscar en Apollo</h2>
+              <p>Ejecuta plantillas guardadas y persiste resultados en PostgreSQL.</p>
+            </div>
+            <button class="icon-button" id="refreshButton" type="button" title="Actualizar">↻</button>
+          </div>
+
+          <form class="search-form" id="searchForm">
+            <label>
+              Plantilla
+              <select id="templateSelect" required></select>
+            </label>
+
+            <label>
+              Pais o region
+              <input id="locationInput" type="text" placeholder="Ej: Colombia, Mexico, United States">
+            </label>
+
+            <label>
+              Keywords
+              <input id="keywordsInput" type="text" placeholder="Ej: venture capital, automation">
+            </label>
+
+            <label>
+              Resultados
+              <input id="perPageInput" type="number" min="1" max="25" value="5">
+            </label>
+
+            <button class="primary-button" id="runSearchButton" type="submit">Buscar leads</button>
+          </form>
+
+          <div class="search-result" id="searchResult"></div>
+        </section>
+
+        <section class="panel" id="leads">
+          <div class="panel-heading">
+            <div>
+              <h2>Leads recientes</h2>
+              <p>Contactos guardados como oportunidades del CRM.</p>
+            </div>
+            <div class="segmented-control" role="group" aria-label="Filtro de leads">
+              <button class="active" type="button" data-filter="all">Todos</button>
+              <button type="button" data-filter="consulting_client">Consultoria</button>
+              <button type="button" data-filter="investor">Inversionistas</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contacto</th>
+                  <th>Empresa</th>
+                  <th>Tipo</th>
+                  <th>Estado</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody id="leadsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/frontend/app.js"></script>
+  </body>
+</html>

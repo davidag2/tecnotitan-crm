@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tecnotitan CRM</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <aside>
+      <div class="brand"><span>TT</span><strong>Tecnotitan CRM</strong></div>
+      <button class="nav active" data-filter="all">Todos</button>
+      <button class="nav" data-filter="consulting_client">Consultoria</button>
+      <button class="nav" data-filter="investor">Inversionistas</button>
+    </aside>
+
+    <main>
+      <header>
+        <div>
+          <h1>CRM interno</h1>
+          <p>Aplicacion local de escritorio, sin abrir puertos ni navegador.</p>
+        </div>
+        <button id="refreshBtn" title="Actualizar">Actualizar</button>
+      </header>
+
+      <section class="metrics">
+        <article><span>Total</span><strong id="totalMetric">0</strong></article>
+        <article><span>Consultoria</span><strong id="consultingMetric">0</strong></article>
+        <article><span>Inversionistas</span><strong id="investorMetric">0</strong></article>
+        <article><span>Prioridad</span><strong id="priorityMetric">0</strong></article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Buscar leads en Apollo</h2>
+          <p>Los resultados se guardan en PostgreSQL local.</p>
+        </div>
+        <form id="searchForm">
+          <label>Plantilla<select id="templateSelect"></select></label>
+          <label>Paises<input id="locationInput" placeholder="Colombia, Mexico"></label>
+          <label>Keywords<input id="keywordsInput" placeholder="venture capital"></label>
+          <label>Cantidad<input id="perPageInput" type="number" min="1" max="25" value="5"></label>
+          <button type="submit" id="searchBtn">Buscar</button>
+        </form>
+        <div id="message"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Leads recientes</h2>
+          <p>Oportunidades guardadas en Tecnotitan CRM.</p>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Contacto</th><th>Empresa</th><th>Tipo</th><th>Estado</th><th>Score</th></tr>
+          </thead>
+          <tbody id="leadRows"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

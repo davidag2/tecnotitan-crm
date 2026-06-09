@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+node_modules/
+dist/
+server.log
+server.err.log
+*.log
+search-quality-report.json

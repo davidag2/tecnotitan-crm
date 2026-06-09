@@ -1,0 +1,5 @@
+$ErrorActionPreference = "Stop"
+
+$Url = "http://127.0.0.1:8000"
+
+Start-Process "msedge.exe" $Url
