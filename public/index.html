@@ -40,11 +40,13 @@
       <section class="panel compact-auth">
         <div class="panel-title">
           <h2>Acceso interno</h2>
-          <p>Token privado del CRM para operar la API web.</p>
+          <p>Usuario autorizado para operar el CRM.</p>
         </div>
         <div class="auth-row">
-          <input id="token-input" type="password" placeholder="CRM_ADMIN_TOKEN">
-          <button id="save-token" type="button">Conectar</button>
+          <input id="username-input" type="text" autocomplete="username" placeholder="Usuario">
+          <input id="password-input" type="password" autocomplete="current-password" placeholder="Contrasena">
+          <button id="login-button" type="button">Entrar</button>
+          <button id="logout-button" class="secondary" type="button">Salir</button>
         </div>
       </section>
 

@@ -1,5 +1,6 @@
 const state = {
-  token: localStorage.getItem("tecnotitan_crm_token") || "",
+  token: localStorage.getItem("tecnotitan_crm_session") || "",
+  username: localStorage.getItem("tecnotitan_crm_username") || "david",
   templates: [],
   selectedTemplate: "consulting_client:latam",
 };
@@ -9,8 +10,10 @@ const elements = {
   metrics: document.querySelector("#metrics"),
   templates: document.querySelector("#templates"),
   leads: document.querySelector("#leads"),
-  tokenInput: document.querySelector("#token-input"),
-  saveToken: document.querySelector("#save-token"),
+  usernameInput: document.querySelector("#username-input"),
+  passwordInput: document.querySelector("#password-input"),
+  loginButton: document.querySelector("#login-button"),
+  logoutButton: document.querySelector("#logout-button"),
   runSearch: document.querySelector("#run-search"),
   searchStatus: document.querySelector("#search-status"),
 };
@@ -18,7 +21,7 @@ const elements = {
 function apiHeaders() {
   return {
     "Content-Type": "application/json",
-    "X-CRM-Token": state.token,
+    Authorization: `Bearer ${state.token}`,
   };
 }
 
@@ -123,7 +126,7 @@ async function loadPublicData() {
     return;
   }
 
-  setStatus("API web lista. Ingresa el token interno para ver datos.", "ok");
+  setStatus("API web lista. Inicia sesion para ver y buscar leads.", "ok");
 }
 
 async function loadPrivateData() {
@@ -141,7 +144,7 @@ async function loadPrivateData() {
 
 async function runApolloSearch() {
   if (!state.token) {
-    setStatus("Guarda primero el token interno.", "warning");
+    setStatus("Inicia sesion primero.", "warning");
     return;
   }
 
@@ -165,12 +168,45 @@ async function runApolloSearch() {
   }
 }
 
-elements.tokenInput.value = state.token;
-elements.saveToken.addEventListener("click", async () => {
-  state.token = elements.tokenInput.value.trim();
-  localStorage.setItem("tecnotitan_crm_token", state.token);
-  await loadPrivateData();
+async function login() {
+  elements.loginButton.disabled = true;
+  try {
+    const payload = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        username: elements.usernameInput.value.trim(),
+        password: elements.passwordInput.value,
+      }),
+      headers: { Authorization: "" },
+    });
+    state.token = payload.token;
+    state.username = payload.username;
+    localStorage.setItem("tecnotitan_crm_session", state.token);
+    localStorage.setItem("tecnotitan_crm_username", state.username);
+    elements.passwordInput.value = "";
+    setStatus("Sesion iniciada.", "ok");
+    await loadPrivateData();
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    elements.loginButton.disabled = false;
+  }
+}
+
+function logout() {
+  state.token = "";
+  localStorage.removeItem("tecnotitan_crm_session");
+  elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
+  elements.metrics.innerHTML = "";
+  setStatus("Sesion cerrada.", "ok");
+}
+
+elements.usernameInput.value = state.username;
+elements.loginButton.addEventListener("click", login);
+elements.passwordInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") login();
 });
+elements.logoutButton.addEventListener("click", logout);
 elements.runSearch.addEventListener("click", runApolloSearch);
 
 loadPublicData().then(loadPrivateData).catch((error) => setStatus(error.message, "warning"));

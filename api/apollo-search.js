@@ -1,4 +1,5 @@
 const { requireAdmin } = require("./_auth");
+const { readJsonBody } = require("./_request");
 const { scoreLead } = require("./_scoring");
 const { buildApolloPayload, getTemplate } = require("./_templates");
 const { insertRow, upsertRow } = require("./_supabase");
@@ -127,7 +128,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const body = req.body || {};
+    const body = await readJsonBody(req);
     const template = getTemplate(body.template_key || "consulting_client:latam");
     const page = Number(body.page || 1);
     const perPage = Math.min(Number(body.per_page || template.default_per_page), 25);

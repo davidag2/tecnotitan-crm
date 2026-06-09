@@ -238,6 +238,11 @@ button:disabled {
   cursor: progress;
 }
 
+button.secondary {
+  background: #eef2f7;
+  color: var(--text);
+}
+
 .template-grid,
 .pipeline-grid {
   display: grid;

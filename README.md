@@ -36,11 +36,14 @@ DATABASE_URL=postgresql://usuario:password@127.0.0.1:5432/tecnotitan_crm
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=solo_en_backend_o_vercel
 CRM_ADMIN_TOKEN=token_privado_para_uso_interno
+CRM_USERNAME=usuario_autorizado
+CRM_PASSWORD_HASH=hash_pbkdf2_generado
+CRM_SESSION_SECRET=secreto_para_firmar_sesiones
 ```
 
 La base `copiloto_pyme` no debe tocarse.
 
-Para Vercel, `SUPABASE_SERVICE_ROLE_KEY`, `APOLLO_API_KEY` y `CRM_ADMIN_TOKEN` deben configurarse como variables privadas. No deben aparecer en `public/`, ni en codigo frontend, ni en commits.
+Para Vercel, `SUPABASE_SERVICE_ROLE_KEY`, `APOLLO_API_KEY`, `CRM_PASSWORD_HASH` y `CRM_SESSION_SECRET` deben configurarse como variables privadas. No deben aparecer en `public/`, ni en codigo frontend, ni en commits.
 
 ## Ejecutar Backend Web Local
 
