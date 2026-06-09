@@ -222,7 +222,7 @@ async function getLeads(templateKey) {
       method: "POST",
       body: JSON.stringify({
         template_key: templateKey,
-        per_page: 10,
+        per_page: 25,
       }),
     });
     elements.searchStatus.textContent = `Listo: ${result.saved} leads guardados sin revelar detalles.`;
