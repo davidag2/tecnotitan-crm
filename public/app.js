@@ -1,11 +1,14 @@
 const state = {
-  token: localStorage.getItem("tecnotitan_crm_session") || "",
+  token: sessionStorage.getItem("tecnotitan_crm_session") || "",
   username: localStorage.getItem("tecnotitan_crm_username") || "david",
   templates: [],
   selectedTemplate: "consulting_client:latam",
 };
 
 const elements = {
+  appShell: document.querySelector("#app-shell"),
+  loginScreen: document.querySelector("#login-screen"),
+  loginStatus: document.querySelector("#login-status"),
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
   templates: document.querySelector("#templates"),
@@ -41,6 +44,21 @@ async function api(path, options = {}) {
 function setStatus(message, tone = "neutral") {
   elements.status.textContent = message;
   elements.status.dataset.tone = tone;
+}
+
+function setLoginStatus(message, tone = "neutral") {
+  elements.loginStatus.textContent = message;
+  elements.loginStatus.dataset.tone = tone;
+}
+
+function showApp() {
+  elements.loginScreen.classList.add("hidden");
+  elements.appShell.classList.remove("hidden");
+}
+
+function showLogin() {
+  elements.appShell.classList.add("hidden");
+  elements.loginScreen.classList.remove("hidden");
 }
 
 function renderMetrics(data) {
@@ -130,15 +148,22 @@ async function loadPublicData() {
 }
 
 async function loadPrivateData() {
-  if (!state.token) return;
+  if (!state.token) {
+    showLogin();
+    return;
+  }
 
   try {
+    showApp();
     const [dashboard, leads] = await Promise.all([api("/api/dashboard"), api("/api/leads")]);
     renderMetrics(dashboard);
     renderLeads(leads.leads || []);
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
-    setStatus(error.message, "warning");
+    state.token = "";
+    sessionStorage.removeItem("tecnotitan_crm_session");
+    showLogin();
+    setLoginStatus(error.message, "warning");
   }
 }
 
@@ -181,13 +206,14 @@ async function login() {
     });
     state.token = payload.token;
     state.username = payload.username;
-    localStorage.setItem("tecnotitan_crm_session", state.token);
+    sessionStorage.setItem("tecnotitan_crm_session", state.token);
     localStorage.setItem("tecnotitan_crm_username", state.username);
     elements.passwordInput.value = "";
+    showApp();
     setStatus("Sesion iniciada.", "ok");
     await loadPrivateData();
   } catch (error) {
-    setStatus(error.message, "warning");
+    setLoginStatus(error.message, "warning");
   } finally {
     elements.loginButton.disabled = false;
   }
@@ -195,10 +221,11 @@ async function login() {
 
 function logout() {
   state.token = "";
-  localStorage.removeItem("tecnotitan_crm_session");
+  sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.metrics.innerHTML = "";
-  setStatus("Sesion cerrada.", "ok");
+  showLogin();
+  setLoginStatus("Sesion cerrada.", "ok");
 }
 
 elements.usernameInput.value = state.username;
@@ -209,4 +236,10 @@ elements.passwordInput.addEventListener("keydown", (event) => {
 elements.logoutButton.addEventListener("click", logout);
 elements.runSearch.addEventListener("click", runApolloSearch);
 
-loadPublicData().then(loadPrivateData).catch((error) => setStatus(error.message, "warning"));
+showLogin();
+loadPublicData()
+  .then(loadPrivateData)
+  .catch((error) => {
+    showLogin();
+    setLoginStatus(error.message, "warning");
+  });

@@ -7,118 +7,131 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="mark">TT</div>
+    <section class="login-screen" id="login-screen">
+      <div class="login-panel">
+        <div class="brand login-brand">
+          <div class="mark">TT</div>
+          <div>
+            <strong>Tecnotitan</strong>
+            <span>CRM privado</span>
+          </div>
+        </div>
         <div>
-          <strong>Tecnotitan</strong>
-          <span>CRM Web</span>
+          <h1>Acceso CRM</h1>
+          <p>Ingresa con tu usuario autorizado para gestionar leads y oportunidades.</p>
         </div>
-      </div>
-      <nav>
-        <a class="active" href="#dashboard">Dashboard</a>
-        <a href="#apollo">Apollo</a>
-        <a href="#pipeline">Pipeline</a>
-        <a href="#roadmap">Roadmap</a>
-      </nav>
-    </aside>
-
-    <main>
-      <header class="topbar">
-        <div>
-          <h1>Tecnotitan CRM</h1>
-          <p>Prospeccion B2B para consultoria e inversionistas con Apollo.io.</p>
-        </div>
-        <span class="environment">Web Cloud</span>
-      </header>
-
-      <section class="notice">
-        <strong id="system-status">Cargando estado del sistema...</strong>
-        <p>La web usa funciones seguras en Vercel para llamar Apollo y guardar leads en Supabase.</p>
-      </section>
-
-      <section class="panel compact-auth">
-        <div class="panel-title">
-          <h2>Acceso interno</h2>
-          <p>Usuario autorizado para operar el CRM.</p>
-        </div>
-        <div class="auth-row">
+        <div class="login-form">
           <input id="username-input" type="text" autocomplete="username" placeholder="Usuario">
           <input id="password-input" type="password" autocomplete="current-password" placeholder="Contrasena">
           <button id="login-button" type="button">Entrar</button>
-          <button id="logout-button" class="secondary" type="button">Salir</button>
         </div>
-      </section>
+        <p class="login-status" id="login-status">Sistema privado de Tecnotitan.</p>
+      </div>
+    </section>
 
-      <section class="metrics" id="metrics"></section>
+    <div class="app-shell hidden" id="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">TT</div>
+          <div>
+            <strong>Tecnotitan</strong>
+            <span>CRM Web</span>
+          </div>
+        </div>
+        <nav>
+          <a class="active" href="#dashboard">Dashboard</a>
+          <a href="#apollo">Apollo</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#roadmap">Roadmap</a>
+        </nav>
+      </aside>
 
-      <section class="panel" id="apollo">
-        <div class="panel-title">
-          <h2>Plantillas Apollo</h2>
-          <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
-        </div>
-        <div class="template-grid" id="templates"></div>
-        <div class="action-row">
-          <button id="run-search" type="button">Buscar 10 leads</button>
-          <span id="search-status"></span>
-        </div>
-      </section>
+      <main>
+        <header class="topbar">
+          <div>
+            <h1>Tecnotitan CRM</h1>
+            <p>Prospeccion B2B para consultoria e inversionistas con Apollo.io.</p>
+          </div>
+          <div class="top-actions">
+            <span class="environment">Web Cloud</span>
+            <button id="logout-button" class="secondary" type="button">Salir</button>
+          </div>
+        </header>
 
-      <section class="panel" id="dashboard">
-        <div class="panel-title">
-          <h2>Leads recientes</h2>
-          <p>Contactos guardados en Supabase despues de buscar en Apollo.</p>
-        </div>
-        <div class="lead-list" id="leads">
-          <p class="empty">Conecta el token interno para cargar leads.</p>
-        </div>
-      </section>
+        <section class="notice">
+          <strong id="system-status">Cargando estado del sistema...</strong>
+          <p>La web usa funciones seguras en Vercel para llamar Apollo y guardar leads en Supabase.</p>
+        </section>
 
-      <section class="panel" id="pipeline">
-        <div class="panel-title">
-          <h2>Pipelines</h2>
-          <p>Estados principales para administrar oportunidades.</p>
-        </div>
-        <div class="pipeline-grid">
-          <article>
-            <h3>Consultoria</h3>
-            <ol>
-              <li>Nuevo</li>
-              <li>Calificado</li>
-              <li>Contactado</li>
-              <li>Diagnostico agendado</li>
-              <li>Propuesta enviada</li>
-              <li>Ganado / Perdido</li>
-            </ol>
-          </article>
-          <article>
-            <h3>Inversionistas</h3>
-            <ol>
-              <li>Identificado</li>
-              <li>Calificado</li>
-              <li>Contactado</li>
-              <li>Deck enviado</li>
-              <li>Reunion agendada</li>
-              <li>Committed / Passed</li>
-            </ol>
-          </article>
-        </div>
-      </section>
+        <section class="metrics" id="metrics"></section>
 
-      <section class="panel" id="roadmap">
-        <div class="panel-title">
-          <h2>Siguiente fase web</h2>
-          <p>Para convertir el preview en CRM web funcional.</p>
-        </div>
-        <ul class="roadmap">
-          <li>Agregar login real con Supabase Auth.</li>
-          <li>Crear vistas de detalle para contacto, empresa y oportunidad.</li>
-          <li>Agregar autenticacion interna.</li>
-          <li>Construir tabla avanzada con filtros, notas y seguimiento.</li>
-          <li>Agregar importacion CSV y campañas de seguimiento.</li>
-        </ul>
-      </section>
-    </main>
+        <section class="panel" id="apollo">
+          <div class="panel-title">
+            <h2>Plantillas Apollo</h2>
+            <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
+          </div>
+          <div class="template-grid" id="templates"></div>
+          <div class="action-row">
+            <button id="run-search" type="button">Buscar 10 leads</button>
+            <span id="search-status"></span>
+          </div>
+        </section>
+
+        <section class="panel" id="dashboard">
+          <div class="panel-title">
+            <h2>Leads recientes</h2>
+            <p>Contactos guardados en Supabase despues de buscar en Apollo.</p>
+          </div>
+          <div class="lead-list" id="leads">
+            <p class="empty">Inicia sesion para cargar leads.</p>
+          </div>
+        </section>
+
+        <section class="panel" id="pipeline">
+          <div class="panel-title">
+            <h2>Pipelines</h2>
+            <p>Estados principales para administrar oportunidades.</p>
+          </div>
+          <div class="pipeline-grid">
+            <article>
+              <h3>Consultoria</h3>
+              <ol>
+                <li>Nuevo</li>
+                <li>Calificado</li>
+                <li>Contactado</li>
+                <li>Diagnostico agendado</li>
+                <li>Propuesta enviada</li>
+                <li>Ganado / Perdido</li>
+              </ol>
+            </article>
+            <article>
+              <h3>Inversionistas</h3>
+              <ol>
+                <li>Identificado</li>
+                <li>Calificado</li>
+                <li>Contactado</li>
+                <li>Deck enviado</li>
+                <li>Reunion agendada</li>
+                <li>Committed / Passed</li>
+              </ol>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="roadmap">
+          <div class="panel-title">
+            <h2>Siguiente fase web</h2>
+            <p>Para convertir el preview en CRM web funcional.</p>
+          </div>
+          <ul class="roadmap">
+            <li>Agregar usuarios por rol.</li>
+            <li>Crear vistas de detalle para contacto, empresa y oportunidad.</li>
+            <li>Construir tabla avanzada con filtros, notas y seguimiento.</li>
+            <li>Agregar importacion CSV y campanas de seguimiento.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
 
     <script src="/app.js"></script>
   </body>
