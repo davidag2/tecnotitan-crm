@@ -386,6 +386,10 @@ function renderLeads(leads) {
     .map((lead) => {
       const contact = lead.contacts || {};
       const company = lead.companies || {};
+      const enrichmentStatus = contact.apollo_enrichment_status || "not_requested";
+      const isEnriched = enrichmentStatus === "enriched";
+      const isRequested = enrichmentStatus === "requested";
+      const enrichLabel = isEnriched ? "Detalles obtenidos" : isRequested ? "Solicitado" : "Obtener detalles";
       return `
         <article class="lead-row">
           <div>
@@ -400,7 +404,7 @@ function renderLeads(leads) {
                   .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
                   .join("")}
               </select>
-              <button type="button" data-enrich="${lead.id}">Obtener detalles</button>
+              <button type="button" data-enrich="${lead.id}" ${isEnriched || isRequested ? "disabled" : ""}>${enrichLabel}</button>
             </div>
             <div class="lead-actions">
               <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
@@ -435,6 +439,7 @@ function renderLeads(leads) {
     select.addEventListener("change", () => assignLead(select.dataset.assign, select.value));
   });
   elements.leads.querySelectorAll("[data-enrich]").forEach((button) => {
+    if (button.disabled) return;
     button.addEventListener("click", () => enrichLead(button.dataset.enrich, button));
   });
   elements.leads.querySelectorAll("[data-open-detail]").forEach((button) => {
@@ -800,8 +805,10 @@ async function enrichLead(opportunityId, button) {
   } catch (error) {
     setStatus(error.message, "warning");
   } finally {
-    button.disabled = false;
-    button.textContent = "Obtener detalles";
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = "Obtener detalles";
+    }
   }
 }
 
