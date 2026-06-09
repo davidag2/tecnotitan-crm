@@ -13,6 +13,9 @@ const elements = {
   loginStatus: document.querySelector("#login-status"),
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
+  followupsOverdue: document.querySelector("#followups-overdue"),
+  followupsToday: document.querySelector("#followups-today"),
+  followupsUpcoming: document.querySelector("#followups-upcoming"),
   templates: document.querySelector("#templates"),
   leads: document.querySelector("#leads"),
   userList: document.querySelector("#user-list"),
@@ -123,6 +126,8 @@ function renderMetrics(data) {
     ["Busquedas", data.searches ?? "-"],
     ["Hot", data.hot ?? "-"],
     ["Warm", data.warm ?? "-"],
+    ["Vencidos", data.overdueFollowups ?? "-"],
+    ["Hoy", data.todayFollowups ?? "-"],
   ]
     .map(
       ([label, value]) => `
@@ -133,6 +138,37 @@ function renderMetrics(data) {
       `
     )
     .join("");
+}
+
+function renderFollowupList(container, rows) {
+  if (!rows.length) {
+    container.innerHTML = `<p class="empty">Sin seguimientos.</p>`;
+    return;
+  }
+
+  container.innerHTML = rows
+    .map((row) => {
+      const contact = row.contacts || {};
+      const company = row.companies || {};
+      return `
+        <button class="followup-row" type="button" data-open-detail="${row.id}">
+          <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+          <span>${company.name || "Empresa no disponible"}</span>
+          <small>${row.next_follow_up_at} · ${row.next_follow_up_type || "Seguimiento"}</small>
+        </button>
+      `;
+    })
+    .join("");
+
+  container.querySelectorAll("[data-open-detail]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+}
+
+function renderFollowups(data) {
+  renderFollowupList(elements.followupsOverdue, data.overdue || []);
+  renderFollowupList(elements.followupsToday, data.today || []);
+  renderFollowupList(elements.followupsUpcoming, data.upcoming || []);
 }
 
 function applyRoleVisibility() {
@@ -400,6 +436,7 @@ async function saveLeadDetail() {
     });
     renderLeadDetail(detail);
     await reloadLeadsOnly();
+    renderFollowups(await api("/api/followups"));
     setStatus("Detalle actualizado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
@@ -436,6 +473,7 @@ async function addLeadNote() {
     elements.detailNoteInput.value = "";
     renderLeadDetail(detail);
     await reloadLeadsOnly();
+    renderFollowups(await api("/api/followups"));
   } catch (error) {
     setStatus(error.message, "warning");
   }
@@ -467,14 +505,16 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users] = await Promise.all([
+    const [dashboard, leads, users, followups] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
+      api("/api/followups"),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
     renderMetrics(dashboard);
+    renderFollowups(followups);
     renderUsers();
     renderLeads(leads.leads || []);
     applyRoleVisibility();
