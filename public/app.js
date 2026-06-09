@@ -38,7 +38,23 @@ const elements = {
   getConsultingLeads: document.querySelector("#get-consulting-leads"),
   getInvestorLeads: document.querySelector("#get-investor-leads"),
   searchStatus: document.querySelector("#search-status"),
+  detailModal: document.querySelector("#lead-detail-modal"),
+  closeDetail: document.querySelector("#close-detail"),
+  detailTitle: document.querySelector("#detail-title"),
+  detailSubtitle: document.querySelector("#detail-subtitle"),
+  detailContact: document.querySelector("#detail-contact"),
+  detailCompany: document.querySelector("#detail-company"),
+  detailScore: document.querySelector("#detail-score"),
+  detailStatus: document.querySelector("#detail-status"),
+  detailFollowupDate: document.querySelector("#detail-followup-date"),
+  detailFollowupType: document.querySelector("#detail-followup-type"),
+  saveDetail: document.querySelector("#save-detail"),
+  detailNotesList: document.querySelector("#detail-notes-list"),
+  detailNoteInput: document.querySelector("#detail-note-input"),
+  addDetailNote: document.querySelector("#add-detail-note"),
 };
+
+let activeOpportunityId = "";
 
 function apiHeaders() {
   return {
@@ -231,6 +247,9 @@ function renderLeads(leads) {
               </select>
               <button type="button" data-enrich="${lead.id}">Obtener detalles</button>
             </div>
+            <div class="lead-actions">
+              <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+            </div>
           </div>
           <div class="lead-company">
             <strong>${company.name || "Empresa no disponible"}</strong>
@@ -261,6 +280,114 @@ function renderLeads(leads) {
   elements.leads.querySelectorAll("[data-enrich]").forEach((button) => {
     button.addEventListener("click", () => enrichLead(button.dataset.enrich, button));
   });
+  elements.leads.querySelectorAll("[data-open-detail]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+}
+
+function line(label, value) {
+  return `<p><strong>${label}</strong><span>${value || "No disponible"}</span></p>`;
+}
+
+function renderLeadDetail(detail) {
+  const opportunity = detail.opportunity;
+  const contact = opportunity.contacts || {};
+  const company = opportunity.companies || {};
+  const reasons = Array.isArray(opportunity.score_reasons) ? opportunity.score_reasons : [];
+
+  elements.detailTitle.textContent = contact.full_name || "Lead sin nombre";
+  elements.detailSubtitle.textContent = `${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} · ${opportunity.target_region}`;
+  elements.detailContact.innerHTML = [
+    line("Cargo", contact.title),
+    line("Email", contact.email),
+    line("Telefono", contact.mobile_phone || contact.phone),
+    line("LinkedIn", contact.linkedin_url),
+    line("Ubicacion", [contact.city, contact.country].filter(Boolean).join(", ")),
+    line("Enriquecimiento", contact.apollo_enrichment_status),
+  ].join("");
+  elements.detailCompany.innerHTML = [
+    line("Empresa", company.name),
+    line("Dominio", company.domain),
+    line("Industria", company.industry),
+    line("Web", company.website_url),
+    line("LinkedIn", company.linkedin_url),
+    line("Pais", company.country),
+    line("Empleados", company.employee_count),
+  ].join("");
+  elements.detailScore.innerHTML = `
+    <div class="detail-score ${opportunity.score_label}">
+      <strong>${opportunity.score}</strong>
+      <span>${opportunity.score_label}</span>
+    </div>
+    <ul>${reasons.map((reason) => `<li>${reason.points} · ${reason.reason}</li>`).join("") || "<li>Sin razones registradas.</li>"}</ul>
+  `;
+  elements.detailStatus.value = opportunity.pipeline_status || "nuevo";
+  elements.detailFollowupDate.value = opportunity.next_follow_up_at ? opportunity.next_follow_up_at.slice(0, 10) : "";
+  elements.detailFollowupType.value = opportunity.next_follow_up_type || "";
+  elements.detailNotesList.innerHTML = detail.notes.length
+    ? detail.notes
+        .map(
+          (note) => `
+            <article class="note-row">
+              <p>${note.body}</p>
+              <small>${note.users?.name || "Usuario"} · ${new Date(note.created_at).toLocaleString("es-CO")}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay notas todavia.</p>`;
+}
+
+async function openLeadDetail(opportunityId) {
+  activeOpportunityId = opportunityId;
+  try {
+    const detail = await api(`/api/lead-detail?id=${encodeURIComponent(opportunityId)}`);
+    renderLeadDetail(detail);
+    elements.detailModal.classList.remove("hidden");
+    elements.detailModal.setAttribute("aria-hidden", "false");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+function closeLeadDetail() {
+  activeOpportunityId = "";
+  elements.detailModal.classList.add("hidden");
+  elements.detailModal.setAttribute("aria-hidden", "true");
+}
+
+async function saveLeadDetail() {
+  if (!activeOpportunityId) return;
+  try {
+    const detail = await api(`/api/lead-detail?id=${encodeURIComponent(activeOpportunityId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        pipeline_status: elements.detailStatus.value,
+        next_follow_up_at: elements.detailFollowupDate.value,
+        next_follow_up_type: elements.detailFollowupType.value,
+      }),
+    });
+    renderLeadDetail(detail);
+    await reloadLeadsOnly();
+    setStatus("Detalle actualizado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function addLeadNote() {
+  if (!activeOpportunityId || !elements.detailNoteInput.value.trim()) return;
+  try {
+    const detail = await api(`/api/lead-detail?id=${encodeURIComponent(activeOpportunityId)}`, {
+      method: "POST",
+      body: JSON.stringify({ note: elements.detailNoteInput.value.trim() }),
+    });
+    elements.detailNoteInput.value = "";
+    renderLeadDetail(detail);
+    await reloadLeadsOnly();
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
 }
 
 async function loadPublicData() {
@@ -493,6 +620,9 @@ elements.passwordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") login();
 });
 elements.logoutButton.addEventListener("click", logout);
+elements.closeDetail.addEventListener("click", closeLeadDetail);
+elements.saveDetail.addEventListener("click", saveLeadDetail);
+elements.addDetailNote.addEventListener("click", addLeadNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);

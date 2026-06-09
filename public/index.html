@@ -185,6 +185,59 @@
       </main>
     </div>
 
+    <section class="detail-modal hidden" id="lead-detail-modal" aria-hidden="true">
+      <div class="detail-panel">
+        <div class="detail-header">
+          <div>
+            <h2 id="detail-title">Detalle del lead</h2>
+            <p id="detail-subtitle">Contacto y oportunidad</p>
+          </div>
+          <button id="close-detail" class="secondary" type="button">Cerrar</button>
+        </div>
+
+        <div class="detail-grid">
+          <article>
+            <h3>Contacto</h3>
+            <div id="detail-contact"></div>
+          </article>
+          <article>
+            <h3>Empresa</h3>
+            <div id="detail-company"></div>
+          </article>
+          <article>
+            <h3>Score</h3>
+            <div id="detail-score"></div>
+          </article>
+          <article>
+            <h3>Seguimiento</h3>
+            <div class="detail-form">
+              <select id="detail-status">
+                <option value="nuevo">Nuevo</option>
+                <option value="calificado">Calificado</option>
+                <option value="contactado">Contactado</option>
+                <option value="reunion_agendada">Reunion agendada</option>
+                <option value="propuesta_enviada">Propuesta enviada</option>
+                <option value="ganado">Ganado</option>
+                <option value="perdido">Perdido</option>
+              </select>
+              <input id="detail-followup-date" type="date">
+              <input id="detail-followup-type" type="text" placeholder="Tipo de seguimiento">
+              <button id="save-detail" type="button">Guardar seguimiento</button>
+            </div>
+          </article>
+        </div>
+
+        <article class="detail-notes">
+          <h3>Notas</h3>
+          <div id="detail-notes-list"></div>
+          <div class="note-form">
+            <textarea id="detail-note-input" rows="3" placeholder="Agregar nota"></textarea>
+            <button id="add-detail-note" type="button">Agregar nota</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <script src="/app.js"></script>
   </body>
 </html>
