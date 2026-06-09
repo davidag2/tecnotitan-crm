@@ -5,6 +5,7 @@
   "description": "CRM interno de Tecnotitan como aplicacion local de escritorio.",
   "main": "desktop/main.js",
   "scripts": {
+    "build": "node scripts/build_vercel.js",
     "desktop": "electron desktop/main.js",
     "build:portable": "electron-builder --win portable",
     "build:dir": "electron-builder --win dir"

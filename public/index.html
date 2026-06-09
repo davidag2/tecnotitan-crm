@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tecnotitan CRM</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">TT</div>
+        <div>
+          <strong>Tecnotitan</strong>
+          <span>CRM Web</span>
+        </div>
+      </div>
+      <nav>
+        <a class="active" href="#dashboard">Dashboard</a>
+        <a href="#apollo">Apollo</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#roadmap">Roadmap</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1>Tecnotitan CRM</h1>
+          <p>Prospeccion B2B para consultoria e inversionistas con Apollo.io.</p>
+        </div>
+        <span class="environment">Preview Web</span>
+      </header>
+
+      <section class="notice">
+        <strong>Version desplegable en Vercel</strong>
+        <p>Esta version no usa tu PostgreSQL local ni expone la API key de Apollo. La conexion cloud se hara con variables seguras y una base PostgreSQL remota.</p>
+      </section>
+
+      <section class="metrics" id="dashboard">
+        <article>
+          <span>Mercados consultoria</span>
+          <strong>10</strong>
+          <small>LATAM prioritario</small>
+        </article>
+        <article>
+          <span>Regiones inversion</span>
+          <strong>3</strong>
+          <small>USA, LATAM, Europa</small>
+        </article>
+        <article>
+          <span>Plantillas Apollo</span>
+          <strong>4</strong>
+          <small>Listas para integrar</small>
+        </article>
+        <article>
+          <span>Estado</span>
+          <strong>MVP</strong>
+          <small>Web preview</small>
+        </article>
+      </section>
+
+      <section class="panel" id="apollo">
+        <div class="panel-title">
+          <h2>Plantillas Apollo</h2>
+          <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
+        </div>
+        <div class="template-grid" id="templates"></div>
+      </section>
+
+      <section class="panel" id="pipeline">
+        <div class="panel-title">
+          <h2>Pipelines</h2>
+          <p>Estados principales para administrar oportunidades.</p>
+        </div>
+        <div class="pipeline-grid">
+          <article>
+            <h3>Consultoria</h3>
+            <ol>
+              <li>Nuevo</li>
+              <li>Calificado</li>
+              <li>Contactado</li>
+              <li>Diagnostico agendado</li>
+              <li>Propuesta enviada</li>
+              <li>Ganado / Perdido</li>
+            </ol>
+          </article>
+          <article>
+            <h3>Inversionistas</h3>
+            <ol>
+              <li>Identificado</li>
+              <li>Calificado</li>
+              <li>Contactado</li>
+              <li>Deck enviado</li>
+              <li>Reunion agendada</li>
+              <li>Committed / Passed</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="roadmap">
+        <div class="panel-title">
+          <h2>Siguiente fase web</h2>
+          <p>Para convertir el preview en CRM web funcional.</p>
+        </div>
+        <ul class="roadmap">
+          <li>Crear backend serverless para Apollo Search.</li>
+          <li>Conectar PostgreSQL cloud, no la base local.</li>
+          <li>Agregar autenticacion interna.</li>
+          <li>Guardar API key de Apollo en Vercel Environment Variables.</li>
+          <li>Construir tabla real de leads y pipelines.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
