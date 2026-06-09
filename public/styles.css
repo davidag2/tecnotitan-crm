@@ -138,11 +138,20 @@ main {
 }
 
 .top-actions {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 20;
   display: flex;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
 }
 
 h1,
@@ -473,6 +482,14 @@ li {
 
   .topbar {
     display: grid;
+    padding-top: 62px;
+  }
+
+  .top-actions {
+    left: 16px;
+    right: 16px;
+    top: 12px;
+    justify-content: space-between;
   }
 
   .metrics,
