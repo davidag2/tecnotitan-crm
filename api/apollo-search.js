@@ -2,7 +2,7 @@ const { requireAdmin } = require("./_auth");
 const { readJsonBody } = require("./_request");
 const { scoreLead } = require("./_scoring");
 const { buildApolloPayload, getTemplate } = require("./_templates");
-const { insertRow, upsertRow } = require("./_supabase");
+const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 
 function apolloKey() {
   if (!process.env.APOLLO_API_KEY) throw new Error("APOLLO_API_KEY no esta configurada en Vercel.");
@@ -34,17 +34,63 @@ function companyFromPerson(person) {
 
   return {
     apollo_organization_id: organization.id || null,
-    name: organization.name || "Empresa sin nombre",
-    domain: organization.primary_domain || organization.domain || null,
+    name: String(organization.name || "Empresa sin nombre").trim(),
+    domain: String(organization.primary_domain || organization.domain || "").trim().toLowerCase() || null,
     website_url: organization.website_url || null,
     linkedin_url: organization.linkedin_url || null,
     industry: organization.industry || null,
-    country: organization.country || person.country || null,
+    country: String(organization.country || person.country || "").trim() || null,
     city: organization.city || null,
     state: organization.state || null,
     employee_count: organization.estimated_num_employees || organization.employee_count || null,
     raw_payload: organization,
   };
+}
+
+async function firstRow(path) {
+  const { payload } = await supabaseFetch(path);
+  return payload?.[0] || null;
+}
+
+async function findCompany(companyRow) {
+  if (!companyRow) return null;
+  if (companyRow.apollo_organization_id) {
+    const company = await firstRow(`/companies?select=*&apollo_organization_id=eq.${encodeURIComponent(companyRow.apollo_organization_id)}&deleted_at=is.null&limit=1`);
+    if (company) return company;
+  }
+
+  if (companyRow.domain) {
+    const company = await firstRow(`/companies?select=*&domain=ilike.${encodeURIComponent(companyRow.domain)}&deleted_at=is.null&limit=1`);
+    if (company) return company;
+  }
+
+  if (companyRow.name) {
+    const countryFilter = companyRow.country
+      ? `country=ilike.${encodeURIComponent(companyRow.country)}`
+      : "or=(country.is.null,country.eq.)";
+    const company = await firstRow(
+      `/companies?select=*&name=ilike.${encodeURIComponent(companyRow.name)}&${countryFilter}&domain=is.null&deleted_at=is.null&limit=1`
+    );
+    if (company) return company;
+  }
+
+  return null;
+}
+
+async function saveCompany(companyRow) {
+  if (!companyRow) return null;
+  const existing = await findCompany(companyRow);
+  if (existing) {
+    const updates = {
+      ...companyRow,
+      apollo_organization_id: existing.apollo_organization_id || companyRow.apollo_organization_id,
+      updated_at: new Date().toISOString(),
+    };
+    const rows = await updateRows("companies", updates, `id=eq.${encodeURIComponent(existing.id)}`);
+    return rows[0] || existing;
+  }
+
+  return insertRow("companies", companyRow);
 }
 
 function contactFromPerson(person, companyId) {
@@ -53,14 +99,14 @@ function contactFromPerson(person, companyId) {
     apollo_person_id: person.id || null,
     first_name: person.first_name || null,
     last_name: person.last_name || null,
-    full_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(" ") || null,
+    full_name: String(person.name || [person.first_name, person.last_name].filter(Boolean).join(" ") || "").trim() || null,
     title: person.title || null,
     seniority: person.seniority || null,
-    email: person.email || null,
+    email: String(person.email || "").trim().toLowerCase() || null,
     email_status: person.email_status || null,
     phone: person.phone_numbers?.[0]?.raw_number || person.phone || null,
     mobile_phone: person.mobile_phone || null,
-    linkedin_url: person.linkedin_url || null,
+    linkedin_url: String(person.linkedin_url || "").trim() || null,
     photo_url: person.photo_url || null,
     country: person.country || null,
     city: person.city || null,
@@ -71,19 +117,54 @@ function contactFromPerson(person, companyId) {
   };
 }
 
-async function savePerson(person, template, leadSearchId, position, page) {
-  const companyRow = companyFromPerson(person);
-  let company = null;
-  if (companyRow?.apollo_organization_id) {
-    company = await upsertRow("companies", companyRow, ["apollo_organization_id"]);
-  } else if (companyRow?.name) {
-    company = await insertRow("companies", companyRow);
+async function findContact(contactRow) {
+  if (!contactRow) return null;
+  if (contactRow.apollo_person_id) {
+    const contact = await firstRow(`/contacts?select=*&apollo_person_id=eq.${encodeURIComponent(contactRow.apollo_person_id)}&deleted_at=is.null&limit=1`);
+    if (contact) return contact;
   }
 
+  if (contactRow.email) {
+    const contact = await firstRow(`/contacts?select=*&email=ilike.${encodeURIComponent(contactRow.email)}&deleted_at=is.null&limit=1`);
+    if (contact) return contact;
+  }
+
+  if (contactRow.linkedin_url) {
+    const contact = await firstRow(`/contacts?select=*&linkedin_url=ilike.${encodeURIComponent(contactRow.linkedin_url)}&deleted_at=is.null&limit=1`);
+    if (contact) return contact;
+  }
+
+  if (contactRow.full_name && contactRow.company_id) {
+    const contact = await firstRow(
+      `/contacts?select=*&full_name=ilike.${encodeURIComponent(contactRow.full_name)}&company_id=eq.${encodeURIComponent(contactRow.company_id)}&deleted_at=is.null&limit=1`
+    );
+    if (contact) return contact;
+  }
+
+  return null;
+}
+
+async function saveContact(contactRow) {
+  const existing = await findContact(contactRow);
+  if (existing) {
+    const updates = {
+      ...contactRow,
+      apollo_person_id: existing.apollo_person_id || contactRow.apollo_person_id,
+      updated_at: new Date().toISOString(),
+    };
+    const rows = await updateRows("contacts", updates, `id=eq.${encodeURIComponent(existing.id)}`);
+    return rows[0] || existing;
+  }
+
+  return insertRow("contacts", contactRow);
+}
+
+async function savePerson(person, template, leadSearchId, position, page) {
+  const companyRow = companyFromPerson(person);
+  const company = await saveCompany(companyRow);
+
   const contactRow = contactFromPerson(person, company?.id || null);
-  const contact = contactRow.apollo_person_id
-    ? await upsertRow("contacts", contactRow, ["apollo_person_id"])
-    : await insertRow("contacts", contactRow);
+  const contact = await saveContact(contactRow);
 
   const score = scoreLead({
     leadType: template.lead_type,
@@ -106,16 +187,33 @@ async function savePerson(person, template, leadSearchId, position, page) {
     ["contact_id", "lead_type", "target_region"]
   );
 
-  await insertRow("lead_search_results", {
-    lead_search_id: leadSearchId,
-    contact_id: contact.id,
-    company_id: company?.id || null,
-    opportunity_id: opportunity.id,
-    apollo_person_id: person.id || null,
-    apollo_organization_id: companyRow?.apollo_organization_id || null,
-    page,
-    position,
-  });
+  if (person.id) {
+    await upsertRow(
+      "lead_search_results",
+      {
+        lead_search_id: leadSearchId,
+        contact_id: contact.id,
+        company_id: company?.id || null,
+        opportunity_id: opportunity.id,
+        apollo_person_id: person.id,
+        apollo_organization_id: companyRow?.apollo_organization_id || null,
+        page,
+        position,
+      },
+      ["lead_search_id", "apollo_person_id"]
+    );
+  } else {
+    await insertRow("lead_search_results", {
+      lead_search_id: leadSearchId,
+      contact_id: contact.id,
+      company_id: company?.id || null,
+      opportunity_id: opportunity.id,
+      apollo_person_id: null,
+      apollo_organization_id: companyRow?.apollo_organization_id || null,
+      page,
+      position,
+    });
+  }
 
   return { contact, company, opportunity };
 }
