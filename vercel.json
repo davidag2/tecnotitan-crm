@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm install --omit=dev",
   "buildCommand": "npm run build",
   "outputDirectory": ".vercel/output/static"
 }

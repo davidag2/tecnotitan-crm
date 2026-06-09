@@ -10,3 +10,6 @@ server.err.log
 *.log
 search-quality-report.json
 .vercel/output/
+.vercel/
+
+.vercel
