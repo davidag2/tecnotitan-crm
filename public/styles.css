@@ -382,9 +382,27 @@ button.secondary {
   gap: 10px;
 }
 
+.lead-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) repeat(4, minmax(120px, 0.8fr)) auto auto;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.lead-table-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) 80px;
+  gap: 14px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .lead-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) 80px;
   gap: 14px;
   align-items: center;
   padding: 12px;
@@ -397,6 +415,18 @@ button.secondary {
 .lead-row span,
 .lead-row small {
   display: block;
+}
+
+.lead-company strong,
+.lead-company span,
+.lead-company small,
+.lead-meta strong,
+.lead-meta span {
+  display: block;
+}
+
+.lead-meta strong {
+  text-transform: capitalize;
 }
 
 .lead-actions {
@@ -516,6 +546,7 @@ li {
 
   .metrics,
   .user-form,
+  .lead-filters,
   .template-grid,
   .pipeline-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -541,6 +572,7 @@ li {
 
   .metrics,
   .user-form,
+  .lead-filters,
   .template-grid,
   .pipeline-grid,
   nav {
@@ -552,6 +584,10 @@ li {
   .auth-row {
     align-items: stretch;
     display: grid;
+  }
+
+  .lead-table-header {
+    display: none;
   }
 
   .user-actions {

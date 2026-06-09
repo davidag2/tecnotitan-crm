@@ -101,8 +101,38 @@
 
         <section class="panel" id="dashboard">
           <div class="panel-title">
-            <h2>Leads recientes</h2>
-            <p>Contactos guardados en Supabase despues de buscar en Apollo.</p>
+            <h2>Leads</h2>
+            <p>Filtra contactos por tipo, region, score, estado, pais, empresa o cargo.</p>
+          </div>
+          <div class="lead-filters">
+            <input id="lead-search" type="search" placeholder="Buscar contacto, empresa o cargo">
+            <input id="lead-country" type="search" placeholder="Pais">
+            <select id="lead-type-filter">
+              <option value="">Tipo</option>
+              <option value="consulting_client">Consultoria</option>
+              <option value="investor">Inversionista</option>
+            </select>
+            <select id="lead-region-filter">
+              <option value="">Region</option>
+              <option value="latam">LATAM</option>
+              <option value="usa">USA</option>
+              <option value="europe">Europa</option>
+            </select>
+            <select id="lead-score-filter">
+              <option value="">Score</option>
+              <option value="hot">Hot</option>
+              <option value="warm">Warm</option>
+              <option value="cold">Cold</option>
+              <option value="unqualified">No calificado</option>
+            </select>
+            <select id="lead-status-filter">
+              <option value="">Estado</option>
+              <option value="nuevo">Nuevo</option>
+              <option value="calificado">Calificado</option>
+              <option value="contactado">Contactado</option>
+            </select>
+            <button id="apply-lead-filters" type="button">Filtrar</button>
+            <button id="clear-lead-filters" class="secondary" type="button">Limpiar</button>
           </div>
           <div class="lead-list" id="leads">
             <p class="empty">Inicia sesion para cargar leads.</p>

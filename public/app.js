@@ -16,6 +16,14 @@ const elements = {
   templates: document.querySelector("#templates"),
   leads: document.querySelector("#leads"),
   userList: document.querySelector("#user-list"),
+  leadSearch: document.querySelector("#lead-search"),
+  leadCountry: document.querySelector("#lead-country"),
+  leadTypeFilter: document.querySelector("#lead-type-filter"),
+  leadRegionFilter: document.querySelector("#lead-region-filter"),
+  leadScoreFilter: document.querySelector("#lead-score-filter"),
+  leadStatusFilter: document.querySelector("#lead-status-filter"),
+  applyLeadFilters: document.querySelector("#apply-lead-filters"),
+  clearLeadFilters: document.querySelector("#clear-lead-filters"),
   newUserName: document.querySelector("#new-user-name"),
   newUserEmail: document.querySelector("#new-user-email"),
   newUserUsername: document.querySelector("#new-user-username"),
@@ -191,11 +199,19 @@ function renderTemplates() {
 
 function renderLeads(leads) {
   if (!leads.length) {
-    elements.leads.innerHTML = `<p class="empty">Todavia no hay leads guardados en Supabase.</p>`;
+    elements.leads.innerHTML = `<p class="empty">No hay leads para los filtros actuales.</p>`;
     return;
   }
 
-  elements.leads.innerHTML = leads
+  elements.leads.innerHTML = `
+    <div class="lead-table-header">
+      <span>Contacto</span>
+      <span>Empresa</span>
+      <span>Tipo</span>
+      <span>Estado</span>
+      <span>Score</span>
+    </div>
+  ${leads
     .map((lead) => {
       const contact = lead.contacts || {};
       const company = lead.companies || {};
@@ -216,6 +232,19 @@ function renderLeads(leads) {
               <button type="button" data-enrich="${lead.id}">Obtener detalles</button>
             </div>
           </div>
+          <div class="lead-company">
+            <strong>${company.name || "Empresa no disponible"}</strong>
+            <span>${company.industry || "Industria no disponible"}</span>
+            <small>${company.country || contact.country || "Sin pais"}</small>
+          </div>
+          <div class="lead-meta">
+            <strong>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</strong>
+            <span>${lead.target_region}</span>
+          </div>
+          <div class="lead-meta">
+            <strong>${lead.pipeline_status}</strong>
+            <span>${new Date(lead.created_at).toLocaleDateString("es-CO")}</span>
+          </div>
           <div class="score ${lead.score_label}">
             <strong>${lead.score}</strong>
             <span>${lead.score_label}</span>
@@ -223,7 +252,7 @@ function renderLeads(leads) {
         </article>
       `;
     })
-    .join("");
+    .join("")}`;
 
   applyRoleVisibility();
   elements.leads.querySelectorAll("[data-assign]").forEach((select) => {
@@ -262,7 +291,7 @@ async function loadPrivateData() {
     showApp();
     const [dashboard, leads, users] = await Promise.all([
       api("/api/dashboard"),
-      api("/api/leads"),
+      api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
     ]);
     state.currentUser = dashboard.user;
@@ -320,8 +349,38 @@ async function updateUser(id, patch) {
 }
 
 async function currentLeads() {
-  const leads = await api("/api/leads");
+  const leads = await api(`/api/leads${leadFilterQuery()}`);
   return leads.leads || [];
+}
+
+function leadFilterQuery() {
+  const params = new URLSearchParams();
+  if (elements.leadSearch.value.trim()) params.set("q", elements.leadSearch.value.trim());
+  if (elements.leadCountry.value.trim()) params.set("country", elements.leadCountry.value.trim());
+  if (elements.leadTypeFilter.value) params.set("lead_type", elements.leadTypeFilter.value);
+  if (elements.leadRegionFilter.value) params.set("target_region", elements.leadRegionFilter.value);
+  if (elements.leadScoreFilter.value) params.set("score_label", elements.leadScoreFilter.value);
+  if (elements.leadStatusFilter.value) params.set("pipeline_status", elements.leadStatusFilter.value);
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+async function reloadLeadsOnly() {
+  try {
+    renderLeads(await currentLeads());
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+function clearLeadFilters() {
+  elements.leadSearch.value = "";
+  elements.leadCountry.value = "";
+  elements.leadTypeFilter.value = "";
+  elements.leadRegionFilter.value = "";
+  elements.leadScoreFilter.value = "";
+  elements.leadStatusFilter.value = "";
+  reloadLeadsOnly();
 }
 
 async function getLeads(templateKey) {
@@ -435,6 +494,14 @@ elements.passwordInput.addEventListener("keydown", (event) => {
 });
 elements.logoutButton.addEventListener("click", logout);
 elements.createUser.addEventListener("click", createUser);
+elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
+elements.clearLeadFilters.addEventListener("click", clearLeadFilters);
+elements.leadSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") reloadLeadsOnly();
+});
+elements.leadCountry.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") reloadLeadsOnly();
+});
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
 
