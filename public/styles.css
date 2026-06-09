@@ -411,6 +411,52 @@ button.secondary {
   min-height: 36px;
 }
 
+.user-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.user-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.user-row strong,
+.user-row span,
+.user-row small {
+  display: block;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.user-actions input {
+  min-height: 36px;
+  max-width: 180px;
+}
+
+.user-actions button {
+  min-height: 36px;
+}
+
 .score {
   min-width: 74px;
   text-align: right;
@@ -469,6 +515,7 @@ li {
   }
 
   .metrics,
+  .user-form,
   .template-grid,
   .pipeline-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -493,6 +540,7 @@ li {
   }
 
   .metrics,
+  .user-form,
   .template-grid,
   .pipeline-grid,
   nav {
@@ -500,9 +548,14 @@ li {
   }
 
   .lead-row,
+  .user-row,
   .auth-row {
     align-items: stretch;
     display: grid;
+  }
+
+  .user-actions {
+    justify-content: stretch;
   }
 
   .score {

@@ -41,6 +41,7 @@
         <nav>
           <a class="active" href="#dashboard">Dashboard</a>
           <a href="#apollo">Apollo</a>
+          <a class="admin-only" href="#usuarios">Usuarios</a>
           <a href="#pipeline">Pipeline</a>
           <a href="#roadmap">Roadmap</a>
         </nav>
@@ -65,6 +66,25 @@
         </section>
 
         <section class="metrics" id="metrics"></section>
+
+        <section class="panel admin-only" id="usuarios">
+          <div class="panel-title">
+            <h2>Usuarios</h2>
+            <p>Crea, activa, desactiva y cambia contrasenas de usuarios autorizados.</p>
+          </div>
+          <div class="user-form">
+            <input id="new-user-name" type="text" placeholder="Nombre">
+            <input id="new-user-email" type="email" placeholder="Email">
+            <input id="new-user-username" type="text" placeholder="Usuario">
+            <input id="new-user-password" type="password" placeholder="Contrasena">
+            <select id="new-user-role">
+              <option value="consultant">Consultor</option>
+              <option value="admin">Maestro</option>
+            </select>
+            <button id="create-user" type="button">Crear usuario</button>
+          </div>
+          <div class="user-list" id="user-list"></div>
+        </section>
 
         <section class="panel" id="apollo">
           <div class="panel-title">

@@ -9,7 +9,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const { username, password } = await readJsonBody(req);
-    const user = verifyCredentials(username, password);
+    const user = await verifyCredentials(username, password);
     if (!user) {
       res.status(401).json({ error: "Usuario o contrasena incorrectos." });
       return;

@@ -15,6 +15,13 @@ const elements = {
   metrics: document.querySelector("#metrics"),
   templates: document.querySelector("#templates"),
   leads: document.querySelector("#leads"),
+  userList: document.querySelector("#user-list"),
+  newUserName: document.querySelector("#new-user-name"),
+  newUserEmail: document.querySelector("#new-user-email"),
+  newUserUsername: document.querySelector("#new-user-username"),
+  newUserPassword: document.querySelector("#new-user-password"),
+  newUserRole: document.querySelector("#new-user-role"),
+  createUser: document.querySelector("#create-user"),
   usernameInput: document.querySelector("#username-input"),
   passwordInput: document.querySelector("#password-input"),
   loginButton: document.querySelector("#login-button"),
@@ -67,6 +74,7 @@ function showLogin() {
 
 function roleLabel(role) {
   if (role === "admin") return "Maestro";
+  if (role === "sales") return "Consultor";
   if (role === "consultant") return "Consultor";
   return "Usuario";
 }
@@ -110,6 +118,56 @@ function applyRoleVisibility() {
   renderSessionUser();
 }
 
+function renderUsers() {
+  if (!elements.userList) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.userList.innerHTML = "";
+    return;
+  }
+
+  elements.userList.innerHTML = state.users
+    .map(
+      (user) => `
+        <article class="user-row">
+          <div>
+            <strong>${user.name}</strong>
+            <span>${user.username || "sin usuario"} · ${user.email}</span>
+            <small>${roleLabel(user.role)} · ${user.is_active ? "Activo" : "Inactivo"}</small>
+          </div>
+          <div class="user-actions">
+            <select data-user-role="${user.id}">
+              <option value="consultant" ${user.role !== "admin" ? "selected" : ""}>Consultor</option>
+              <option value="admin" ${user.role === "admin" ? "selected" : ""}>Maestro</option>
+            </select>
+            <input data-user-password="${user.id}" type="password" placeholder="Nueva contrasena">
+            <button type="button" data-save-password="${user.id}">Cambiar</button>
+            <button class="secondary" type="button" data-toggle-user="${user.id}" data-active="${user.is_active}">
+              ${user.is_active ? "Desactivar" : "Activar"}
+            </button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+
+  elements.userList.querySelectorAll("[data-user-role]").forEach((select) => {
+    select.addEventListener("change", () => updateUser(select.dataset.userRole, { role: select.value }));
+  });
+  elements.userList.querySelectorAll("[data-save-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = elements.userList.querySelector(`[data-user-password="${button.dataset.savePassword}"]`);
+      if (!input.value.trim()) return;
+      updateUser(button.dataset.savePassword, { password: input.value.trim() });
+      input.value = "";
+    });
+  });
+  elements.userList.querySelectorAll("[data-toggle-user]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateUser(button.dataset.toggleUser, { is_active: button.dataset.active !== "true" });
+    });
+  });
+}
+
 function renderTemplates() {
   elements.templates.innerHTML = state.templates
     .map(
@@ -151,6 +209,7 @@ function renderLeads(leads) {
               <select data-assign="${lead.id}">
                 <option value="">Asignar a...</option>
                 ${state.users
+                  .filter((user) => user.is_active)
                   .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
                   .join("")}
               </select>
@@ -209,6 +268,7 @@ async function loadPrivateData() {
     state.currentUser = dashboard.user;
     state.users = users.users || [];
     renderMetrics(dashboard);
+    renderUsers();
     renderLeads(leads.leads || []);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
@@ -218,6 +278,50 @@ async function loadPrivateData() {
     showLogin();
     setLoginStatus(error.message, "warning");
   }
+}
+
+async function createUser() {
+  try {
+    const result = await api("/api/users", {
+      method: "POST",
+      body: JSON.stringify({
+        name: elements.newUserName.value.trim(),
+        email: elements.newUserEmail.value.trim(),
+        username: elements.newUserUsername.value.trim(),
+        password: elements.newUserPassword.value,
+        role: elements.newUserRole.value,
+      }),
+    });
+    state.users = result.users || [];
+    elements.newUserName.value = "";
+    elements.newUserEmail.value = "";
+    elements.newUserUsername.value = "";
+    elements.newUserPassword.value = "";
+    renderUsers();
+    setStatus("Usuario creado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function updateUser(id, patch) {
+  try {
+    const result = await api("/api/users", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...patch }),
+    });
+    state.users = result.users || [];
+    renderUsers();
+    renderLeads(await currentLeads());
+    setStatus("Usuario actualizado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function currentLeads() {
+  const leads = await api("/api/leads");
+  return leads.leads || [];
 }
 
 async function getLeads(templateKey) {
@@ -318,6 +422,7 @@ function logout() {
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.metrics.innerHTML = "";
   elements.searchStatus.textContent = "";
+  elements.userList.innerHTML = "";
   renderSessionUser();
   showLogin();
   setLoginStatus("Sesion cerrada.", "ok");
@@ -329,6 +434,7 @@ elements.passwordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") login();
 });
 elements.logoutButton.addEventListener("click", logout);
+elements.createUser.addEventListener("click", createUser);
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
 

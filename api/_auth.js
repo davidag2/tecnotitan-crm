@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const { verifyPassword, timingSafeEqual } = require("./_password");
+const { supabaseFetch } = require("./_supabase");
 
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
 
@@ -10,13 +12,6 @@ function sign(value) {
   const secret = process.env.CRM_SESSION_SECRET || process.env.CRM_ADMIN_TOKEN || "";
   if (!secret) throw new Error("CRM_SESSION_SECRET no esta configurado en Vercel.");
   return crypto.createHmac("sha256", secret).update(value).digest("base64url");
-}
-
-function timingSafeEqual(left, right) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function tokenFromRequest(req) {
@@ -43,6 +38,30 @@ function configuredUsers() {
       password_hash: process.env.CRM_PASSWORD_HASH || "",
     },
   ];
+}
+
+function appRole(dbRole) {
+  return dbRole === "admin" ? "admin" : "consultant";
+}
+
+async function findDbUser(username) {
+  const query = [
+    "select=id,username,name,email,role,password_hash,is_active",
+    `username=eq.${encodeURIComponent(username)}`,
+    "is_active=eq.true",
+    "limit=1",
+  ].join("&");
+  const { payload } = await supabaseFetch(`/users?${query}`);
+  const user = payload?.[0];
+  if (!user?.password_hash) return null;
+  return {
+    username: user.username,
+    name: user.name,
+    email: user.email,
+    role: appRole(user.role),
+    db_user_id: user.id,
+    password_hash: user.password_hash,
+  };
 }
 
 function publicUser(user) {
@@ -78,22 +97,14 @@ function verifySession(token) {
   };
 }
 
-function verifyPassword(password, passwordHash) {
-  const stored = String(passwordHash || "").replace(/^"|"$/g, "");
-  const [algorithm, iterations, salt, expected] = stored.split(":");
-  if (algorithm !== "pbkdf2_sha256" || !iterations || !salt || !expected) {
-    throw new Error("CRM_PASSWORD_HASH no esta configurado correctamente.");
+async function verifyCredentials(username, password) {
+  const normalizedUsername = String(username || "").trim();
+  const dbUser = await findDbUser(normalizedUsername).catch(() => null);
+  if (dbUser) {
+    return verifyPassword(password, dbUser.password_hash) ? publicUser(dbUser) : null;
   }
 
-  const actual = crypto
-    .pbkdf2Sync(String(password || ""), salt, Number(iterations), 32, "sha256")
-    .toString("base64url");
-
-  return timingSafeEqual(actual, expected);
-}
-
-function verifyCredentials(username, password) {
-  const user = configuredUsers().find((item) => item.username === String(username || ""));
+  const user = configuredUsers().find((item) => item.username === normalizedUsername);
   if (!user) return null;
   return verifyPassword(password, user.password_hash) ? publicUser(user) : null;
 }
