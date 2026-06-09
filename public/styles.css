@@ -185,6 +185,19 @@ small {
   font-weight: 800;
 }
 
+.session-user {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .notice,
 .panel,
 .metrics article {

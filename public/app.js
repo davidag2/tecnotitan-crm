@@ -19,6 +19,7 @@ const elements = {
   passwordInput: document.querySelector("#password-input"),
   loginButton: document.querySelector("#login-button"),
   logoutButton: document.querySelector("#logout-button"),
+  sessionUser: document.querySelector("#session-user"),
   getConsultingLeads: document.querySelector("#get-consulting-leads"),
   getInvestorLeads: document.querySelector("#get-investor-leads"),
   searchStatus: document.querySelector("#search-status"),
@@ -64,6 +65,22 @@ function showLogin() {
   elements.loginScreen.classList.remove("hidden");
 }
 
+function roleLabel(role) {
+  if (role === "admin") return "Maestro";
+  if (role === "consultant") return "Consultor";
+  return "Usuario";
+}
+
+function renderSessionUser() {
+  const user = state.currentUser;
+  if (!user) {
+    elements.sessionUser.textContent = "Sesion";
+    return;
+  }
+
+  elements.sessionUser.textContent = `${user.name || user.username} · ${roleLabel(user.role)}`;
+}
+
 function renderMetrics(data) {
   state.currentUser = data.user || state.currentUser;
   elements.metrics.innerHTML = [
@@ -90,6 +107,7 @@ function applyRoleVisibility() {
   document.querySelectorAll(".admin-only").forEach((node) => {
     node.classList.toggle("hidden", !isAdmin);
   });
+  renderSessionUser();
 }
 
 function renderTemplates() {
@@ -294,9 +312,13 @@ async function login() {
 
 function logout() {
   state.token = "";
+  state.currentUser = null;
+  state.users = [];
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.metrics.innerHTML = "";
+  elements.searchStatus.textContent = "";
+  renderSessionUser();
   showLogin();
   setLoginStatus("Sesion cerrada.", "ok");
 }
