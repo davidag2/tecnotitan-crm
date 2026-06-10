@@ -20,6 +20,8 @@ const elements = {
   tabPanels: document.querySelectorAll("[data-tab-panel]"),
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
+  executiveSummary: document.querySelector("#executive-summary"),
+  executiveWeekly: document.querySelector("#executive-weekly"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
@@ -269,7 +271,83 @@ function renderMetrics(data) {
       `
     )
     .join("");
+  renderExecutiveDashboard(data.executiveWeekly || []);
   renderAssignmentWorkload(data.assignmentWorkload);
+}
+
+function sumWeekly(rows, field) {
+  return (rows || []).reduce((sum, row) => sum + Number(row[field] || 0), 0);
+}
+
+function renderExecutiveDashboard(rows) {
+  if (!elements.executiveSummary || !elements.executiveWeekly) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.executiveSummary.innerHTML = "";
+    elements.executiveWeekly.innerHTML = "";
+    return;
+  }
+  if (!rows.length) {
+    elements.executiveSummary.innerHTML = `<p class="empty">No hay metricas ejecutivas disponibles.</p>`;
+    elements.executiveWeekly.innerHTML = "";
+    return;
+  }
+  const leads = sumWeekly(rows, "leads_obtained");
+  const details = sumWeekly(rows, "details_consumed");
+  const clients = sumWeekly(rows, "clients_processed");
+  const meetings = sumWeekly(rows, "meetings");
+  const proposals = sumWeekly(rows, "proposals");
+  const won = sumWeekly(rows, "won");
+  const credits = sumWeekly(rows, "apollo_credits_used");
+  const conversion = leads ? Math.round((won / leads) * 1000) / 10 : 0;
+  elements.executiveSummary.innerHTML = [
+    ["Leads obtenidos", leads],
+    ["Detalles consumidos", details],
+    ["Clientes procesados", clients],
+    ["Reuniones", meetings],
+    ["Propuestas", proposals],
+    ["Ganados", won],
+    ["Conversion", `${conversion}%`],
+    ["Creditos Apollo", credits],
+  ]
+    .map(
+      ([label, value]) => `
+        <article>
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </article>
+      `
+    )
+    .join("");
+  elements.executiveWeekly.innerHTML = `
+    <div class="executive-row executive-head">
+      <span>Semana</span>
+      <span>Leads</span>
+      <span>Detalles</span>
+      <span>Clientes</span>
+      <span>Reuniones</span>
+      <span>Propuestas</span>
+      <span>Ganados</span>
+      <span>Conv.</span>
+      <span>Creditos</span>
+    </div>
+    ${rows
+      .map(
+        (row) => `
+          <div class="executive-row">
+            <span>${new Date(`${row.week}T00:00:00Z`).toLocaleDateString("es-CO", { month: "short", day: "numeric" })}</span>
+            <span>${row.leads_obtained}</span>
+            <span>${row.details_consumed}</span>
+            <span>${row.clients_processed}</span>
+            <span>${row.meetings}</span>
+            <span>${row.proposals}</span>
+            <span>${row.won}</span>
+            <span>${row.conversion_rate}%</span>
+            <span>${row.apollo_credits_used}</span>
+          </div>
+        `
+      )
+      .join("")}
+  `;
 }
 
 function workloadForUser(userId) {
@@ -1790,6 +1868,8 @@ function logout() {
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
   elements.archive.innerHTML = `<p class="empty">No hay clientes archivados.</p>`;
   elements.metrics.innerHTML = "";
+  elements.executiveSummary.innerHTML = "";
+  elements.executiveWeekly.innerHTML = "";
   elements.assignmentWorkload.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";

@@ -279,6 +279,57 @@ small {
   gap: 10px;
 }
 
+.executive-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.executive-summary article {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.executive-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.executive-summary strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+}
+
+.executive-table {
+  overflow-x: auto;
+}
+
+.executive-row {
+  min-width: 860px;
+  display: grid;
+  grid-template-columns: 110px repeat(8, minmax(78px, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 10px 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.executive-row span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.executive-head {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
 .workload-card {
   display: grid;
   gap: 10px;
