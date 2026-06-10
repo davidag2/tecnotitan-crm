@@ -67,6 +67,16 @@ const elements = {
 let activeOpportunityId = "";
 let activeTab = "dashboard";
 
+const PIPELINE_STATUSES = [
+  ["nuevo", "Nuevo"],
+  ["calificado", "Calificado"],
+  ["contactado", "Contactado"],
+  ["reunion_agendada", "Reunion agendada"],
+  ["propuesta_enviada", "Propuesta enviada"],
+  ["ganado", "Ganado"],
+  ["perdido", "Perdido"],
+];
+
 function apiHeaders() {
   return {
     "Content-Type": "application/json",
@@ -513,61 +523,70 @@ function renderClients(clients) {
     return;
   }
 
+  const grouped = PIPELINE_STATUSES.map(([status, label]) => ({
+    status,
+    label,
+    rows: clients.filter((client) => (client.pipeline_status || "nuevo") === status),
+  }));
+
   elements.clients.innerHTML = `
-    <div class="lead-table-header">
-      <span>Cliente</span>
-      <span>Empresa</span>
-      <span>Tipo</span>
-      <span>Estado</span>
-      <span>Score</span>
+    <div class="kanban-board">
+      ${grouped
+        .map(
+          (group) => `
+            <section class="kanban-column">
+              <div class="kanban-column-title">
+                <h3>${group.label}</h3>
+                <span>${group.rows.length}</span>
+              </div>
+              <div class="kanban-cards">
+                ${
+                  group.rows.length
+                    ? group.rows
+                        .map((lead) => {
+                          const contact = lead.contacts || {};
+                          const company = lead.companies || {};
+                          return `
+                            <article class="client-card">
+                              <div class="client-card-title">
+                                <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+                                <span class="score-pill ${lead.score_label}">${lead.score} ${lead.score_label}</span>
+                              </div>
+                              <span>${contact.title || "Cargo no disponible"}</span>
+                              <small>${company.name || "Empresa no disponible"}</small>
+                              <small>${contact.email || contact.mobile_phone || contact.phone || "Detalles obtenidos"}</small>
+                              <div class="client-card-meta">
+                                <span>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</span>
+                                <span>${regionLabel(lead.target_region)}</span>
+                              </div>
+                              <div class="client-card-actions">
+                                <select data-pipeline-status="${lead.id}">
+                                  ${pipelineStatusOptions(lead.pipeline_status)}
+                                </select>
+                                <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+                              </div>
+                              <div class="lead-actions admin-only">
+                                <select data-assign="${lead.id}">
+                                  <option value="">Asignar a...</option>
+                                  ${state.users
+                                    .filter((user) => user.is_active)
+                                    .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
+                                    .join("")}
+                                </select>
+                              </div>
+                            </article>
+                          `;
+                        })
+                        .join("")
+                    : `<p class="kanban-empty">Sin clientes.</p>`
+                }
+              </div>
+            </section>
+          `
+        )
+        .join("")}
     </div>
-  ${clients
-    .map((lead) => {
-      const contact = lead.contacts || {};
-      const company = lead.companies || {};
-      return `
-        <article class="lead-row client-row">
-          <div>
-            <strong>${contact.full_name || "Contacto sin nombre"}</strong>
-            <span>${contact.title || "Cargo no disponible"}</span>
-            <small>${contact.email || contact.mobile_phone || contact.phone || "Detalles obtenidos"} | ${contact.country || company.country || "Sin pais"}</small>
-            <div class="lead-actions admin-only">
-              <select data-assign="${lead.id}">
-                <option value="">Asignar a...</option>
-                ${state.users
-                  .filter((user) => user.is_active)
-                  .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
-                  .join("")}
-              </select>
-              <span class="status-badge">Detalles obtenidos</span>
-            </div>
-            <div class="lead-actions">
-              <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
-            </div>
-          </div>
-          <div class="lead-company">
-            <strong>${company.name || "Empresa no disponible"}</strong>
-            <span>${company.industry || "Industria no disponible"}</span>
-            <small>${company.country || contact.country || "Sin pais"}</small>
-          </div>
-          <div class="lead-meta">
-            <strong>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</strong>
-            <span>${lead.target_region}</span>
-          </div>
-          <div class="lead-meta">
-            <select data-pipeline-status="${lead.id}">
-              ${pipelineStatusOptions(lead.pipeline_status)}
-            </select>
-            <span>${new Date(lead.created_at).toLocaleDateString("es-CO")}</span>
-          </div>
-          <div class="score ${lead.score_label}">
-            <strong>${lead.score}</strong>
-            <span>${lead.score_label}</span>
-          </div>
-        </article>
-      `;
-    })
-    .join("")}`;
+  `;
 
   applyRoleVisibility();
   elements.clients.querySelectorAll("[data-assign]").forEach((select) => {
@@ -582,16 +601,7 @@ function renderClients(clients) {
 }
 
 function pipelineStatusOptions(current) {
-  const statuses = [
-    ["nuevo", "Nuevo"],
-    ["calificado", "Calificado"],
-    ["contactado", "Contactado"],
-    ["reunion_agendada", "Reunion agendada"],
-    ["propuesta_enviada", "Propuesta enviada"],
-    ["ganado", "Ganado"],
-    ["perdido", "Perdido"],
-  ];
-  return statuses.map(([value, label]) => `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`).join("");
+  return PIPELINE_STATUSES.map(([value, label]) => `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function line(label, value) {

@@ -472,6 +472,113 @@ button.secondary {
   font-weight: 800;
 }
 
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(220px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.kanban-column {
+  min-width: 220px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.kanban-column-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.kanban-column-title span {
+  min-width: 26px;
+  min-height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: #315f99;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kanban-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.client-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.client-card strong,
+.client-card span,
+.client-card small {
+  display: block;
+}
+
+.client-card small {
+  overflow-wrap: anywhere;
+}
+
+.client-card-title {
+  display: grid;
+  gap: 8px;
+}
+
+.client-card-meta,
+.client-card-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: #315f99;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-pill.hot {
+  background: #fde8e7;
+  color: #b42318;
+}
+
+.score-pill.warm {
+  background: var(--amber-soft);
+  color: #b8640c;
+}
+
+.kanban-empty {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .followup-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -797,6 +904,10 @@ li {
   .pipeline-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .kanban-board {
+    grid-template-columns: repeat(7, minmax(210px, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -826,6 +937,15 @@ li {
   .pipeline-grid,
   nav {
     grid-template-columns: 1fr;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .kanban-column {
+    min-width: 0;
   }
 
   .lead-row,
