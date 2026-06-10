@@ -429,6 +429,73 @@ button.danger {
   font-weight: 800;
 }
 
+.message-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.message-toolbar select {
+  max-width: 280px;
+}
+
+.message-toolbar span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.message-template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.message-template-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.message-template-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.message-template-header strong,
+.message-template-header span,
+.message-template-card p strong,
+.message-template-card p span {
+  display: block;
+}
+
+.message-template-header span,
+.message-template-card p span {
+  color: var(--muted);
+}
+
+.message-template-card pre {
+  min-height: 180px;
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .action-row {
   margin-top: 16px;
 }
@@ -1138,6 +1205,15 @@ li {
     max-width: none;
   }
 
+  .message-toolbar {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .message-toolbar select {
+    max-width: none;
+  }
+
   .company-row {
     grid-template-columns: 1fr;
   }
@@ -1156,6 +1232,7 @@ li {
   .user-form,
   .lead-filters,
   .template-grid,
+  .message-template-grid,
   .search-card,
   .search-result-row,
   .pipeline-grid,

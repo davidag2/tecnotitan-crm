@@ -46,6 +46,7 @@
           <a href="#clientes" data-tab="clientes">Clientes</a>
           <a href="#archivo" data-tab="archivo">Archivo</a>
           <a href="#seguimientos" data-tab="seguimientos">Seguimientos</a>
+          <a href="#mensajes" data-tab="mensajes">Mensajes</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
           <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
@@ -101,6 +102,24 @@
               <div id="followups-upcoming"></div>
             </article>
           </div>
+        </section>
+
+        <section class="panel tab-panel" id="mensajes" data-tab-panel="mensajes">
+          <div class="panel-title">
+            <h2>Mensajes y plantillas</h2>
+            <p>Email y LinkedIn para consultoria, inversionistas, seguimiento y reactivacion.</p>
+          </div>
+          <div class="message-toolbar">
+            <select id="message-template-filter">
+              <option value="all">Todas las plantillas</option>
+              <option value="consultoria">Consultoria</option>
+              <option value="inversionistas">Inversionistas</option>
+              <option value="seguimiento">Seguimiento</option>
+              <option value="reactivacion">Reactivacion</option>
+            </select>
+            <span id="message-template-count"></span>
+          </div>
+          <div class="message-template-grid" id="message-templates"></div>
         </section>
 
         <section class="panel admin-only role-hidden tab-panel" id="usuarios" data-tab-panel="usuarios">

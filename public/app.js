@@ -9,6 +9,7 @@ const state = {
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
   clientContactFilter: "all",
+  messageTemplateFilter: "all",
 };
 
 const elements = {
@@ -20,6 +21,9 @@ const elements = {
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
+  messageTemplateFilter: document.querySelector("#message-template-filter"),
+  messageTemplateCount: document.querySelector("#message-template-count"),
+  messageTemplates: document.querySelector("#message-templates"),
   followupsOverdue: document.querySelector("#followups-overdue"),
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
@@ -101,6 +105,81 @@ const PIPELINE_STATUSES = [
 ];
 
 const ARCHIVE_STATUS = "archivado";
+
+const MESSAGE_TEMPLATES = [
+  {
+    id: "consultoria-email-1",
+    category: "consultoria",
+    channel: "Email",
+    title: "Consultoria - primer contacto",
+    subject: "Idea rapida para {{empresa}}",
+    body:
+      "Hola {{nombre}},\n\nVi que {{empresa}} esta creciendo en {{industria}} y pense que podria tener sentido conversar.\n\nEn Tecnotitan ayudamos a empresas a crear software, automatizaciones e integraciones con IA para reducir trabajo manual y acelerar operaciones comerciales.\n\nSi te parece util, puedo proponerte 2 o 3 oportunidades concretas para {{empresa}} en una llamada corta de 15 minutos.\n\nSaludos,\nDavid Arias\nTecnotitan",
+  },
+  {
+    id: "consultoria-linkedin-1",
+    category: "consultoria",
+    channel: "LinkedIn",
+    title: "Consultoria - conexion LinkedIn",
+    subject: "",
+    body:
+      "Hola {{nombre}}, vi tu rol en {{empresa}}. En Tecnotitan trabajamos con software, automatizacion e IA para equipos que quieren operar mejor sin aumentar carga manual. Me gustaria conectar.",
+  },
+  {
+    id: "inversionistas-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Inversionistas - intro Tecnotitan",
+    subject: "Tecnotitan - software e IA para LATAM",
+    body:
+      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una plataforma de software e IA orientada a empresas de America Latina, comenzando con automatizacion comercial, CRM interno y soluciones para pymes.\n\nVi tu foco en {{industria}} y pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen corto o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid",
+  },
+  {
+    id: "inversionistas-linkedin-1",
+    category: "inversionistas",
+    channel: "LinkedIn",
+    title: "Inversionistas - conexion LinkedIn",
+    subject: "",
+    body:
+      "Hola {{nombre}}, estoy construyendo Tecnotitan, una compania de software e IA enfocada en LATAM. Vi tu perfil de inversion y me gustaria conectar para compartirte el avance cuando tenga sentido.",
+  },
+  {
+    id: "seguimiento-email-1",
+    category: "seguimiento",
+    channel: "Email",
+    title: "Seguimiento - despues del primer mensaje",
+    subject: "Re: {{empresa}}",
+    body:
+      "Hola {{nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nCreo que hay una oportunidad interesante para {{empresa}} en automatizacion, integracion de sistemas o uso practico de IA en procesos comerciales/operativos.\n\nSi no eres la persona correcta, con gusto me indicas quien podria revisar este tema.\n\nSaludos,\nDavid",
+  },
+  {
+    id: "seguimiento-linkedin-1",
+    category: "seguimiento",
+    channel: "LinkedIn",
+    title: "Seguimiento - LinkedIn",
+    subject: "",
+    body:
+      "Hola {{nombre}}, te dejo una nota corta de seguimiento. Si en {{empresa}} estan revisando automatizacion, software interno o IA aplicada a operaciones, puedo compartirte ideas concretas sin compromiso.",
+  },
+  {
+    id: "reactivacion-email-1",
+    category: "reactivacion",
+    channel: "Email",
+    title: "Reactivacion - lead archivado",
+    subject: "Retomamos conversacion?",
+    body:
+      "Hola {{nombre}},\n\nHace un tiempo dejamos pendiente conversar sobre posibles mejoras para {{empresa}}.\n\nTe escribo porque en Tecnotitan hemos avanzado en soluciones de software, automatizacion e IA que podrian aplicar muy bien a equipos que buscan crecer sin aumentar friccion operativa.\n\nSi sigue siendo relevante, puedo enviarte una propuesta breve o agendar una llamada corta.\n\nSaludos,\nDavid",
+  },
+  {
+    id: "reactivacion-linkedin-1",
+    category: "reactivacion",
+    channel: "LinkedIn",
+    title: "Reactivacion - LinkedIn",
+    subject: "",
+    body:
+      "Hola {{nombre}}, retomo contacto. Si en {{empresa}} siguen explorando mejoras con software, automatizacion o IA, puedo compartirte una idea concreta y breve para evaluar.",
+  },
+];
 
 function apiHeaders() {
   return {
@@ -550,6 +629,51 @@ function renderTemplates() {
       renderTemplates();
     });
   });
+}
+
+function categoryLabel(category) {
+  if (category === "consultoria") return "Consultoria";
+  if (category === "inversionistas") return "Inversionistas";
+  if (category === "seguimiento") return "Seguimiento";
+  if (category === "reactivacion") return "Reactivacion";
+  return category;
+}
+
+function renderMessageTemplates() {
+  if (!elements.messageTemplates) return;
+  const filter = state.messageTemplateFilter || "all";
+  if (elements.messageTemplateFilter) elements.messageTemplateFilter.value = filter;
+  const templates = filter === "all" ? MESSAGE_TEMPLATES : MESSAGE_TEMPLATES.filter((template) => template.category === filter);
+  if (elements.messageTemplateCount) {
+    elements.messageTemplateCount.textContent = `${templates.length} plantillas`;
+  }
+  elements.messageTemplates.innerHTML = templates
+    .map(
+      (template) => `
+        <article class="message-template-card">
+          <div class="message-template-header">
+            <div>
+              <strong>${template.title}</strong>
+              <span>${template.channel} | ${categoryLabel(template.category)}</span>
+            </div>
+            <button class="secondary" type="button" data-copy-template="${template.id}">Copiar</button>
+          </div>
+          ${template.subject ? `<p><strong>Asunto</strong><span>${template.subject}</span></p>` : ""}
+          <pre>${template.body}</pre>
+        </article>
+      `
+    )
+    .join("");
+  elements.messageTemplates.querySelectorAll("[data-copy-template]").forEach((button) => {
+    button.addEventListener("click", () => copyMessageTemplate(button.dataset.copyTemplate));
+  });
+}
+
+function copyMessageTemplate(templateId) {
+  const template = MESSAGE_TEMPLATES.find((item) => item.id === templateId);
+  if (!template) return;
+  const text = [template.subject ? `Asunto: ${template.subject}` : "", template.body].filter(Boolean).join("\n\n");
+  copyValue(text, "Plantilla");
 }
 
 function isProcessedClient(lead) {
@@ -1297,6 +1421,7 @@ async function loadPublicData() {
   const [status, templates] = await Promise.all([api("/api/status"), api("/api/templates")]);
   state.templates = templates.templates;
   renderTemplates();
+  renderMessageTemplates();
 
   if (!status.supabaseConfigured) {
     setStatus("Falta SUPABASE_SERVICE_ROLE_KEY en Vercel para activar base de datos.", "warning");
@@ -1592,6 +1717,10 @@ elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);
+elements.messageTemplateFilter.addEventListener("change", () => {
+  state.messageTemplateFilter = elements.messageTemplateFilter.value;
+  renderMessageTemplates();
+});
 elements.clientContactFilter.addEventListener("change", () => {
   state.clientContactFilter = elements.clientContactFilter.value;
   refreshClientContactFilter();
