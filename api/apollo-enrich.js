@@ -7,7 +7,21 @@ function apolloKey() {
   return process.env.APOLLO_API_KEY;
 }
 
-async function enrichWithApollo({ contact, company }) {
+function webhookSecret() {
+  return process.env.APOLLO_PHONE_WEBHOOK_SECRET || process.env.CRM_SESSION_SECRET || "";
+}
+
+function webhookUrl(req) {
+  const configured = process.env.APOLLO_PHONE_WEBHOOK_URL;
+  if (configured) return configured;
+  const secret = webhookSecret();
+  if (!secret) return "";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "www.tecnotitanmarketing.com";
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+  return `${protocol}://${host}/api/apollo-enrich?webhook=phone&token=${encodeURIComponent(secret)}`;
+}
+
+async function enrichWithApollo({ contact, company, req, requestPhone }) {
   const params = new URLSearchParams();
   if (contact.apollo_person_id) params.set("id", contact.apollo_person_id);
   if (contact.email) params.set("email", contact.email);
@@ -17,10 +31,11 @@ async function enrichWithApollo({ contact, company }) {
   if (contact.full_name) params.set("name", contact.full_name);
   if (company?.domain) params.set("domain", company.domain);
   if (company?.name) params.set("organization_name", company.name);
+  const phoneWebhookUrl = requestPhone ? webhookUrl(req) : "";
   params.set("reveal_personal_emails", "true");
-  params.set("reveal_phone_number", process.env.APOLLO_PHONE_WEBHOOK_URL ? "true" : "false");
-  if (process.env.APOLLO_PHONE_WEBHOOK_URL) {
-    params.set("webhook_url", process.env.APOLLO_PHONE_WEBHOOK_URL);
+  params.set("reveal_phone_number", phoneWebhookUrl ? "true" : "false");
+  if (phoneWebhookUrl) {
+    params.set("webhook_url", phoneWebhookUrl);
   }
 
   const response = await fetch(`https://api.apollo.io/api/v1/people/match?${params.toString()}`, {
@@ -40,12 +55,30 @@ async function enrichWithApollo({ contact, company }) {
   return data;
 }
 
+function isPhoneWebhook(req) {
+  const url = new URL(req.url, "https://tecnotitan.local");
+  return url.searchParams.get("webhook") === "phone";
+}
+
+function validWebhookToken(req) {
+  const secret = webhookSecret();
+  if (!secret) return false;
+  const url = new URL(req.url, "https://tecnotitan.local");
+  return url.searchParams.get("token") === secret;
+}
+
 function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") || null;
 }
 
-function contactUpdateFromApollo(person, currentContact) {
+function contactUpdateFromApollo(person, currentContact, options = {}) {
   const firstPhone = person.phone_numbers?.[0]?.raw_number || person.phone;
+  const rawPayload = {
+    ...person,
+    tecnotitan_phone_requested_at: options.requestPhone
+      ? new Date().toISOString()
+      : currentContact.apollo_raw_payload?.tecnotitan_phone_requested_at,
+  };
   return {
     apollo_person_id: firstValue(currentContact.apollo_person_id, person.id),
     first_name: firstValue(person.first_name, currentContact.first_name),
@@ -62,7 +95,7 @@ function contactUpdateFromApollo(person, currentContact) {
     country: firstValue(person.country, currentContact.country),
     city: firstValue(person.city, currentContact.city),
     state: firstValue(person.state, currentContact.state),
-    apollo_raw_payload: person,
+    apollo_raw_payload: rawPayload,
     apollo_enriched_at: new Date().toISOString(),
     apollo_enrichment_status: person.id ? "enriched" : "not_available",
     updated_at: new Date().toISOString(),
@@ -88,7 +121,72 @@ function companyUpdateFromApollo(person, currentCompany) {
   };
 }
 
+function phoneFromPerson(person) {
+  const numbers = Array.isArray(person.phone_numbers) ? person.phone_numbers : [];
+  const mobile =
+    numbers.find((item) => String(item.type_cd || "").toLowerCase().includes("mobile")) ||
+    numbers.find((item) => item.raw_number || item.sanitized_number);
+  return {
+    mobile_phone: mobile?.raw_number || mobile?.sanitized_number || person.mobile_phone || null,
+    phone: numbers[0]?.raw_number || numbers[0]?.sanitized_number || person.phone || null,
+  };
+}
+
+async function handlePhoneWebhook(req, res) {
+  if (!validWebhookToken(req)) {
+    res.status(401).json({ error: "Webhook no autorizado." });
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const people = Array.isArray(body.people) ? body.people : [];
+  const updatedContacts = [];
+
+  for (const person of people) {
+    if (!person.id) continue;
+    const phones = phoneFromPerson(person);
+    if (!phones.mobile_phone && !phones.phone) continue;
+
+    const rows = await updateRows(
+      "contacts",
+      {
+        mobile_phone: phones.mobile_phone,
+        phone: phones.phone,
+        apollo_enrichment_status: "enriched",
+        apollo_enriched_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      `apollo_person_id=eq.${encodeURIComponent(person.id)}`
+    );
+    updatedContacts.push(...rows);
+  }
+
+  await insertRow("apollo_sync_logs", {
+    operation: "phone_webhook",
+    endpoint: "/api/apollo-enrich?webhook=phone",
+    request_payload: { people_count: people.length },
+    response_status: 200,
+    response_payload: body,
+    credits_used: body.credits_consumed || null,
+  });
+
+  res.status(200).json({ ok: true, updated: updatedContacts.length });
+}
+
 module.exports = async function handler(req, res) {
+  if (isPhoneWebhook(req)) {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Metodo no permitido." });
+      return;
+    }
+    try {
+      await handlePhoneWebhook(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
   const user = requireAdmin(req, res);
   if (!user) return;
   if (req.method !== "POST") {
@@ -104,7 +202,7 @@ module.exports = async function handler(req, res) {
     }
 
     const select = [
-      "select=id,contact_id,company_id,contacts(id,apollo_person_id,first_name,last_name,full_name,title,seniority,email,email_status,phone,mobile_phone,linkedin_url,country,city,state),companies(id,apollo_organization_id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
+      "select=id,contact_id,company_id,contacts(id,apollo_person_id,first_name,last_name,full_name,title,seniority,email,email_status,phone,mobile_phone,linkedin_url,country,city,state,apollo_raw_payload),companies(id,apollo_organization_id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
       `id=eq.${encodeURIComponent(body.opportunity_id)}`,
       "limit=1",
     ].join("&");
@@ -116,9 +214,18 @@ module.exports = async function handler(req, res) {
     }
 
     await updateRows("contacts", { apollo_enrichment_status: "requested" }, `id=eq.${opportunity.contacts.id}`);
-    const apollo = await enrichWithApollo({ contact: opportunity.contacts, company: opportunity.companies });
+    const apollo = await enrichWithApollo({
+      contact: opportunity.contacts,
+      company: opportunity.companies,
+      req,
+      requestPhone: Boolean(body.request_phone),
+    });
     const person = apollo.person || {};
-    const updated = await updateRows("contacts", contactUpdateFromApollo(person, opportunity.contacts), `id=eq.${opportunity.contacts.id}`);
+    const updated = await updateRows(
+      "contacts",
+      contactUpdateFromApollo(person, opportunity.contacts, { requestPhone: Boolean(body.request_phone) }),
+      `id=eq.${opportunity.contacts.id}`
+    );
     const companyPatch = companyUpdateFromApollo(person, opportunity.companies || {});
     if (companyPatch && opportunity.companies?.id) {
       await updateRows("companies", companyPatch, `id=eq.${opportunity.companies.id}`);
@@ -127,7 +234,7 @@ module.exports = async function handler(req, res) {
     await insertRow("apollo_sync_logs", {
       operation: "people_match_enrichment",
       endpoint: "/api/v1/people/match",
-      request_payload: { opportunity_id: body.opportunity_id },
+      request_payload: { opportunity_id: body.opportunity_id, request_phone: Boolean(body.request_phone) },
       response_status: 200,
       response_payload: apollo,
       credits_used: person.id ? 1 : 0,
@@ -140,7 +247,8 @@ module.exports = async function handler(req, res) {
       enriched: Boolean(person.id),
       has_email: Boolean(updated[0]?.email),
       has_phone: Boolean(updated[0]?.mobile_phone || updated[0]?.phone),
-      phone_reveal_enabled: Boolean(process.env.APOLLO_PHONE_WEBHOOK_URL),
+      phone_reveal_enabled: Boolean(webhookUrl(req)),
+      phone_request_sent: Boolean(body.request_phone && webhookUrl(req)),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

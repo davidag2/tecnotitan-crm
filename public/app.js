@@ -594,6 +594,8 @@ function renderClients(clients) {
                           const contact = lead.contacts || {};
                           const company = lead.companies || {};
                           const phone = contact.mobile_phone || contact.phone || "";
+                          const phoneRequested = Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
+                          const phoneButtonLabel = phone ? "Telefono obtenido" : phoneRequested ? "Telefono solicitado" : "Solicitar telefono";
                           const email = contact.email || "";
                           const linkedinUrl = contact.linkedin_url || "";
                           const webUrl = websiteUrl(company);
@@ -620,6 +622,7 @@ function renderClients(clients) {
                               <div class="contact-actions">
                                 <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
                                 <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
+                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${phone || phoneRequested ? "disabled" : ""}>${phoneButtonLabel}</button>
                                 <button class="secondary" type="button" data-open-url="${attr(linkedinUrl)}" data-open-label="LinkedIn" ${linkedinUrl ? "" : "disabled"}>LinkedIn</button>
                                 <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
                                 <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
@@ -676,6 +679,10 @@ function renderClients(clients) {
   });
   elements.clients.querySelectorAll("[data-register-activity]").forEach((button) => {
     button.addEventListener("click", () => registerActivity(button.dataset.registerActivity, button.dataset.activityType, button));
+  });
+  elements.clients.querySelectorAll("[data-request-phone]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => requestPhone(button.dataset.requestPhone, button));
   });
   elements.clients.querySelectorAll("[data-archive-lead]").forEach((button) => {
     button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
@@ -943,6 +950,36 @@ async function registerActivity(opportunityId, activityType, button) {
     await reloadLeadsOnly();
     renderFollowups(await api("/api/followups"));
     setStatus("Contacto registrado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function requestPhone(opportunityId, button) {
+  if (!window.confirm("Solicitar telefono movil a Apollo? Esta accion puede consumir creditos de enriquecimiento.")) return;
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Solicitando...";
+  try {
+    const result = await api("/api/apollo-enrich", {
+      method: "POST",
+      body: JSON.stringify({
+        opportunity_id: opportunityId,
+        request_phone: true,
+      }),
+    });
+    await reloadLeadsOnly();
+    setStatus(
+      result.phone_request_sent
+        ? "Telefono solicitado. Apollo lo enviara al webhook cuando este disponible."
+        : "No hay webhook de telefono configurado.",
+      result.phone_request_sent ? "ok" : "warning"
+    );
   } catch (error) {
     setStatus(error.message, "warning");
   } finally {
