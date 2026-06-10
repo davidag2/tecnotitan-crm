@@ -1214,8 +1214,7 @@ textarea {
   color: #a86714;
 }
 
-ol,
-.roadmap {
+ol {
   margin: 12px 0 0;
   padding-left: 22px;
   color: var(--muted);
