@@ -332,6 +332,43 @@
       </div>
     </section>
 
+    <section class="detail-modal hidden" id="company-detail-modal" aria-hidden="true">
+      <div class="detail-panel company-detail-panel">
+        <div class="detail-header">
+          <div>
+            <h2 id="company-detail-title">Ficha de empresa</h2>
+            <p id="company-detail-subtitle">Datos comerciales y contactos asociados</p>
+          </div>
+          <button id="close-company-detail" class="secondary" type="button">Cerrar</button>
+        </div>
+
+        <div class="detail-grid">
+          <article>
+            <h3>Empresa</h3>
+            <div id="company-detail-facts"></div>
+          </article>
+          <article>
+            <h3>Oportunidades</h3>
+            <div id="company-detail-opportunities"></div>
+          </article>
+        </div>
+
+        <article class="detail-notes">
+          <h3>Contactos asociados</h3>
+          <div id="company-detail-contacts"></div>
+        </article>
+
+        <article class="detail-notes">
+          <h3>Notas comerciales</h3>
+          <div id="company-detail-notes"></div>
+          <div class="note-form">
+            <textarea id="company-note-input" rows="3" placeholder="Agregar nota comercial de empresa"></textarea>
+            <button id="add-company-note" type="button">Agregar nota</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <script src="/app.js"></script>
   </body>
 </html>

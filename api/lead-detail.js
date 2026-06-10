@@ -14,6 +14,16 @@ function getOpportunityId(req) {
   return String(url.searchParams.get("id") || "").trim();
 }
 
+function getCompanyId(req) {
+  const url = new URL(req.url, "https://tecnotitan.local");
+  return String(url.searchParams.get("company_id") || "").trim();
+}
+
+async function firstRow(path) {
+  const { payload } = await supabaseFetch(path);
+  return payload?.[0] || null;
+}
+
 async function loadOpportunity(id, user) {
   const filters = [
     "select=id,lead_type,target_region,pipeline_status,owner_user_id,score,score_label,score_reasons,service_interest,consulting_need,investor_type,investment_stage,investment_thesis,last_activity_at,next_follow_up_at,next_follow_up_type,created_at,contacts(id,full_name,first_name,last_name,title,seniority,email,email_status,phone,mobile_phone,linkedin_url,photo_url,country,city,state,apollo_enrichment_status,apollo_enriched_at,apollo_raw_payload),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,raw_payload)",
@@ -28,6 +38,79 @@ async function loadOpportunity(id, user) {
 
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   return payload?.[0] || null;
+}
+
+function opportunityPath(companyId, user) {
+  const filters = [
+    "select=id,contact_id,lead_type,target_region,pipeline_status,score,score_label,owner_user_id,next_follow_up_at,contacts(id,full_name,title,email,phone,mobile_phone,linkedin_url)",
+    `company_id=eq.${encodeURIComponent(companyId)}`,
+    "deleted_at=is.null",
+    "order=score.desc",
+    "limit=50",
+  ];
+  if (user.role !== "admin") {
+    filters.splice(2, 0, `owner_user_id=eq.${encodeURIComponent(user.db_user_id || "")}`);
+  }
+  return `/opportunities?${filters.join("&")}`;
+}
+
+async function loadCompanyDetail(companyId, user) {
+  const company = await firstRow(
+    `/companies?select=id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,employee_range,annual_revenue,phone,raw_payload,created_at,updated_at&deleted_at=is.null&id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  if (!company) return null;
+
+  const { payload: opportunities } = await supabaseFetch(opportunityPath(companyId, user));
+  const visibleOpportunities = opportunities || [];
+  if (user.role !== "admin" && !visibleOpportunities.length) return null;
+
+  let contacts = [];
+  if (user.role === "admin") {
+    const { payload } = await supabaseFetch(
+      `/contacts?select=id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,state,apollo_enrichment_status&company_id=eq.${encodeURIComponent(companyId)}&deleted_at=is.null&order=full_name.asc&limit=50`
+    );
+    contacts = payload || [];
+  } else {
+    const contactIds = [...new Set(visibleOpportunities.map((row) => row.contact_id).filter(Boolean))];
+    if (contactIds.length) {
+      const { payload } = await supabaseFetch(
+        `/contacts?select=id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,state,apollo_enrichment_status&id=in.(${contactIds.map(encodeURIComponent).join(",")})&deleted_at=is.null&order=full_name.asc&limit=50`
+      );
+      contacts = payload || [];
+    }
+  }
+
+  const { payload: notes } = await supabaseFetch(
+    `/notes?select=id,body,created_at,users(name,email)&company_id=eq.${encodeURIComponent(companyId)}&deleted_at=is.null&order=created_at.desc&limit=30`
+  );
+
+  return {
+    company,
+    contacts,
+    opportunities: visibleOpportunities,
+    notes: notes || [],
+  };
+}
+
+async function addCompanyNote(companyId, body, user) {
+  const detail = await loadCompanyDetail(companyId, user);
+  if (!detail) throw new Error("No se encontro la empresa o no tienes acceso.");
+  const note = String(body.note || "").trim();
+  if (!note) throw new Error("La nota no puede estar vacia.");
+
+  await insertRow("notes", {
+    company_id: companyId,
+    user_id: user.db_user_id || null,
+    body: note,
+  });
+
+  await updateRows(
+    "companies",
+    {
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(companyId)}`
+  );
 }
 
 async function ensureDefaultTags() {
@@ -180,6 +263,29 @@ module.exports = async function handler(req, res) {
   if (!user) return;
 
   try {
+    const companyId = getCompanyId(req);
+    if (companyId) {
+      if (req.method === "GET") {
+        const detail = await loadCompanyDetail(companyId, user);
+        if (!detail) {
+          res.status(404).json({ error: "No se encontro la empresa o no tienes acceso." });
+          return;
+        }
+        res.status(200).json(detail);
+        return;
+      }
+
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        await addCompanyNote(companyId, body, user);
+        res.status(201).json(await loadCompanyDetail(companyId, user));
+        return;
+      }
+
+      res.status(405).json({ error: "Metodo no permitido." });
+      return;
+    }
+
     const id = getOpportunityId(req);
     if (!id) {
       res.status(400).json({ error: "id es requerido." });

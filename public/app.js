@@ -72,9 +72,20 @@ const elements = {
   detailActivities: document.querySelector("#detail-activities"),
   detailNoteInput: document.querySelector("#detail-note-input"),
   addDetailNote: document.querySelector("#add-detail-note"),
+  companyDetailModal: document.querySelector("#company-detail-modal"),
+  closeCompanyDetail: document.querySelector("#close-company-detail"),
+  companyDetailTitle: document.querySelector("#company-detail-title"),
+  companyDetailSubtitle: document.querySelector("#company-detail-subtitle"),
+  companyDetailFacts: document.querySelector("#company-detail-facts"),
+  companyDetailOpportunities: document.querySelector("#company-detail-opportunities"),
+  companyDetailContacts: document.querySelector("#company-detail-contacts"),
+  companyDetailNotes: document.querySelector("#company-detail-notes"),
+  companyNoteInput: document.querySelector("#company-note-input"),
+  addCompanyNote: document.querySelector("#add-company-note"),
 };
 
 let activeOpportunityId = "";
+let activeCompanyId = "";
 let activeTab = "dashboard";
 
 const PIPELINE_STATUSES = [
@@ -684,6 +695,7 @@ function renderClients(clients) {
                                   ${pipelineStatusOptions(lead.pipeline_status)}
                                 </select>
                                 <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+                                <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Ver empresa</button>
                                 <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar</button>
                               </div>
                               <div class="contact-actions">
@@ -735,6 +747,10 @@ function renderClients(clients) {
   elements.clients.querySelectorAll("[data-open-detail]").forEach((button) => {
     button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
   });
+  elements.clients.querySelectorAll("[data-open-company]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => openCompanyDetail(button.dataset.openCompany));
+  });
   elements.clients.querySelectorAll("[data-pipeline-status]").forEach((select) => {
     select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
   });
@@ -783,6 +799,7 @@ function renderArchive(archived) {
           </div>
           <div class="archive-actions">
             <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+            <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Ver empresa</button>
             <button type="button" data-restore-lead="${lead.id}">Restaurar a Nuevo</button>
           </div>
         </article>
@@ -792,6 +809,10 @@ function renderArchive(archived) {
 
   elements.archive.querySelectorAll("[data-open-detail]").forEach((button) => {
     button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+  elements.archive.querySelectorAll("[data-open-company]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => openCompanyDetail(button.dataset.openCompany));
   });
   elements.archive.querySelectorAll("[data-restore-lead]").forEach((button) => {
     button.addEventListener("click", () => restoreLead(button.dataset.restoreLead));
@@ -833,7 +854,11 @@ function renderLeadDetail(detail) {
     line("LinkedIn", company.linkedin_url),
     line("Pais", company.country),
     line("Empleados", company.employee_count),
-  ].join("");
+  ].join("") + `<button class="secondary detail-inline-action" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Ver ficha de empresa</button>`;
+  elements.detailCompany.querySelector("[data-open-company]")?.addEventListener("click", (event) => {
+    if (event.currentTarget.disabled) return;
+    openCompanyDetail(event.currentTarget.dataset.openCompany);
+  });
   elements.detailScore.innerHTML = `
     <div class="detail-score ${opportunity.score_label}">
       <strong>${opportunity.score}</strong>
@@ -910,6 +935,119 @@ function closeLeadDetail() {
   activeOpportunityId = "";
   elements.detailModal.classList.add("hidden");
   elements.detailModal.setAttribute("aria-hidden", "true");
+}
+
+function renderCompanyDetail(detail) {
+  const company = detail.company || {};
+  elements.companyDetailTitle.textContent = company.name || "Empresa sin nombre";
+  elements.companyDetailSubtitle.textContent = [company.industry, company.country].filter(Boolean).join(" | ") || "Datos comerciales";
+  elements.companyDetailFacts.innerHTML = [
+    line("Industria", company.industry),
+    line("Pais", company.country),
+    line("Ciudad", [company.city, company.state].filter(Boolean).join(", ")),
+    line("Tamano", company.employee_range || company.employee_count),
+    line("Web", company.website_url || websiteUrl(company)),
+    line("LinkedIn", company.linkedin_url),
+    line("Telefono", company.phone),
+    line("Dominio", company.domain),
+  ].join("");
+
+  elements.companyDetailOpportunities.innerHTML = detail.opportunities?.length
+    ? detail.opportunities
+        .map(
+          (opportunity) => `
+            <article class="company-row">
+              <div>
+                <strong>${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(opportunity.target_region)}</strong>
+                <span>${opportunity.pipeline_status || "Sin estado"} | Score ${opportunity.score} ${opportunity.score_label}</span>
+                <small>${opportunity.contacts?.full_name || "Contacto sin nombre"}</small>
+              </div>
+              <button class="secondary" type="button" data-company-open-lead="${opportunity.id}">Ver lead</button>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay oportunidades asociadas.</p>`;
+
+  elements.companyDetailContacts.innerHTML = detail.contacts?.length
+    ? detail.contacts
+        .map(
+          (contact) => `
+            <article class="company-row">
+              <div>
+                <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+                <span>${contact.title || "Cargo no disponible"}</span>
+                <small>${contact.email || contact.mobile_phone || contact.phone || "Sin contacto directo"}</small>
+              </div>
+              <div class="company-row-actions">
+                <button class="secondary" type="button" data-copy-value="${attr(contact.email || "")}" data-copy-label="Email" ${contact.email ? "" : "disabled"}>Copiar email</button>
+                <button class="secondary" type="button" data-copy-value="${attr(contact.mobile_phone || contact.phone || "")}" data-copy-label="Telefono" ${contact.mobile_phone || contact.phone ? "" : "disabled"}>Copiar telefono</button>
+                <button class="secondary" type="button" data-open-url="${attr(contact.linkedin_url || "")}" data-open-label="LinkedIn" ${contact.linkedin_url ? "" : "disabled"}>LinkedIn</button>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay contactos asociados.</p>`;
+
+  elements.companyDetailNotes.innerHTML = detail.notes?.length
+    ? detail.notes
+        .map(
+          (note) => `
+            <article class="note-row">
+              <p>${note.body}</p>
+              <small>${note.users?.name || "Usuario"} | ${new Date(note.created_at).toLocaleString("es-CO")}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay notas comerciales de empresa.</p>`;
+
+  elements.companyDetailOpportunities.querySelectorAll("[data-company-open-lead]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.companyOpenLead));
+  });
+  elements.companyDetailContacts.querySelectorAll("[data-copy-value]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => copyValue(button.dataset.copyValue, button.dataset.copyLabel || "Valor"));
+  });
+  elements.companyDetailContacts.querySelectorAll("[data-open-url]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => openUrl(button.dataset.openUrl, button.dataset.openLabel || "Enlace"));
+  });
+}
+
+async function openCompanyDetail(companyId) {
+  if (!companyId) return;
+  activeCompanyId = companyId;
+  try {
+    const detail = await api(`/api/lead-detail?company_id=${encodeURIComponent(companyId)}`);
+    renderCompanyDetail(detail);
+    elements.companyDetailModal.classList.remove("hidden");
+    elements.companyDetailModal.setAttribute("aria-hidden", "false");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+function closeCompanyDetail() {
+  activeCompanyId = "";
+  elements.companyDetailModal.classList.add("hidden");
+  elements.companyDetailModal.setAttribute("aria-hidden", "true");
+}
+
+async function addCompanyNote() {
+  if (!activeCompanyId || !elements.companyNoteInput.value.trim()) return;
+  try {
+    const detail = await api(`/api/lead-detail?company_id=${encodeURIComponent(activeCompanyId)}`, {
+      method: "POST",
+      body: JSON.stringify({ note: elements.companyNoteInput.value.trim() }),
+    });
+    elements.companyNoteInput.value = "";
+    renderCompanyDetail(detail);
+    setStatus("Nota comercial de empresa agregada.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
 }
 
 async function saveLeadDetail() {
@@ -1379,9 +1517,11 @@ elements.passwordInput.addEventListener("keydown", (event) => {
 });
 elements.logoutButton.addEventListener("click", logout);
 elements.closeDetail.addEventListener("click", closeLeadDetail);
+elements.closeCompanyDetail.addEventListener("click", closeCompanyDetail);
 elements.saveDetail.addEventListener("click", saveLeadDetail);
 elements.saveScoreTags.addEventListener("click", saveScoreTags);
 elements.addDetailNote.addEventListener("click", addLeadNote);
+elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);

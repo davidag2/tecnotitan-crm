@@ -888,6 +888,48 @@ button.danger {
   color: var(--muted);
 }
 
+.detail-inline-action {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.company-detail-panel {
+  width: min(1160px, 100%);
+}
+
+.company-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.company-row:last-child {
+  border-bottom: 0;
+}
+
+.company-row strong,
+.company-row span,
+.company-row small {
+  display: block;
+}
+
+.company-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.company-row-actions button,
+.company-row > button {
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .detail-score strong {
   display: block;
   font-size: 36px;
@@ -1053,6 +1095,19 @@ li {
 
   .client-toolbar select {
     max-width: none;
+  }
+
+  .company-row {
+    grid-template-columns: 1fr;
+  }
+
+  .company-row-actions {
+    justify-content: stretch;
+  }
+
+  .company-row-actions button,
+  .company-row > button {
+    width: 100%;
   }
 
   .metrics,
