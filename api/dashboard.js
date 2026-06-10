@@ -75,16 +75,16 @@ async function executiveWeeklyMetrics() {
   const since = `${weeks[0]}T00:00:00.000Z`;
   const weekly = new Map(weeks.map((key) => [key, emptyWeek(key)]));
 
-  const [{ payload: searches }, { payload: logs }, { payload: contacts }, { payload: events }] = await Promise.all([
-    supabaseFetch(`/lead_searches?select=created_at,results_saved&created_at=gte.${encodeURIComponent(since)}&limit=5000`),
+  const [{ payload: opportunities }, { payload: logs }, { payload: contacts }, { payload: events }] = await Promise.all([
+    supabaseFetch(`/opportunities?select=id,created_at&created_at=gte.${encodeURIComponent(since)}&deleted_at=is.null&limit=5000`),
     supabaseFetch(`/apollo_sync_logs?select=created_at,operation,credits_used&created_at=gte.${encodeURIComponent(since)}&limit=5000`),
     supabaseFetch(`/contacts?select=apollo_enriched_at&apollo_enriched_at=gte.${encodeURIComponent(since)}&deleted_at=is.null&limit=5000`),
     supabaseFetch(`/pipeline_events?select=to_status,changed_at&changed_at=gte.${encodeURIComponent(since)}&limit=5000`),
   ]);
 
-  for (const search of searches || []) {
-    const row = weekly.get(weekKey(search.created_at));
-    if (row) row.leads_obtained += Number(search.results_saved || 0);
+  for (const opportunity of opportunities || []) {
+    const row = weekly.get(weekKey(opportunity.created_at));
+    if (row) row.leads_obtained += 1;
   }
   for (const log of logs || []) {
     const row = weekly.get(weekKey(log.created_at));
