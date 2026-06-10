@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Tecnotitan Marketing">
+  <rect width="64" height="64" rx="14" fill="#1e2633"/>
+  <path d="M14 14h36v10H38v26H26V24H14V14Z" fill="#d7f35f"/>
+  <path d="M42 30h8v20h-8V30Z" fill="#1f7a67"/>
+  <path d="M14 40h8v10h-8V40Z" fill="#1f7a67"/>
+</svg>

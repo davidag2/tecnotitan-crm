@@ -99,6 +99,15 @@ body {
   font-weight: 800;
 }
 
+.app-icon {
+  width: 42px;
+  height: 42px;
+  display: block;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
 .brand strong,
 .brand span {
   display: block;
