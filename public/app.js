@@ -1016,6 +1016,7 @@ function renderClients(clients) {
               <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
               <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
               <button class="phone-request-button" type="button" data-request-phone="${lead.id}" ${!contactState.canRequestPhone ? "disabled" : ""}>${phoneButtonLabel}</button>
+              <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar lead</button>
             </div>
             <div class="lead-actions admin-only">
               <select data-assign="${lead.id}">
