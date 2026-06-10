@@ -624,6 +624,17 @@ function renderClients(clients) {
                                 <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
                                 <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
                               </div>
+                              <div class="task-actions">
+                                <select data-task-type="${lead.id}">
+                                  <option value="Llamar">Llamar</option>
+                                  <option value="Enviar email">Enviar email</option>
+                                  <option value="Enviar propuesta">Enviar propuesta</option>
+                                  <option value="Seguimiento">Seguimiento</option>
+                                  <option value="Reunion">Reunion</option>
+                                </select>
+                                <input data-task-date="${lead.id}" type="date" value="${lead.next_follow_up_at ? lead.next_follow_up_at.slice(0, 10) : ""}">
+                                <button type="button" data-schedule-task="${lead.id}">Crear tarea</button>
+                              </div>
                               <div class="lead-actions admin-only">
                                 <select data-assign="${lead.id}">
                                   <option value="">Asignar a...</option>
@@ -668,6 +679,9 @@ function renderClients(clients) {
   });
   elements.clients.querySelectorAll("[data-archive-lead]").forEach((button) => {
     button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
+  });
+  elements.clients.querySelectorAll("[data-schedule-task]").forEach((button) => {
+    button.addEventListener("click", () => scheduleTask(button.dataset.scheduleTask, button));
   });
 }
 
@@ -829,6 +843,38 @@ async function saveLeadDetail() {
     setStatus("Detalle actualizado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
+  }
+}
+
+async function scheduleTask(opportunityId, button) {
+  const taskType = elements.clients.querySelector(`[data-task-type="${opportunityId}"]`)?.value || "Seguimiento";
+  const taskDate = elements.clients.querySelector(`[data-task-date="${opportunityId}"]`)?.value || "";
+  if (!taskDate) {
+    setStatus("Selecciona una fecha para crear la tarea.", "warning");
+    return;
+  }
+
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Creando...";
+  try {
+    await api(`/api/lead-detail?id=${encodeURIComponent(opportunityId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        next_follow_up_at: taskDate,
+        next_follow_up_type: taskType,
+      }),
+    });
+    await reloadLeadsOnly();
+    renderFollowups(await api("/api/followups"));
+    setStatus("Tarea creada en Seguimientos.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
 }
 
