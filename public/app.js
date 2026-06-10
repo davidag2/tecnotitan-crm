@@ -23,6 +23,7 @@ const elements = {
   searchHistory: document.querySelector("#search-history"),
   searchResults: document.querySelector("#search-results"),
   leads: document.querySelector("#leads"),
+  clients: document.querySelector("#clients"),
   userList: document.querySelector("#user-list"),
   leadSearch: document.querySelector("#lead-search"),
   leadCountry: document.querySelector("#lead-country"),
@@ -129,6 +130,8 @@ function renderMetrics(data) {
   elements.metrics.innerHTML = [
     ["Empresas", data.companies ?? "-"],
     ["Contactos", data.contacts ?? "-"],
+    ["Leads", data.leadsInAirport ?? "-"],
+    ["Clientes", data.clientsProcessed ?? "-"],
     ["Oportunidades", data.opportunities ?? "-"],
     ["Busquedas", data.searches ?? "-"],
     ["Hot", data.hot ?? "-"],
@@ -404,9 +407,26 @@ function renderTemplates() {
   });
 }
 
+function isProcessedClient(lead) {
+  return lead.contacts?.apollo_enrichment_status === "enriched";
+}
+
+function splitLeadCollections(leads) {
+  return {
+    airportLeads: leads.filter((lead) => !isProcessedClient(lead)),
+    clients: leads.filter(isProcessedClient),
+  };
+}
+
+function renderLeadCollections(leads) {
+  const collections = splitLeadCollections(leads);
+  renderLeads(collections.airportLeads);
+  renderClients(collections.clients);
+}
+
 function renderLeads(leads) {
   if (!leads.length) {
-    elements.leads.innerHTML = `<p class="empty">No hay leads para los filtros actuales.</p>`;
+    elements.leads.innerHTML = `<p class="empty">No hay leads nuevos para procesar con los filtros actuales.</p>`;
     return;
   }
 
@@ -482,6 +502,81 @@ function renderLeads(leads) {
     button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
   });
   elements.leads.querySelectorAll("[data-pipeline-status]").forEach((select) => {
+    select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
+  });
+}
+
+function renderClients(clients) {
+  if (!elements.clients) return;
+  if (!clients.length) {
+    elements.clients.innerHTML = `<p class="empty">No hay clientes procesados para los filtros actuales.</p>`;
+    return;
+  }
+
+  elements.clients.innerHTML = `
+    <div class="lead-table-header">
+      <span>Cliente</span>
+      <span>Empresa</span>
+      <span>Tipo</span>
+      <span>Estado</span>
+      <span>Score</span>
+    </div>
+  ${clients
+    .map((lead) => {
+      const contact = lead.contacts || {};
+      const company = lead.companies || {};
+      return `
+        <article class="lead-row client-row">
+          <div>
+            <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+            <span>${contact.title || "Cargo no disponible"}</span>
+            <small>${contact.email || contact.mobile_phone || contact.phone || "Detalles obtenidos"} | ${contact.country || company.country || "Sin pais"}</small>
+            <div class="lead-actions admin-only">
+              <select data-assign="${lead.id}">
+                <option value="">Asignar a...</option>
+                ${state.users
+                  .filter((user) => user.is_active)
+                  .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
+                  .join("")}
+              </select>
+              <span class="status-badge">Detalles obtenidos</span>
+            </div>
+            <div class="lead-actions">
+              <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+            </div>
+          </div>
+          <div class="lead-company">
+            <strong>${company.name || "Empresa no disponible"}</strong>
+            <span>${company.industry || "Industria no disponible"}</span>
+            <small>${company.country || contact.country || "Sin pais"}</small>
+          </div>
+          <div class="lead-meta">
+            <strong>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</strong>
+            <span>${lead.target_region}</span>
+          </div>
+          <div class="lead-meta">
+            <select data-pipeline-status="${lead.id}">
+              ${pipelineStatusOptions(lead.pipeline_status)}
+            </select>
+            <span>${new Date(lead.created_at).toLocaleDateString("es-CO")}</span>
+          </div>
+          <div class="score ${lead.score_label}">
+            <strong>${lead.score}</strong>
+            <span>${lead.score_label}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join("")}`;
+
+  applyRoleVisibility();
+  elements.clients.querySelectorAll("[data-assign]").forEach((select) => {
+    select.addEventListener("change", () => assignLead(select.dataset.assign, select.value));
+  });
+  elements.clients.querySelectorAll("[data-open-detail]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+  elements.clients.querySelectorAll("[data-pipeline-status]").forEach((select) => {
     select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
   });
 }
@@ -677,11 +772,17 @@ async function loadPrivateData() {
     state.currentUser = dashboard.user;
     state.users = users.users || [];
     state.searches = searchHistory.searches || [];
-    renderMetrics(dashboard);
+    const leadRows = leads.leads || [];
+    const collections = splitLeadCollections(leadRows);
+    renderMetrics({
+      ...dashboard,
+      leadsInAirport: collections.airportLeads.length,
+      clientsProcessed: collections.clients.length,
+    });
     renderFollowups(followups);
     renderUsers();
     renderSearchHistory(state.searches);
-    renderLeads(leads.leads || []);
+    renderLeadCollections(leadRows);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -733,7 +834,7 @@ async function updateUser(id, patch) {
     });
     state.users = result.users || [];
     renderUsers();
-    renderLeads(await currentLeads());
+    renderLeadCollections(await currentLeads());
     setStatus("Usuario actualizado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
@@ -759,7 +860,7 @@ function leadFilterQuery() {
 
 async function reloadLeadsOnly() {
   try {
-    renderLeads(await currentLeads());
+    renderLeadCollections(await currentLeads());
   } catch (error) {
     setStatus(error.message, "warning");
   }
@@ -830,6 +931,7 @@ async function enrichLead(opportunityId, button) {
       body: JSON.stringify({ opportunity_id: opportunityId }),
     });
     await loadPrivateData();
+    activateTab("clientes", true);
     await openLeadDetail(opportunityId);
     if (result.has_email || result.has_phone) {
       setStatus("Detalles Apollo actualizados.", "ok");
@@ -881,6 +983,7 @@ function logout() {
   state.searches = [];
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
+  elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
   elements.metrics.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";
