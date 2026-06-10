@@ -779,6 +779,24 @@ button.danger {
   font-size: 12px;
 }
 
+.crm-client-actions .phone-request-button {
+  min-width: 170px;
+  background: #1f7a67;
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(31, 122, 103, 0.18);
+}
+
+.crm-client-actions .phone-request-button:not(:disabled):hover {
+  background: #176653;
+}
+
+.crm-client-actions .phone-request-button:disabled {
+  background: #e4e9f1;
+  color: #667085;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
