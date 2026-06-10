@@ -9,6 +9,7 @@ const state = {
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
   clientContactFilter: "all",
+  clientCountryFilter: "all",
   kanbanSearch: "",
   messageTemplateFilter: "all",
 };
@@ -37,6 +38,7 @@ const elements = {
   clients: document.querySelector("#clients"),
   kanban: document.querySelector("#kanban-board"),
   clientContactFilter: document.querySelector("#client-contact-filter"),
+  clientCountryFilter: document.querySelector("#client-country-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
   userList: document.querySelector("#user-list"),
@@ -830,6 +832,45 @@ function filterClientsByContact(clients) {
   });
 }
 
+function clientCountry(lead) {
+  const contact = lead.contacts || {};
+  const company = lead.companies || {};
+  return (
+    contact.country ||
+    companyField(company, "country") ||
+    contact.apollo_raw_payload?.country ||
+    contact.apollo_raw_payload?.organization?.country ||
+    ""
+  );
+}
+
+function normalizeFilterValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function filterClientsByCountry(clients) {
+  const filter = normalizeFilterValue(state.clientCountryFilter);
+  if (!filter || filter === "all") return clients;
+  return clients.filter((lead) => normalizeFilterValue(clientCountry(lead)) === filter);
+}
+
+function filteredClients(clients) {
+  return filterClientsByCountry(filterClientsByContact(clients));
+}
+
+function renderClientCountryOptions(clients) {
+  if (!elements.clientCountryFilter) return;
+  const countries = [...new Set(clients.map(clientCountry).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  const current = state.clientCountryFilter || "all";
+  elements.clientCountryFilter.innerHTML = [
+    `<option value="all">Todos los paises</option>`,
+    ...countries.map((country) => `<option value="${attr(normalizeFilterValue(country))}">${country}</option>`),
+  ].join("");
+  const hasCurrent = current === "all" || countries.some((country) => normalizeFilterValue(country) === normalizeFilterValue(current));
+  if (!hasCurrent) state.clientCountryFilter = "all";
+  elements.clientCountryFilter.value = state.clientCountryFilter || "all";
+}
+
 function updateClientFilterSummary(total, visible) {
   if (!elements.clientFilterSummary) return;
   elements.clientFilterSummary.textContent = `${visible} de ${total} clientes`;
@@ -978,7 +1019,8 @@ function renderClients(clients) {
   if (elements.clientContactFilter) {
     elements.clientContactFilter.value = state.clientContactFilter || "all";
   }
-  const visibleClients = filterClientsByContact(clients);
+  renderClientCountryOptions(clients);
+  const visibleClients = filteredClients(clients);
   updateClientFilterSummary(clients.length, visibleClients.length);
   if (!clients.length) {
     elements.clients.innerHTML = `<p class="empty">No hay clientes procesados para los filtros actuales.</p>`;
@@ -1020,12 +1062,12 @@ function renderClients(clients) {
             <div>
               <strong>${contact.full_name || "Contacto sin nombre"}</strong>
               <span>${contact.title || "Cargo no disponible"}</span>
-              <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)}</small>
+              <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)} | ${clientCountry(lead) || "Sin pais"}</small>
             </div>
             <div>
               <strong>${company.name || "Empresa no disponible"}</strong>
               <span>${company.industry || "Industria no disponible"}</span>
-              <small>${company.country || contact.country || "Sin pais"}</small>
+              <small>${clientCountry(lead) || "Sin pais"}</small>
             </div>
             <div>
               <span>${emailLabel}</span>
@@ -1991,6 +2033,7 @@ function logout() {
   state.leadRows = [];
   state.assignmentWorkload = null;
   state.clientContactFilter = "all";
+  state.clientCountryFilter = "all";
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
@@ -2031,6 +2074,10 @@ elements.messageTemplateFilter.addEventListener("change", () => {
 });
 elements.clientContactFilter.addEventListener("change", () => {
   state.clientContactFilter = elements.clientContactFilter.value;
+  refreshClientContactFilter();
+});
+elements.clientCountryFilter.addEventListener("change", () => {
+  state.clientCountryFilter = elements.clientCountryFilter.value;
   refreshClientContactFilter();
 });
 elements.leadSearch.addEventListener("keydown", (event) => {
