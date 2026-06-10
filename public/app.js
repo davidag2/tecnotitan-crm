@@ -508,8 +508,29 @@ function readableFilters(filters) {
   return pieces.length ? pieces.join(" | ") : "Filtros base de la plantilla";
 }
 
+function companyField(company, ...keys) {
+  const raw = company?.raw_payload || {};
+  for (const key of keys) {
+    const value = company?.[key] || raw[key];
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return "";
+}
+
+function companyDomain(company) {
+  return companyField(company, "domain", "primary_domain");
+}
+
+function companyWebsite(company) {
+  return companyField(company, "website_url") || websiteUrl(company);
+}
+
+function companyEmployeeCount(company) {
+  return company.employee_range || companyField(company, "employee_count", "estimated_num_employees");
+}
+
 function websiteUrl(company) {
-  const raw = company.website_url || company.domain || "";
+  const raw = companyField(company, "website_url") || companyDomain(company) || "";
   if (!raw) return "";
   return raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
 }
@@ -1225,12 +1246,12 @@ function renderLeadDetail(detail) {
   ].join("");
   elements.detailCompany.innerHTML = [
     line("Empresa", company.name),
-    line("Dominio", company.domain),
-    line("Industria", company.industry),
-    line("Web", company.website_url),
-    line("LinkedIn", company.linkedin_url),
-    line("Pais", company.country),
-    line("Empleados", company.employee_count),
+    line("Dominio", companyDomain(company)),
+    line("Industria", companyField(company, "industry")),
+    line("Web", companyWebsite(company)),
+    line("LinkedIn", companyField(company, "linkedin_url")),
+    line("Pais", companyField(company, "country")),
+    line("Empleados", companyEmployeeCount(company)),
   ].join("") + `<button class="secondary detail-inline-action" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Ver ficha de empresa</button>`;
   elements.detailCompany.querySelector("[data-open-company]")?.addEventListener("click", (event) => {
     if (event.currentTarget.disabled) return;
@@ -1317,16 +1338,16 @@ function closeLeadDetail() {
 function renderCompanyDetail(detail) {
   const company = detail.company || {};
   elements.companyDetailTitle.textContent = company.name || "Empresa sin nombre";
-  elements.companyDetailSubtitle.textContent = [company.industry, company.country].filter(Boolean).join(" | ") || "Datos comerciales";
+  elements.companyDetailSubtitle.textContent = [companyField(company, "industry"), companyField(company, "country")].filter(Boolean).join(" | ") || "Datos comerciales";
   elements.companyDetailFacts.innerHTML = [
-    line("Industria", company.industry),
-    line("Pais", company.country),
-    line("Ciudad", [company.city, company.state].filter(Boolean).join(", ")),
-    line("Tamano", company.employee_range || company.employee_count),
-    line("Web", company.website_url || websiteUrl(company)),
-    line("LinkedIn", company.linkedin_url),
-    line("Telefono", company.phone),
-    line("Dominio", company.domain),
+    line("Industria", companyField(company, "industry")),
+    line("Pais", companyField(company, "country")),
+    line("Ciudad", [companyField(company, "city"), companyField(company, "state")].filter(Boolean).join(", ")),
+    line("Tamano", companyEmployeeCount(company)),
+    line("Web", companyWebsite(company)),
+    line("LinkedIn", companyField(company, "linkedin_url")),
+    line("Telefono", companyField(company, "phone")),
+    line("Dominio", companyDomain(company)),
   ].join("");
 
   elements.companyDetailOpportunities.innerHTML = detail.opportunities?.length
