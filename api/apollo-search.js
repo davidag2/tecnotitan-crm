@@ -56,6 +56,18 @@ function keepValue(incoming, existing) {
   return incoming === null || incoming === undefined || incoming === "" ? existing || null : incoming;
 }
 
+function wordCount(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+function keepRicherName(incoming, existing) {
+  if (!incoming) return existing || null;
+  if (!existing) return incoming;
+  if (wordCount(incoming) > wordCount(existing)) return incoming;
+  if (wordCount(incoming) === wordCount(existing) && String(incoming).length > String(existing).length) return incoming;
+  return existing;
+}
+
 function mergePayload(existingPayload, incomingPayload) {
   return {
     ...(incomingPayload || {}),
@@ -184,7 +196,7 @@ async function saveContact(contactRow) {
       apollo_person_id: existing.apollo_person_id || contactRow.apollo_person_id,
       first_name: keepValue(contactRow.first_name, existing.first_name),
       last_name: keepValue(contactRow.last_name, existing.last_name),
-      full_name: keepValue(contactRow.full_name, existing.full_name),
+      full_name: keepRicherName(contactRow.full_name, existing.full_name),
       title: keepValue(contactRow.title, existing.title),
       seniority: keepValue(contactRow.seniority, existing.seniority),
       email: keepValue(contactRow.email, existing.email),

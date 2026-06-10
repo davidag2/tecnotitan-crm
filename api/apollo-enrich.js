@@ -71,6 +71,18 @@ function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") || null;
 }
 
+function wordCount(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+function richerName(incoming, existing) {
+  if (!incoming) return existing || null;
+  if (!existing) return incoming;
+  if (wordCount(incoming) > wordCount(existing)) return incoming;
+  if (wordCount(incoming) === wordCount(existing) && String(incoming).length > String(existing).length) return incoming;
+  return existing;
+}
+
 function contactUpdateFromApollo(person, currentContact, options = {}) {
   const firstPhone = person.phone_numbers?.[0]?.raw_number || person.phone;
   const hasPhone = Boolean(firstPhone || person.mobile_phone);
@@ -93,7 +105,7 @@ function contactUpdateFromApollo(person, currentContact, options = {}) {
     apollo_person_id: firstValue(currentContact.apollo_person_id, person.id),
     first_name: firstValue(person.first_name, currentContact.first_name),
     last_name: firstValue(person.last_name, currentContact.last_name),
-    full_name: firstValue(person.name, currentContact.full_name),
+    full_name: richerName(person.name, currentContact.full_name),
     title: firstValue(person.title, currentContact.title),
     seniority: firstValue(person.seniority, currentContact.seniority),
     email: firstValue(person.email, currentContact.email),
