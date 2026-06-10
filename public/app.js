@@ -9,6 +9,7 @@ const state = {
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
   clientContactFilter: "all",
+  kanbanSearch: "",
   messageTemplateFilter: "all",
 };
 
@@ -1036,15 +1037,37 @@ function renderKanban(clients) {
     return;
   }
 
-  const visibleClients = clients;
+  const query = state.kanbanSearch.trim().toLowerCase();
+  const visibleClients = query
+    ? clients.filter((lead) => {
+        const contact = lead.contacts || {};
+        const company = lead.companies || {};
+        return [contact.full_name, contact.title, contact.email, company.name, company.industry, company.country, lead.lead_type]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+    : clients;
   const grouped = PIPELINE_STATUSES.map(([status, label]) => ({
     status,
     label,
     rows: visibleClients.filter((client) => (client.pipeline_status || "nuevo") === status),
   }));
+  const wonCount = visibleClients.filter((client) => client.pipeline_status === "ganado").length;
+  const proposalCount = visibleClients.filter((client) => client.pipeline_status === "propuesta_enviada").length;
+  const meetingCount = visibleClients.filter((client) => client.pipeline_status === "reunion_agendada").length;
 
   elements.kanban.innerHTML = `
-    <div class="kanban-board">
+    <div class="kanban-toolbar">
+      <div class="kanban-summary">
+        <strong>${visibleClients.length}</strong>
+        <span>clientes en tablero</span>
+        <small>${meetingCount} reuniones | ${proposalCount} propuestas | ${wonCount} ganados</small>
+      </div>
+      <input id="kanban-search" type="search" placeholder="Buscar en Kanban" value="${attr(state.kanbanSearch)}">
+    </div>
+    <div class="kanban-board compact-kanban">
       ${grouped
         .map(
           (group) => `
@@ -1060,68 +1083,35 @@ function renderKanban(clients) {
                         .map((lead) => {
                           const contact = lead.contacts || {};
                           const company = lead.companies || {};
-                          const phone = contact.mobile_phone || contact.phone || "";
-                          const contactState = clientContactState(lead);
-                          const phoneButtonLabel = phone
-                            ? "Telefono obtenido"
-                            : contactState.phoneNotAvailable
-                              ? "No disponible en Apollo"
-                              : contactState.phoneRequested
-                                ? "Telefono solicitado"
-                                : "Solicitar telefono";
-                          const email = contact.email || "";
-                          const linkedinUrl = contact.linkedin_url || "";
-                          const webUrl = websiteUrl(company);
+                          const nextFollowUp = lead.next_follow_up_at ? lead.next_follow_up_at.slice(0, 10) : "Sin tarea";
                           return `
-                            <article class="client-card">
-                              <div class="client-card-title">
+                            <article class="kanban-card-compact ${lead.score_label}">
+                              <div class="kanban-card-title">
                                 <strong>${contact.full_name || "Contacto sin nombre"}</strong>
-                                <span class="score-pill ${lead.score_label}">${lead.score} ${lead.score_label}</span>
+                                <small>${company.name || "Empresa no disponible"}</small>
                               </div>
-                              <span>${contact.title || "Cargo no disponible"}</span>
-                              <small>${company.name || "Empresa no disponible"}</small>
-                              <small>${contact.email || contact.mobile_phone || contact.phone || "Detalles obtenidos"}</small>
-                              <div class="client-card-meta">
+                              <span class="kanban-role">${contact.title || "Cargo no disponible"}</span>
+                              <div class="kanban-card-meta">
+                                <span class="score-pill ${lead.score_label}">${lead.score}</span>
                                 <span>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</span>
-                                <span>${regionLabel(lead.target_region)}</span>
+                                <span>${nextFollowUp}</span>
                               </div>
-                              <div class="client-card-actions">
-                                <select data-pipeline-status="${lead.id}">
-                                  ${pipelineStatusOptions(lead.pipeline_status)}
-                                </select>
-                                <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
-                                <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Ver empresa</button>
+                              <div class="kanban-card-actions">
+                                <button class="secondary" type="button" data-open-detail="${lead.id}">Detalle</button>
+                                <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Empresa</button>
                                 <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar</button>
                               </div>
-                              <div class="contact-actions">
-                                <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
-                                <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
-                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${!contactState.canRequestPhone ? "disabled" : ""}>${phoneButtonLabel}</button>
-                                <button class="secondary" type="button" data-open-url="${attr(linkedinUrl)}" data-open-label="LinkedIn" ${linkedinUrl ? "" : "disabled"}>LinkedIn</button>
-                                <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
-                                <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
-                              </div>
-                              <div class="task-actions">
-                                <select data-task-type="${lead.id}">
-                                  <option value="Llamar">Llamar</option>
-                                  <option value="Enviar email">Enviar email</option>
-                                  <option value="Enviar propuesta">Enviar propuesta</option>
-                                  <option value="Seguimiento">Seguimiento</option>
-                                  <option value="Reunion">Reunion</option>
+                              <label class="kanban-quick-move" aria-label="Mover cliente de etapa">
+                                <span>Mover</span>
+                                <select class="kanban-status-select" data-pipeline-status="${lead.id}">
+                                  ${pipelineStatusOptions(lead.pipeline_status)}
                                 </select>
-                                <input data-task-date="${lead.id}" type="date" value="${lead.next_follow_up_at ? lead.next_follow_up_at.slice(0, 10) : ""}">
-                                <button type="button" data-schedule-task="${lead.id}">Crear tarea</button>
-                              </div>
-                              <div class="lead-actions admin-only">
-                                <select data-assign="${lead.id}">
-                                  ${assignmentOptions(lead.owner_user_id)}
-                                </select>
-                              </div>
+                              </label>
                             </article>
                           `;
                         })
                         .join("")
-                    : `<p class="kanban-empty">Sin clientes.</p>`
+                    : `<p class="kanban-empty">Vacio</p>`
                 }
               </div>
             </section>
@@ -1131,6 +1121,19 @@ function renderKanban(clients) {
     </div>
   `;
 
+  const searchInput = elements.kanban.querySelector("#kanban-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const cursorPosition = searchInput.selectionStart || searchInput.value.length;
+      state.kanbanSearch = searchInput.value;
+      renderKanban(clients);
+      const nextSearchInput = elements.kanban.querySelector("#kanban-search");
+      if (nextSearchInput) {
+        nextSearchInput.focus();
+        nextSearchInput.setSelectionRange(cursorPosition, cursorPosition);
+      }
+    });
+  }
   attachClientActions(elements.kanban);
 }
 
