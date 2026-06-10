@@ -2,7 +2,7 @@ const { requireAdmin } = require("./_auth");
 const { readJsonBody } = require("./_request");
 const { scoreLead } = require("./_scoring");
 const { buildApolloPayload, getTemplate } = require("./_templates");
-const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
+const { countRows, insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 
 function apolloKey() {
   if (!process.env.APOLLO_API_KEY) throw new Error("APOLLO_API_KEY no esta configurada en Vercel.");
@@ -52,6 +52,23 @@ async function firstRow(path) {
   return payload?.[0] || null;
 }
 
+function keepValue(incoming, existing) {
+  return incoming === null || incoming === undefined || incoming === "" ? existing || null : incoming;
+}
+
+function mergePayload(existingPayload, incomingPayload) {
+  return {
+    ...(incomingPayload || {}),
+    ...(existingPayload || {}),
+    tecnotitan_last_search_sync_at: new Date().toISOString(),
+  };
+}
+
+async function nextPageForTemplate(templateKey) {
+  const previousSearches = await countRows("lead_searches", `&search_template=eq.${encodeURIComponent(templateKey)}`);
+  return previousSearches + 1;
+}
+
 async function findCompany(companyRow) {
   if (!companyRow) return null;
   if (companyRow.apollo_organization_id) {
@@ -82,8 +99,17 @@ async function saveCompany(companyRow) {
   const existing = await findCompany(companyRow);
   if (existing) {
     const updates = {
-      ...companyRow,
       apollo_organization_id: existing.apollo_organization_id || companyRow.apollo_organization_id,
+      name: keepValue(companyRow.name, existing.name),
+      domain: keepValue(companyRow.domain, existing.domain),
+      website_url: keepValue(companyRow.website_url, existing.website_url),
+      linkedin_url: keepValue(companyRow.linkedin_url, existing.linkedin_url),
+      industry: keepValue(companyRow.industry, existing.industry),
+      country: keepValue(companyRow.country, existing.country),
+      city: keepValue(companyRow.city, existing.city),
+      state: keepValue(companyRow.state, existing.state),
+      employee_count: keepValue(companyRow.employee_count, existing.employee_count),
+      raw_payload: mergePayload(existing.raw_payload, companyRow.raw_payload),
       updated_at: new Date().toISOString(),
     };
     const rows = await updateRows("companies", updates, `id=eq.${encodeURIComponent(existing.id)}`);
@@ -154,8 +180,27 @@ async function saveContact(contactRow) {
   const existing = await findContact(contactRow);
   if (existing) {
     const updates = {
-      ...contactRow,
+      company_id: existing.company_id || contactRow.company_id,
       apollo_person_id: existing.apollo_person_id || contactRow.apollo_person_id,
+      first_name: keepValue(contactRow.first_name, existing.first_name),
+      last_name: keepValue(contactRow.last_name, existing.last_name),
+      full_name: keepValue(contactRow.full_name, existing.full_name),
+      title: keepValue(contactRow.title, existing.title),
+      seniority: keepValue(contactRow.seniority, existing.seniority),
+      email: keepValue(contactRow.email, existing.email),
+      email_status: keepValue(contactRow.email_status, existing.email_status),
+      phone: keepValue(contactRow.phone, existing.phone),
+      mobile_phone: keepValue(contactRow.mobile_phone, existing.mobile_phone),
+      linkedin_url: keepValue(contactRow.linkedin_url, existing.linkedin_url),
+      photo_url: keepValue(contactRow.photo_url, existing.photo_url),
+      country: keepValue(contactRow.country, existing.country),
+      city: keepValue(contactRow.city, existing.city),
+      state: keepValue(contactRow.state, existing.state),
+      lead_source: existing.lead_source || contactRow.lead_source,
+      apollo_raw_payload: mergePayload(existing.apollo_raw_payload, contactRow.apollo_raw_payload),
+      apollo_last_synced_at: new Date().toISOString(),
+      apollo_enrichment_status: existing.apollo_enrichment_status || contactRow.apollo_enrichment_status,
+      apollo_enriched_at: existing.apollo_enriched_at || contactRow.apollo_enriched_at,
       updated_at: new Date().toISOString(),
     };
     const rows = await updateRows("contacts", updates, `id=eq.${encodeURIComponent(existing.id)}`);
@@ -180,18 +225,31 @@ async function savePerson(person, template, leadSearchId, position, page) {
     organization: companyRow,
   });
 
-  const opportunity = await upsertRow(
-    "opportunities",
-    {
+  const existingOpportunity = await firstRow(
+    `/opportunities?select=*&contact_id=eq.${encodeURIComponent(contact.id)}&lead_type=eq.${encodeURIComponent(template.lead_type)}&target_region=eq.${encodeURIComponent(template.target_region)}&deleted_at=is.null&limit=1`
+  );
+  const opportunity = existingOpportunity
+    ? (
+        await updateRows(
+          "opportunities",
+          {
+            company_id: existingOpportunity.company_id || company?.id || null,
+            score: existingOpportunity.score || score.score,
+            score_label: existingOpportunity.score_label || score.score_label,
+            score_reasons: existingOpportunity.score_reasons || score.score_reasons,
+            updated_at: new Date().toISOString(),
+          },
+          `id=eq.${encodeURIComponent(existingOpportunity.id)}`
+        )
+      )[0] || existingOpportunity
+    : await upsertRow("opportunities", {
       contact_id: contact.id,
       company_id: company?.id || null,
       lead_type: template.lead_type,
       target_region: template.target_region,
       pipeline_status: "nuevo",
       ...score,
-    },
-    ["contact_id", "lead_type", "target_region"]
-  );
+    }, ["contact_id", "lead_type", "target_region"]);
 
   if (person.id) {
     await upsertRow(
@@ -235,7 +293,7 @@ module.exports = async function handler(req, res) {
   try {
     const body = await readJsonBody(req);
     const template = getTemplate(body.template_key || "consulting_client:latam");
-    const page = Number(body.page || 1);
+    const page = Number(body.page || (await nextPageForTemplate(template.key)));
     const perPage = Math.min(Number(body.per_page || template.default_per_page), 25);
     const payload = { ...buildApolloPayload(template, body.filters), page, per_page: perPage };
     const apollo = await searchApollo(payload);
