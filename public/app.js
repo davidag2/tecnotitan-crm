@@ -58,6 +58,11 @@ const elements = {
   getConsultingLeads: document.querySelector("#get-consulting-leads"),
   getInvestorLeads: document.querySelector("#get-investor-leads"),
   searchStatus: document.querySelector("#search-status"),
+  csvImportFile: document.querySelector("#csv-import-file"),
+  csvImportType: document.querySelector("#csv-import-type"),
+  csvImportRegion: document.querySelector("#csv-import-region"),
+  importCsvButton: document.querySelector("#import-csv-button"),
+  csvImportStatus: document.querySelector("#csv-import-status"),
   detailModal: document.querySelector("#lead-detail-modal"),
   closeDetail: document.querySelector("#close-detail"),
   detailTitle: document.querySelector("#detail-title"),
@@ -1609,6 +1614,100 @@ async function getLeads(templateKey) {
   }
 }
 
+function normalizeCsvHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      values.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  values.push(current);
+  return values.map((value) => value.trim());
+}
+
+function parseCsv(text) {
+  const lines = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((line) => line.trim());
+  if (lines.length < 2) throw new Error("El CSV debe tener encabezados y al menos una fila.");
+  const headers = parseCsvLine(lines[0]).map(normalizeCsvHeader);
+  return lines.slice(1).map((line) => {
+    const values = parseCsvLine(line);
+    return headers.reduce((row, header, index) => {
+      if (header) row[header] = values[index] || "";
+      return row;
+    }, {});
+  });
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result || "");
+    reader.onerror = () => reject(new Error("No pude leer el archivo CSV."));
+    reader.readAsText(file);
+  });
+}
+
+async function importCsv() {
+  const file = elements.csvImportFile.files?.[0];
+  if (!file) {
+    elements.csvImportStatus.textContent = "Selecciona un archivo CSV.";
+    return;
+  }
+
+  elements.importCsvButton.disabled = true;
+  elements.csvImportStatus.textContent = "Leyendo CSV...";
+  try {
+    const text = await readFileAsText(file);
+    const rows = parseCsv(text);
+    if (rows.length > 500 && !window.confirm("El CSV tiene mas de 500 filas. Solo se importaran las primeras 500. Continuar?")) return;
+    elements.csvImportStatus.textContent = `Importando ${Math.min(rows.length, 500)} filas...`;
+    const result = await api("/api/leads", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "csv_import",
+        name: file.name,
+        lead_type: elements.csvImportType.value,
+        target_region: elements.csvImportRegion.value,
+        rows,
+      }),
+    });
+    elements.csvImportStatus.textContent = `Listo: ${result.saved} importados, ${result.skipped} omitidos.`;
+    elements.csvImportFile.value = "";
+    await loadPrivateData();
+    activateTab("leads", true);
+  } catch (error) {
+    elements.csvImportStatus.textContent = error.message;
+  } finally {
+    elements.importCsvButton.disabled = false;
+  }
+}
+
 async function assignLead(opportunityId, userId) {
   if (!userId) return;
   const ownerUserId = userId === "__unassigned__" ? null : userId;
@@ -1733,6 +1832,7 @@ elements.leadCountry.addEventListener("keydown", (event) => {
 });
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
+elements.importCsvButton.addEventListener("click", importCsv);
 elements.tabs.forEach((tab) => {
   tab.addEventListener("click", (event) => {
     event.preventDefault();

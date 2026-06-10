@@ -504,6 +504,31 @@ button.danger {
   color: var(--muted);
 }
 
+.csv-import {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.csv-import-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(130px, 0.7fr) minmax(120px, 0.7fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.csv-import-help,
+#csv-import-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#csv-import-status {
+  font-weight: 800;
+}
+
 .lead-list {
   display: grid;
   gap: 10px;
@@ -1212,6 +1237,10 @@ li {
 
   .message-toolbar select {
     max-width: none;
+  }
+
+  .csv-import-controls {
+    grid-template-columns: 1fr;
   }
 
   .company-row {
