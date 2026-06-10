@@ -60,6 +60,7 @@ const elements = {
   saveDetail: document.querySelector("#save-detail"),
   detailNotesList: document.querySelector("#detail-notes-list"),
   detailPipelineEvents: document.querySelector("#detail-pipeline-events"),
+  detailActivities: document.querySelector("#detail-activities"),
   detailNoteInput: document.querySelector("#detail-note-input"),
   addDetailNote: document.querySelector("#add-detail-note"),
 };
@@ -247,6 +248,42 @@ function readableFilters(filters) {
     pieces.push(`Empleados: ${data.organization_num_employees_ranges.join(", ")}`);
   }
   return pieces.length ? pieces.join(" | ") : "Filtros base de la plantilla";
+}
+
+function websiteUrl(company) {
+  const raw = company.website_url || company.domain || "";
+  if (!raw) return "";
+  return raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+}
+
+function attr(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function copyValue(value, label) {
+  if (!value) {
+    setStatus(`${label} no disponible.`, "warning");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus(`${label} copiado.`, "ok");
+  } catch (error) {
+    setStatus(`No pude copiar ${label.toLowerCase()}; puedes abrir el detalle y copiarlo manualmente.`, "warning");
+  }
+}
+
+function openUrl(url, label) {
+  if (!url) {
+    setStatus(`${label} no disponible.`, "warning");
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function renderSearchResults(results) {
@@ -546,6 +583,10 @@ function renderClients(clients) {
                         .map((lead) => {
                           const contact = lead.contacts || {};
                           const company = lead.companies || {};
+                          const phone = contact.mobile_phone || contact.phone || "";
+                          const email = contact.email || "";
+                          const linkedinUrl = contact.linkedin_url || "";
+                          const webUrl = websiteUrl(company);
                           return `
                             <article class="client-card">
                               <div class="client-card-title">
@@ -564,6 +605,13 @@ function renderClients(clients) {
                                   ${pipelineStatusOptions(lead.pipeline_status)}
                                 </select>
                                 <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+                              </div>
+                              <div class="contact-actions">
+                                <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
+                                <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
+                                <button class="secondary" type="button" data-open-url="${attr(linkedinUrl)}" data-open-label="LinkedIn" ${linkedinUrl ? "" : "disabled"}>LinkedIn</button>
+                                <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
+                                <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
                               </div>
                               <div class="lead-actions admin-only">
                                 <select data-assign="${lead.id}">
@@ -597,6 +645,15 @@ function renderClients(clients) {
   });
   elements.clients.querySelectorAll("[data-pipeline-status]").forEach((select) => {
     select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
+  });
+  elements.clients.querySelectorAll("[data-copy-value]").forEach((button) => {
+    button.addEventListener("click", () => copyValue(button.dataset.copyValue, button.dataset.copyLabel || "Valor"));
+  });
+  elements.clients.querySelectorAll("[data-open-url]").forEach((button) => {
+    button.addEventListener("click", () => openUrl(button.dataset.openUrl, button.dataset.openLabel || "Enlace"));
+  });
+  elements.clients.querySelectorAll("[data-register-activity]").forEach((button) => {
+    button.addEventListener("click", () => registerActivity(button.dataset.registerActivity, button.dataset.activityType, button));
   });
 }
 
@@ -670,6 +727,18 @@ function renderLeadDetail(detail) {
         )
         .join("")
     : `<p class="empty">No hay cambios de pipeline todavia.</p>`;
+  elements.detailActivities.innerHTML = detail.activities?.length
+    ? detail.activities
+        .map(
+          (activity) => `
+            <article class="note-row">
+              <p>${activity.subject || activity.activity_type}</p>
+              <small>${activity.users?.name || "Usuario"} Â· ${new Date(activity.activity_at).toLocaleString("es-CO")}</small>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty">No hay actividades registradas todavia.</p>`;
 }
 
 async function openLeadDetail(opportunityId) {
@@ -743,6 +812,34 @@ async function addLeadNote() {
     renderFollowups(await api("/api/followups"));
   } catch (error) {
     setStatus(error.message, "warning");
+  }
+}
+
+async function registerActivity(opportunityId, activityType, button) {
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Registrando...";
+  try {
+    const detail = await api(`/api/lead-detail?id=${encodeURIComponent(opportunityId)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        activity_type: activityType || "contact",
+        subject: "Contacto registrado desde Clientes",
+      }),
+    });
+    if (activeOpportunityId === opportunityId) {
+      renderLeadDetail(detail);
+    }
+    await reloadLeadsOnly();
+    renderFollowups(await api("/api/followups"));
+    setStatus("Contacto registrado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
 }
 

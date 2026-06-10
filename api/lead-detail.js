@@ -27,15 +27,18 @@ async function loadNotes(id, user) {
   const opportunity = await loadOpportunity(id, user);
   if (!opportunity) return { opportunity: null, notes: [] };
 
-  const [{ payload: notes }, { payload: events }] = await Promise.all([
+  const [{ payload: notes }, { payload: events }, { payload: activities }] = await Promise.all([
     supabaseFetch(
     `/notes?select=id,body,created_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&deleted_at=is.null&order=created_at.desc&limit=20`
     ),
     supabaseFetch(
       `/pipeline_events?select=id,from_status,to_status,note,changed_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&order=changed_at.desc&limit=20`
     ),
+    supabaseFetch(
+      `/activities?select=id,activity_type,subject,body,activity_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&order=activity_at.desc&limit=20`
+    ),
   ]);
-  return { opportunity, notes: notes || [], events: events || [] };
+  return { opportunity, notes: notes || [], events: events || [], activities: activities || [] };
 }
 
 async function addNote(id, body, user) {
@@ -49,6 +52,41 @@ async function addNote(id, body, user) {
     company_id: opportunity.companies?.id || null,
     user_id: user.db_user_id || null,
     body: String(body.note).trim(),
+  });
+
+  await updateRows(
+    "opportunities",
+    {
+      last_activity_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(id)}`
+  );
+}
+
+async function addActivity(id, body, user) {
+  const opportunity = await loadOpportunity(id, user);
+  if (!opportunity) throw new Error("No se encontro el lead o no tienes acceso.");
+  if (!body.activity_type) throw new Error("activity_type es requerido.");
+
+  const labels = {
+    email: "Email registrado",
+    phone: "Llamada registrada",
+    linkedin: "LinkedIn registrado",
+    website: "Web revisada",
+    contact: "Contacto registrado",
+  };
+  const activityType = String(body.activity_type).trim();
+  const subject = String(body.subject || labels[activityType] || "Actividad registrada").trim();
+
+  await insertRow("activities", {
+    opportunity_id: id,
+    contact_id: opportunity.contacts?.id || null,
+    company_id: opportunity.companies?.id || null,
+    user_id: user.db_user_id || null,
+    activity_type: activityType,
+    subject,
+    body: body.body ? String(body.body).trim() : null,
   });
 
   await updateRows(
@@ -109,6 +147,11 @@ module.exports = async function handler(req, res) {
 
     const body = await readJsonBody(req);
     if (req.method === "POST") {
+      if (body.activity_type) {
+        await addActivity(id, body, user);
+        res.status(201).json(await loadNotes(id, user));
+        return;
+      }
       await addNote(id, body, user);
       res.status(201).json(await loadNotes(id, user));
       return;
