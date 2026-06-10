@@ -11,15 +11,15 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readJsonBody(req);
-    if (!body.opportunity_id || !body.owner_user_id) {
-      res.status(400).json({ error: "opportunity_id y owner_user_id son requeridos." });
+    if (!body.opportunity_id) {
+      res.status(400).json({ error: "opportunity_id es requerido." });
       return;
     }
 
     const rows = await updateRows(
       "opportunities",
       {
-        owner_user_id: body.owner_user_id,
+        owner_user_id: body.owner_user_id || null,
         updated_at: new Date().toISOString(),
       },
       `id=eq.${encodeURIComponent(body.opportunity_id)}`

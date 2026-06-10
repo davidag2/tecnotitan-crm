@@ -5,6 +5,7 @@ const state = {
   users: [],
   searches: [],
   leadRows: [],
+  assignmentWorkload: null,
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
   clientContactFilter: "all",
@@ -18,6 +19,7 @@ const elements = {
   tabPanels: document.querySelectorAll("[data-tab-panel]"),
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
+  assignmentWorkload: document.querySelector("#assignment-workload"),
   followupsOverdue: document.querySelector("#followups-overdue"),
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
@@ -160,6 +162,7 @@ function renderSessionUser() {
 
 function renderMetrics(data) {
   state.currentUser = data.user || state.currentUser;
+  state.assignmentWorkload = data.assignmentWorkload || state.assignmentWorkload;
   elements.metrics.innerHTML = [
     ["Empresas", data.companies ?? "-"],
     ["Contactos", data.contacts ?? "-"],
@@ -182,6 +185,74 @@ function renderMetrics(data) {
       `
     )
     .join("");
+  renderAssignmentWorkload(data.assignmentWorkload);
+}
+
+function workloadForUser(userId) {
+  return state.assignmentWorkload?.rows?.find((row) => row.user_id === userId) || null;
+}
+
+function assignmentOptionLabel(user) {
+  const workload = workloadForUser(user.id);
+  if (!workload) return user.name;
+  return `${user.name} (${workload.clients} clientes / ${workload.leads} leads)`;
+}
+
+function userWorkloadSummary(userId) {
+  const workload = workloadForUser(userId);
+  return workload ? ` | ${workload.total} oportunidades (${workload.clients} clientes / ${workload.leads} leads)` : "";
+}
+
+function assignmentOptions(currentOwnerId) {
+  return `
+    <option value="__unassigned__" ${!currentOwnerId ? "selected" : ""}>Sin asignar</option>
+    ${state.users
+      .filter((user) => user.is_active && user.role !== "admin")
+      .map((user) => `<option value="${user.id}" ${currentOwnerId === user.id ? "selected" : ""}>${assignmentOptionLabel(user)}</option>`)
+      .join("")}
+  `;
+}
+
+function renderAssignmentWorkload(workload) {
+  if (!elements.assignmentWorkload) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.assignmentWorkload.innerHTML = "";
+    return;
+  }
+  const rows = workload?.rows || [];
+  const unassigned = workload?.unassigned || { total: 0, leads: 0, clients: 0 };
+  if (!rows.length && !unassigned.total) {
+    elements.assignmentWorkload.innerHTML = `<p class="empty">Todavia no hay carga asignada.</p>`;
+    return;
+  }
+  elements.assignmentWorkload.innerHTML = `
+    <article class="workload-card unassigned">
+      <div>
+        <strong>Sin asignar</strong>
+        <span>${unassigned.total} oportunidades</span>
+      </div>
+      <small>${unassigned.leads} leads | ${unassigned.clients} clientes</small>
+    </article>
+    ${rows
+      .map(
+        (row) => `
+          <article class="workload-card">
+            <div>
+              <strong>${row.name}</strong>
+              <span>${row.total} oportunidades</span>
+            </div>
+            <div class="workload-stats">
+              <span>${row.leads} leads</span>
+              <span>${row.clients} clientes</span>
+              <span>${row.hot} hot</span>
+              <span>${row.overdue} vencidos</span>
+              <span>${row.today} hoy</span>
+            </div>
+          </article>
+        `
+      )
+      .join("")}
+  `;
 }
 
 function renderFollowupList(container, rows) {
@@ -420,7 +491,7 @@ function renderUsers() {
           <div>
             <strong>${user.name}</strong>
             <span>${user.username || "sin usuario"} · ${user.email}</span>
-            <small>${roleLabel(user.role)} · ${user.is_active ? "Activo" : "Inactivo"}</small>
+            <small>${roleLabel(user.role)} · ${user.is_active ? "Activo" : "Inactivo"}${userWorkloadSummary(user.id)}</small>
           </div>
           <div class="user-actions">
             <select data-user-role="${user.id}">
@@ -574,11 +645,7 @@ function renderLeads(leads) {
             <small>${company.name || "Empresa no disponible"} · ${contact.country || company.country || "Sin pais"}</small>
             <div class="lead-actions admin-only">
               <select data-assign="${lead.id}">
-                <option value="">Asignar a...</option>
-                ${state.users
-                  .filter((user) => user.is_active)
-                  .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
-                  .join("")}
+                ${assignmentOptions(lead.owner_user_id)}
               </select>
               <button type="button" data-enrich="${lead.id}" ${isEnriched || isRequested ? "disabled" : ""}>${enrichLabel}</button>
             </div>
@@ -719,11 +786,7 @@ function renderClients(clients) {
                               </div>
                               <div class="lead-actions admin-only">
                                 <select data-assign="${lead.id}">
-                                  <option value="">Asignar a...</option>
-                                  ${state.users
-                                    .filter((user) => user.is_active)
-                                    .map((user) => `<option value="${user.id}" ${lead.owner_user_id === user.id ? "selected" : ""}>${user.name}</option>`)
-                                    .join("")}
+                                  ${assignmentOptions(lead.owner_user_id)}
                                 </select>
                               </div>
                             </article>
@@ -1423,12 +1486,14 @@ async function getLeads(templateKey) {
 
 async function assignLead(opportunityId, userId) {
   if (!userId) return;
+  const ownerUserId = userId === "__unassigned__" ? null : userId;
   try {
     await api("/api/assign-lead", {
       method: "POST",
-      body: JSON.stringify({ opportunity_id: opportunityId, owner_user_id: userId }),
+      body: JSON.stringify({ opportunity_id: opportunityId, owner_user_id: ownerUserId }),
     });
     await loadPrivateData();
+    setStatus(ownerUserId ? "Lead asignado al consultor." : "Lead marcado como sin asignar.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
   }
@@ -1494,12 +1559,14 @@ function logout() {
   state.users = [];
   state.searches = [];
   state.leadRows = [];
+  state.assignmentWorkload = null;
   state.clientContactFilter = "all";
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
   elements.archive.innerHTML = `<p class="empty">No hay clientes archivados.</p>`;
   elements.metrics.innerHTML = "";
+  elements.assignmentWorkload.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";
   elements.searchHistory.innerHTML = `<p class="empty">Inicia sesion para cargar historial.</p>`;
