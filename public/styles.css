@@ -401,6 +401,24 @@ button.danger {
   gap: 10px;
 }
 
+.client-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.client-toolbar select {
+  max-width: 280px;
+}
+
+.client-toolbar span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .lead-filters {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) repeat(4, minmax(120px, 0.8fr)) auto auto;
@@ -992,6 +1010,15 @@ li {
     right: 16px;
     top: 12px;
     justify-content: space-between;
+  }
+
+  .client-toolbar {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .client-toolbar select {
+    max-width: none;
   }
 
   .metrics,

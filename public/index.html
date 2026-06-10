@@ -183,6 +183,19 @@
             <h2>Clientes</h2>
             <p>Centro de procesamiento para leads con detalles Apollo obtenidos.</p>
           </div>
+          <div class="client-toolbar">
+            <select id="client-contact-filter">
+              <option value="all">Todos los clientes</option>
+              <option value="contactable">Contactables</option>
+              <option value="email">Con email</option>
+              <option value="phone">Con telefono</option>
+              <option value="can_request_phone">Puede solicitar telefono</option>
+              <option value="phone_requested">Telefono solicitado</option>
+              <option value="phone_not_available">Telefono no disponible</option>
+              <option value="no_direct_contact">Sin contacto directo</option>
+            </select>
+            <span id="client-filter-summary"></span>
+          </div>
           <div class="lead-list" id="clients">
             <p class="empty">Aun no hay clientes procesados.</p>
           </div>

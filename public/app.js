@@ -4,8 +4,10 @@ const state = {
   templates: [],
   users: [],
   searches: [],
+  leadRows: [],
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
+  clientContactFilter: "all",
 };
 
 const elements = {
@@ -24,6 +26,8 @@ const elements = {
   searchResults: document.querySelector("#search-results"),
   leads: document.querySelector("#leads"),
   clients: document.querySelector("#clients"),
+  clientContactFilter: document.querySelector("#client-contact-filter"),
+  clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
   userList: document.querySelector("#user-list"),
   leadSearch: document.querySelector("#lead-search"),
@@ -474,11 +478,55 @@ function splitLeadCollections(leads) {
   };
 }
 
+function clientContactState(lead) {
+  const contact = lead.contacts || {};
+  const phone = contact.mobile_phone || contact.phone || "";
+  const email = contact.email || "";
+  const phoneStatus = contact.apollo_raw_payload?.tecnotitan_phone_status || "unknown";
+  const phoneRequested = phoneStatus === "requested" || Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
+  const phoneNotAvailable = phoneStatus === "not_available";
+  return {
+    hasEmail: Boolean(email),
+    hasPhone: Boolean(phone),
+    phoneRequested,
+    phoneNotAvailable,
+    canRequestPhone: !phone && !phoneRequested && !phoneNotAvailable,
+    contactable: Boolean(email || phone),
+  };
+}
+
+function filterClientsByContact(clients) {
+  const filter = state.clientContactFilter || "all";
+  if (filter === "all") return clients;
+  return clients.filter((lead) => {
+    const contactState = clientContactState(lead);
+    if (filter === "contactable") return contactState.contactable;
+    if (filter === "email") return contactState.hasEmail;
+    if (filter === "phone") return contactState.hasPhone;
+    if (filter === "can_request_phone") return contactState.canRequestPhone;
+    if (filter === "phone_requested") return contactState.phoneRequested && !contactState.hasPhone;
+    if (filter === "phone_not_available") return contactState.phoneNotAvailable && !contactState.hasPhone;
+    if (filter === "no_direct_contact") return !contactState.contactable;
+    return true;
+  });
+}
+
+function updateClientFilterSummary(total, visible) {
+  if (!elements.clientFilterSummary) return;
+  elements.clientFilterSummary.textContent = `${visible} de ${total} clientes`;
+}
+
 function renderLeadCollections(leads) {
+  state.leadRows = leads;
   const collections = splitLeadCollections(leads);
   renderLeads(collections.airportLeads);
   renderClients(collections.clients);
   renderArchive(collections.archived);
+}
+
+function refreshClientContactFilter() {
+  const collections = splitLeadCollections(state.leadRows || []);
+  renderClients(collections.clients);
 }
 
 function renderLeads(leads) {
@@ -565,15 +613,24 @@ function renderLeads(leads) {
 
 function renderClients(clients) {
   if (!elements.clients) return;
+  if (elements.clientContactFilter) {
+    elements.clientContactFilter.value = state.clientContactFilter || "all";
+  }
+  const visibleClients = filterClientsByContact(clients);
+  updateClientFilterSummary(clients.length, visibleClients.length);
   if (!clients.length) {
     elements.clients.innerHTML = `<p class="empty">No hay clientes procesados para los filtros actuales.</p>`;
+    return;
+  }
+  if (!visibleClients.length) {
+    elements.clients.innerHTML = `<p class="empty">No hay clientes que coincidan con el filtro de contacto.</p>`;
     return;
   }
 
   const grouped = PIPELINE_STATUSES.map(([status, label]) => ({
     status,
     label,
-    rows: clients.filter((client) => (client.pipeline_status || "nuevo") === status),
+    rows: visibleClients.filter((client) => (client.pipeline_status || "nuevo") === status),
   }));
 
   elements.clients.innerHTML = `
@@ -594,14 +651,12 @@ function renderClients(clients) {
                           const contact = lead.contacts || {};
                           const company = lead.companies || {};
                           const phone = contact.mobile_phone || contact.phone || "";
-                          const phoneStatus = contact.apollo_raw_payload?.tecnotitan_phone_status || "unknown";
-                          const phoneRequested = phoneStatus === "requested" || Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
-                          const phoneNotAvailable = phoneStatus === "not_available";
+                          const contactState = clientContactState(lead);
                           const phoneButtonLabel = phone
                             ? "Telefono obtenido"
-                            : phoneNotAvailable
+                            : contactState.phoneNotAvailable
                               ? "No disponible en Apollo"
-                              : phoneRequested
+                              : contactState.phoneRequested
                                 ? "Telefono solicitado"
                                 : "Solicitar telefono";
                           const email = contact.email || "";
@@ -630,7 +685,7 @@ function renderClients(clients) {
                               <div class="contact-actions">
                                 <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
                                 <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
-                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${phone || phoneRequested || phoneNotAvailable ? "disabled" : ""}>${phoneButtonLabel}</button>
+                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${!contactState.canRequestPhone ? "disabled" : ""}>${phoneButtonLabel}</button>
                                 <button class="secondary" type="button" data-open-url="${attr(linkedinUrl)}" data-open-label="LinkedIn" ${linkedinUrl ? "" : "disabled"}>LinkedIn</button>
                                 <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
                                 <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
@@ -1264,6 +1319,8 @@ function logout() {
   state.currentUser = null;
   state.users = [];
   state.searches = [];
+  state.leadRows = [];
+  state.clientContactFilter = "all";
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
@@ -1291,6 +1348,10 @@ elements.addDetailNote.addEventListener("click", addLeadNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);
+elements.clientContactFilter.addEventListener("change", () => {
+  state.clientContactFilter = elements.clientContactFilter.value;
+  refreshClientContactFilter();
+});
 elements.leadSearch.addEventListener("keydown", (event) => {
   if (event.key === "Enter") reloadLeadsOnly();
 });
