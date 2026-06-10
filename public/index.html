@@ -44,6 +44,7 @@
           <a class="active" href="#dashboard" data-tab="dashboard">Dashboard</a>
           <a href="#leads" data-tab="leads">Leads</a>
           <a href="#clientes" data-tab="clientes">Clientes</a>
+          <a href="#archivo" data-tab="archivo">Archivo</a>
           <a href="#seguimientos" data-tab="seguimientos">Seguimientos</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
@@ -187,6 +188,16 @@
           </div>
         </section>
 
+        <section class="panel tab-panel" id="archivo" data-tab-panel="archivo">
+          <div class="panel-title">
+            <h2>Archivo</h2>
+            <p>Clientes archivados para nurturing futuro, sin borrar historial ni datos.</p>
+          </div>
+          <div class="lead-list" id="archive">
+            <p class="empty">No hay clientes archivados.</p>
+          </div>
+        </section>
+
         <section class="panel tab-panel" id="pipeline" data-tab-panel="pipeline">
           <div class="panel-title">
             <h2>Pipelines</h2>
@@ -267,6 +278,7 @@
                 <option value="propuesta_enviada">Propuesta enviada</option>
                 <option value="ganado">Ganado</option>
                 <option value="perdido">Perdido</option>
+                <option value="archivado">Archivado</option>
               </select>
               <input id="detail-followup-date" type="date">
               <input id="detail-followup-type" type="text" placeholder="Tipo de seguimiento">

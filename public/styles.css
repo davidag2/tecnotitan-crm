@@ -600,6 +600,31 @@ button.danger {
   font-size: 13px;
 }
 
+.archive-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(160px, 0.8fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.archive-row strong,
+.archive-row span,
+.archive-row small {
+  display: block;
+}
+
+.archive-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .followup-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -969,7 +994,16 @@ li {
     min-width: 0;
   }
 
+  .archive-row {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-actions {
+    justify-content: stretch;
+  }
+
   .lead-row,
+  .archive-row,
   .search-card,
   .search-result-row,
   .user-row,

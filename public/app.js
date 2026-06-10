@@ -24,6 +24,7 @@ const elements = {
   searchResults: document.querySelector("#search-results"),
   leads: document.querySelector("#leads"),
   clients: document.querySelector("#clients"),
+  archive: document.querySelector("#archive"),
   userList: document.querySelector("#user-list"),
   leadSearch: document.querySelector("#lead-search"),
   leadCountry: document.querySelector("#lead-country"),
@@ -77,6 +78,8 @@ const PIPELINE_STATUSES = [
   ["ganado", "Ganado"],
   ["perdido", "Perdido"],
 ];
+
+const ARCHIVE_STATUS = "archivado";
 
 function apiHeaders() {
   return {
@@ -143,6 +146,7 @@ function renderMetrics(data) {
     ["Contactos", data.contacts ?? "-"],
     ["Leads", data.leadsInAirport ?? "-"],
     ["Clientes", data.clientsProcessed ?? "-"],
+    ["Archivo", data.archived ?? "-"],
     ["Oportunidades", data.opportunities ?? "-"],
     ["Busquedas", data.searches ?? "-"],
     ["Hot", data.hot ?? "-"],
@@ -464,8 +468,9 @@ function isProcessedClient(lead) {
 
 function splitLeadCollections(leads) {
   return {
-    airportLeads: leads.filter((lead) => !isProcessedClient(lead)),
-    clients: leads.filter(isProcessedClient),
+    airportLeads: leads.filter((lead) => !isProcessedClient(lead) && lead.pipeline_status !== ARCHIVE_STATUS),
+    clients: leads.filter((lead) => isProcessedClient(lead) && lead.pipeline_status !== ARCHIVE_STATUS),
+    archived: leads.filter((lead) => lead.pipeline_status === ARCHIVE_STATUS),
   };
 }
 
@@ -473,6 +478,7 @@ function renderLeadCollections(leads) {
   const collections = splitLeadCollections(leads);
   renderLeads(collections.airportLeads);
   renderClients(collections.clients);
+  renderArchive(collections.archived);
 }
 
 function renderLeads(leads) {
@@ -609,6 +615,7 @@ function renderClients(clients) {
                                   ${pipelineStatusOptions(lead.pipeline_status)}
                                 </select>
                                 <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+                                <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar</button>
                               </div>
                               <div class="contact-actions">
                                 <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
@@ -658,6 +665,48 @@ function renderClients(clients) {
   });
   elements.clients.querySelectorAll("[data-register-activity]").forEach((button) => {
     button.addEventListener("click", () => registerActivity(button.dataset.registerActivity, button.dataset.activityType, button));
+  });
+  elements.clients.querySelectorAll("[data-archive-lead]").forEach((button) => {
+    button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
+  });
+}
+
+function renderArchive(archived) {
+  if (!elements.archive) return;
+  if (!archived.length) {
+    elements.archive.innerHTML = `<p class="empty">No hay clientes archivados para nurturing.</p>`;
+    return;
+  }
+
+  elements.archive.innerHTML = archived
+    .map((lead) => {
+      const contact = lead.contacts || {};
+      const company = lead.companies || {};
+      return `
+        <article class="archive-row">
+          <div>
+            <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+            <span>${contact.title || "Cargo no disponible"}</span>
+            <small>${company.name || "Empresa no disponible"} | ${contact.email || contact.mobile_phone || contact.phone || "Sin contacto directo"}</small>
+          </div>
+          <div class="client-card-meta">
+            <span>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"}</span>
+            <span>${regionLabel(lead.target_region)} | Score ${lead.score}</span>
+          </div>
+          <div class="archive-actions">
+            <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+            <button type="button" data-restore-lead="${lead.id}">Restaurar a Nuevo</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.archive.querySelectorAll("[data-open-detail]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+  elements.archive.querySelectorAll("[data-restore-lead]").forEach((button) => {
+    button.addEventListener("click", () => restoreLead(button.dataset.restoreLead));
   });
 }
 
@@ -796,11 +845,22 @@ async function changePipelineStatus(opportunityId, pipelineStatus) {
     if (activeOpportunityId === opportunityId) {
       await openLeadDetail(opportunityId);
     }
-    setStatus("Estado de pipeline actualizado.", "ok");
+    setStatus(pipelineStatus === ARCHIVE_STATUS ? "Cliente archivado para nurturing." : "Estado de pipeline actualizado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
     await reloadLeadsOnly();
   }
+}
+
+async function archiveLead(opportunityId) {
+  if (!window.confirm("Archivar este cliente para nurturing futuro? No se borrara ningun dato.")) return;
+  await changePipelineStatus(opportunityId, ARCHIVE_STATUS);
+  activateTab("archivo", true);
+}
+
+async function restoreLead(opportunityId) {
+  await changePipelineStatus(opportunityId, "nuevo");
+  activateTab("clientes", true);
 }
 
 async function addLeadNote() {
@@ -889,6 +949,7 @@ async function loadPrivateData() {
       ...dashboard,
       leadsInAirport: collections.airportLeads.length,
       clientsProcessed: collections.clients.length,
+      archived: collections.archived.length,
     });
     renderFollowups(followups);
     renderUsers();
@@ -1112,6 +1173,7 @@ function logout() {
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
+  elements.archive.innerHTML = `<p class="empty">No hay clientes archivados.</p>`;
   elements.metrics.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";

@@ -10,6 +10,7 @@ const ALLOWED_STATUSES = new Set([
   "propuesta_enviada",
   "ganado",
   "perdido",
+  "archivado",
 ]);
 
 async function loadOpportunity(id, user) {
