@@ -610,6 +610,75 @@ button.danger {
   margin-bottom: 14px;
 }
 
+.lead-acquisition {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4faf8 100%);
+}
+
+.lead-acquisition strong,
+.lead-acquisition span {
+  display: block;
+}
+
+.lead-acquisition > div:first-child > strong {
+  font-size: 15px;
+}
+
+.lead-acquisition > div:first-child > span,
+#search-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.lead-acquisition-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.lead-fetch-button {
+  min-width: 188px;
+  min-height: 56px;
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  padding: 10px 14px;
+  border: 1px solid rgba(31, 122, 103, 0.18);
+  box-shadow: 0 8px 20px rgba(20, 32, 54, 0.08);
+}
+
+.lead-fetch-button span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lead-fetch-button strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.lead-fetch-button.consulting {
+  background: #1f7a67;
+}
+
+.lead-fetch-button.investor {
+  background: #243b6b;
+}
+
+.lead-acquisition #search-status {
+  grid-column: 1 / -1;
+  min-height: 18px;
+}
+
 .lead-table-header {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) 80px;
@@ -1474,6 +1543,18 @@ li {
     width: 100%;
   }
 
+  .lead-acquisition {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-acquisition-actions {
+    justify-content: stretch;
+  }
+
+  .lead-fetch-button {
+    flex: 1 1 180px;
+  }
+
   .csv-import-controls {
     grid-template-columns: 1fr;
   }
@@ -1511,6 +1592,10 @@ li {
 
   .kanban-column {
     min-width: 0;
+  }
+
+  .lead-fetch-button {
+    width: 100%;
   }
 
   .crm-client-header {

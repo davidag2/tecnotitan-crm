@@ -156,11 +156,6 @@
             <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
           </div>
           <div class="template-grid" id="templates"></div>
-          <div class="action-row admin-only role-hidden">
-            <button id="get-consulting-leads" type="button">Obtener 25 leads de consultoria</button>
-            <button id="get-investor-leads" type="button">Obtener 25 leads de inversionista</button>
-            <span id="search-status"></span>
-          </div>
           <div class="csv-import admin-only role-hidden">
             <div>
               <h3>Importacion CSV</h3>
@@ -199,6 +194,23 @@
           <div class="panel-title">
             <h2>Leads</h2>
             <p>Filtra contactos por tipo, region, score, estado, pais, empresa o cargo.</p>
+          </div>
+          <div class="lead-acquisition admin-only role-hidden">
+            <div>
+              <strong>Obtener leads desde Apollo</strong>
+              <span>Cada busqueda guarda 25 leads nuevos para revisar antes de pedir detalles.</span>
+            </div>
+            <div class="lead-acquisition-actions">
+              <button id="get-consulting-leads" class="lead-fetch-button consulting" type="button">
+                <span>Consultoria</span>
+                <strong>Obtener 25 leads</strong>
+              </button>
+              <button id="get-investor-leads" class="lead-fetch-button investor" type="button">
+                <span>Inversionistas</span>
+                <strong>Obtener 25 leads</strong>
+              </button>
+            </div>
+            <span id="search-status"></span>
           </div>
           <div class="lead-filters">
             <input id="lead-search" type="search" placeholder="Buscar contacto, empresa o cargo">
