@@ -55,6 +55,25 @@ async function updateUser(body, actingUser) {
   return rows[0] || null;
 }
 
+async function deleteUser(body, actingUser) {
+  if (!body.id) throw new Error("id es requerido.");
+  if (body.id === actingUser.db_user_id) {
+    throw new Error("No puedes eliminar tu propio usuario maestro.");
+  }
+
+  const rows = await updateRows(
+    "users",
+    {
+      is_active: false,
+      username: null,
+      password_hash: null,
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(body.id)}`
+  );
+  return rows[0] || null;
+}
+
 module.exports = async function handler(req, res) {
   const user = requireAdmin(req, res);
   if (!user) return;
@@ -74,6 +93,12 @@ module.exports = async function handler(req, res) {
 
     if (req.method === "PATCH") {
       await updateUser(body, user);
+      res.status(200).json({ users: await listUsers() });
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      await deleteUser(body, user);
       res.status(200).json({ users: await listUsers() });
       return;
     }

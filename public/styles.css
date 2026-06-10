@@ -340,6 +340,11 @@ button.secondary {
   color: var(--text);
 }
 
+button.danger {
+  background: #fde8e7;
+  color: #b42318;
+}
+
 .template-grid,
 .pipeline-grid {
   display: grid;

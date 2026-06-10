@@ -409,6 +409,7 @@ function renderUsers() {
             <button class="secondary" type="button" data-toggle-user="${user.id}" data-active="${user.is_active}">
               ${user.is_active ? "Desactivar" : "Activar"}
             </button>
+            <button class="danger" type="button" data-delete-user="${user.id}" data-user-name="${attr(user.name)}">Eliminar</button>
           </div>
         </article>
       `
@@ -430,6 +431,9 @@ function renderUsers() {
     button.addEventListener("click", () => {
       updateUser(button.dataset.toggleUser, { is_active: button.dataset.active !== "true" });
     });
+  });
+  elements.userList.querySelectorAll("[data-delete-user]").forEach((button) => {
+    button.addEventListener("click", () => deleteUser(button.dataset.deleteUser, button.dataset.userName));
   });
 }
 
@@ -943,6 +947,23 @@ async function updateUser(id, patch) {
     renderUsers();
     renderLeadCollections(await currentLeads());
     setStatus("Usuario actualizado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function deleteUser(id, name) {
+  if (!window.confirm(`Eliminar usuario ${name || ""}? Esta accion desactiva su acceso y conserva el historial.`)) return;
+
+  try {
+    const result = await api("/api/users", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    });
+    state.users = result.users || [];
+    renderUsers();
+    renderLeadCollections(await currentLeads());
+    setStatus("Usuario eliminado.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
   }
