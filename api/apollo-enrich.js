@@ -73,8 +73,18 @@ function firstValue(...values) {
 
 function contactUpdateFromApollo(person, currentContact, options = {}) {
   const firstPhone = person.phone_numbers?.[0]?.raw_number || person.phone;
+  const hasPhone = Boolean(firstPhone || person.mobile_phone);
+  const previousPhoneStatus = currentContact.apollo_raw_payload?.tecnotitan_phone_status;
+  const phoneStatus = hasPhone
+    ? "available"
+    : options.requestPhone
+      ? person.id && options.phoneWebhookEnabled
+        ? "requested"
+        : "not_available"
+      : previousPhoneStatus || "unknown";
   const rawPayload = {
     ...person,
+    tecnotitan_phone_status: phoneStatus,
     tecnotitan_phone_requested_at: options.requestPhone
       ? new Date().toISOString()
       : currentContact.apollo_raw_payload?.tecnotitan_phone_requested_at,
@@ -132,6 +142,13 @@ function phoneFromPerson(person) {
   };
 }
 
+function phoneStatusFromPerson(person, phones) {
+  if (phones.mobile_phone || phones.phone) return "available";
+  if (person.status === "success" && Array.isArray(person.phone_numbers) && person.phone_numbers.length === 0) return "not_available";
+  if (["missing", "not_found", "failed"].includes(String(person.status || "").toLowerCase())) return "not_available";
+  return "not_available";
+}
+
 async function handlePhoneWebhook(req, res) {
   if (!validWebhookToken(req)) {
     res.status(401).json({ error: "Webhook no autorizado." });
@@ -145,17 +162,23 @@ async function handlePhoneWebhook(req, res) {
   for (const person of people) {
     if (!person.id) continue;
     const phones = phoneFromPerson(person);
-    if (!phones.mobile_phone && !phones.phone) continue;
+    const phoneStatus = phoneStatusFromPerson(person, phones);
+    const contactPatch = {
+      apollo_raw_payload: {
+        ...person,
+        tecnotitan_phone_status: phoneStatus,
+        tecnotitan_phone_received_at: new Date().toISOString(),
+      },
+      apollo_enrichment_status: "enriched",
+      apollo_enriched_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (phones.mobile_phone) contactPatch.mobile_phone = phones.mobile_phone;
+    if (phones.phone) contactPatch.phone = phones.phone;
 
     const rows = await updateRows(
       "contacts",
-      {
-        mobile_phone: phones.mobile_phone,
-        phone: phones.phone,
-        apollo_enrichment_status: "enriched",
-        apollo_enriched_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
+      contactPatch,
       `apollo_person_id=eq.${encodeURIComponent(person.id)}`
     );
     updatedContacts.push(...rows);
@@ -214,16 +237,18 @@ module.exports = async function handler(req, res) {
     }
 
     await updateRows("contacts", { apollo_enrichment_status: "requested" }, `id=eq.${opportunity.contacts.id}`);
+    const requestPhone = Boolean(body.request_phone);
+    const phoneWebhookEnabled = Boolean(webhookUrl(req));
     const apollo = await enrichWithApollo({
       contact: opportunity.contacts,
       company: opportunity.companies,
       req,
-      requestPhone: Boolean(body.request_phone),
+      requestPhone,
     });
     const person = apollo.person || {};
     const updated = await updateRows(
       "contacts",
-      contactUpdateFromApollo(person, opportunity.contacts, { requestPhone: Boolean(body.request_phone) }),
+      contactUpdateFromApollo(person, opportunity.contacts, { requestPhone, phoneWebhookEnabled }),
       `id=eq.${opportunity.contacts.id}`
     );
     const companyPatch = companyUpdateFromApollo(person, opportunity.companies || {});
@@ -234,7 +259,7 @@ module.exports = async function handler(req, res) {
     await insertRow("apollo_sync_logs", {
       operation: "people_match_enrichment",
       endpoint: "/api/v1/people/match",
-      request_payload: { opportunity_id: body.opportunity_id, request_phone: Boolean(body.request_phone) },
+      request_payload: { opportunity_id: body.opportunity_id, request_phone: requestPhone },
       response_status: 200,
       response_payload: apollo,
       credits_used: person.id ? 1 : 0,
@@ -247,8 +272,9 @@ module.exports = async function handler(req, res) {
       enriched: Boolean(person.id),
       has_email: Boolean(updated[0]?.email),
       has_phone: Boolean(updated[0]?.mobile_phone || updated[0]?.phone),
-      phone_reveal_enabled: Boolean(webhookUrl(req)),
-      phone_request_sent: Boolean(body.request_phone && webhookUrl(req)),
+      phone_reveal_enabled: phoneWebhookEnabled,
+      phone_request_sent: Boolean(requestPhone && phoneWebhookEnabled && person.id),
+      phone_status: updated[0]?.apollo_raw_payload?.tecnotitan_phone_status || "unknown",
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -94,6 +94,12 @@ async function saveCompany(companyRow) {
 }
 
 function contactFromPerson(person, companyId) {
+  const phone = person.phone_numbers?.[0]?.raw_number || person.phone || null;
+  const mobilePhone = person.mobile_phone || null;
+  const apolloRawPayload = {
+    ...person,
+    tecnotitan_phone_status: phone || mobilePhone ? "available" : "unknown",
+  };
   return {
     company_id: companyId,
     apollo_person_id: person.id || null,
@@ -104,15 +110,15 @@ function contactFromPerson(person, companyId) {
     seniority: person.seniority || null,
     email: String(person.email || "").trim().toLowerCase() || null,
     email_status: person.email_status || null,
-    phone: person.phone_numbers?.[0]?.raw_number || person.phone || null,
-    mobile_phone: person.mobile_phone || null,
+    phone,
+    mobile_phone: mobilePhone,
     linkedin_url: String(person.linkedin_url || "").trim() || null,
     photo_url: person.photo_url || null,
     country: person.country || null,
     city: person.city || null,
     state: person.state || null,
     lead_source: "apollo",
-    apollo_raw_payload: person,
+    apollo_raw_payload: apolloRawPayload,
     apollo_last_synced_at: new Date().toISOString(),
   };
 }

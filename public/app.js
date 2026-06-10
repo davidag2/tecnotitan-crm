@@ -594,8 +594,16 @@ function renderClients(clients) {
                           const contact = lead.contacts || {};
                           const company = lead.companies || {};
                           const phone = contact.mobile_phone || contact.phone || "";
-                          const phoneRequested = Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
-                          const phoneButtonLabel = phone ? "Telefono obtenido" : phoneRequested ? "Telefono solicitado" : "Solicitar telefono";
+                          const phoneStatus = contact.apollo_raw_payload?.tecnotitan_phone_status || "unknown";
+                          const phoneRequested = phoneStatus === "requested" || Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
+                          const phoneNotAvailable = phoneStatus === "not_available";
+                          const phoneButtonLabel = phone
+                            ? "Telefono obtenido"
+                            : phoneNotAvailable
+                              ? "No disponible en Apollo"
+                              : phoneRequested
+                                ? "Telefono solicitado"
+                                : "Solicitar telefono";
                           const email = contact.email || "";
                           const linkedinUrl = contact.linkedin_url || "";
                           const webUrl = websiteUrl(company);
@@ -622,7 +630,7 @@ function renderClients(clients) {
                               <div class="contact-actions">
                                 <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
                                 <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
-                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${phone || phoneRequested ? "disabled" : ""}>${phoneButtonLabel}</button>
+                                <button class="secondary" type="button" data-request-phone="${lead.id}" ${phone || phoneRequested || phoneNotAvailable ? "disabled" : ""}>${phoneButtonLabel}</button>
                                 <button class="secondary" type="button" data-open-url="${attr(linkedinUrl)}" data-open-label="LinkedIn" ${linkedinUrl ? "" : "disabled"}>LinkedIn</button>
                                 <button class="secondary" type="button" data-open-url="${attr(webUrl)}" data-open-label="Web" ${webUrl ? "" : "disabled"}>Web</button>
                                 <button type="button" data-register-activity="${lead.id}" data-activity-type="contact">Registrar contacto</button>
@@ -974,12 +982,15 @@ async function requestPhone(opportunityId, button) {
       }),
     });
     await reloadLeadsOnly();
-    setStatus(
-      result.phone_request_sent
-        ? "Telefono solicitado. Apollo lo enviara al webhook cuando este disponible."
-        : "No hay webhook de telefono configurado.",
-      result.phone_request_sent ? "ok" : "warning"
-    );
+    if (result.has_phone) {
+      setStatus("Telefono obtenido desde Apollo.", "ok");
+    } else if (result.phone_request_sent) {
+      setStatus("Telefono solicitado. Apollo lo enviara al webhook cuando este disponible.", "ok");
+    } else if (result.phone_status === "not_available") {
+      setStatus("Apollo no tiene telefono disponible para esta lead.", "warning");
+    } else {
+      setStatus("No hay webhook de telefono configurado.", "warning");
+    }
   } catch (error) {
     setStatus(error.message, "warning");
   } finally {
