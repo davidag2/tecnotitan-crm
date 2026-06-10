@@ -778,14 +778,17 @@ function clientContactState(lead) {
   const phone = contact.mobile_phone || contact.phone || "";
   const email = contact.email || "";
   const phoneStatus = contact.apollo_raw_payload?.tecnotitan_phone_status || "unknown";
+  const apolloHasDirectPhone = String(contact.apollo_raw_payload?.has_direct_phone || "").toLowerCase() === "yes";
   const phoneRequested = phoneStatus === "requested" || Boolean(contact.apollo_raw_payload?.tecnotitan_phone_requested_at);
   const phoneNotAvailable = phoneStatus === "not_available";
   return {
     hasEmail: Boolean(email),
     hasPhone: Boolean(phone),
+    apolloHasEmail: contact.apollo_raw_payload?.has_email === true,
+    apolloHasDirectPhone,
     phoneRequested,
     phoneNotAvailable,
-    canRequestPhone: !phone && !phoneRequested && !phoneNotAvailable,
+    canRequestPhone: !phone && !phoneRequested && !phoneNotAvailable && (apolloHasDirectPhone || phoneStatus === "unknown"),
     contactable: Boolean(email || phone),
   };
 }
@@ -980,13 +983,17 @@ function renderClients(clients) {
         const phone = contact.mobile_phone || contact.phone || "";
         const email = contact.email || "";
         const contactState = clientContactState(lead);
+        const emailLabel = email || (contactState.apolloHasEmail ? "Email disponible en Apollo" : "Sin email");
         const phoneButtonLabel = phone
           ? "Telefono obtenido"
           : contactState.phoneNotAvailable
             ? "No disponible en Apollo"
             : contactState.phoneRequested
               ? "Telefono solicitado"
+              : contactState.apolloHasDirectPhone
+                ? "Solicitar telefono disponible"
               : "Solicitar telefono";
+        const phoneLabel = phone || (contactState.apolloHasDirectPhone ? "Telefono disponible en Apollo" : phoneButtonLabel);
         return `
           <article class="crm-client-row">
             <div>
@@ -1000,8 +1007,8 @@ function renderClients(clients) {
               <small>${company.country || contact.country || "Sin pais"}</small>
             </div>
             <div>
-              <span>${email || "Sin email"}</span>
-              <small>${phone || phoneButtonLabel}</small>
+              <span>${emailLabel}</span>
+              <small>${phoneLabel}</small>
             </div>
             <div>
               <select data-pipeline-status="${lead.id}">
@@ -1196,15 +1203,21 @@ function renderLeadDetail(detail) {
   const contact = opportunity.contacts || {};
   const company = opportunity.companies || {};
   const reasons = Array.isArray(opportunity.score_reasons) ? opportunity.score_reasons : [];
+  const detailContactState = clientContactState(opportunity);
+  const detailEmail = contact.email || (detailContactState.apolloHasEmail ? "Disponible en Apollo, no revelado" : "");
+  const detailPhone =
+    contact.mobile_phone ||
+    contact.phone ||
+    (detailContactState.apolloHasDirectPhone ? "Disponible en Apollo, solicitar telefono" : "");
 
   elements.detailTitle.textContent = contact.full_name || "Lead sin nombre";
   elements.detailSubtitle.textContent = `${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} · ${opportunity.target_region}`;
   elements.detailContact.innerHTML = [
     line("Cargo", contact.title),
     line("Senioridad", contact.seniority),
-    line("Email", contact.email),
+    line("Email", detailEmail),
     line("Estado email", contact.email_status),
-    line("Telefono", contact.mobile_phone || contact.phone),
+    line("Telefono", detailPhone),
     line("LinkedIn", contact.linkedin_url),
     line("Ubicacion", [contact.city, contact.state, contact.country].filter(Boolean).join(", ")),
     line("Enriquecimiento", contact.apollo_enrichment_status),
