@@ -12,6 +12,8 @@ const elements = {
   appShell: document.querySelector("#app-shell"),
   loginScreen: document.querySelector("#login-screen"),
   loginStatus: document.querySelector("#login-status"),
+  tabs: document.querySelectorAll("[data-tab]"),
+  tabPanels: document.querySelectorAll("[data-tab-panel]"),
   status: document.querySelector("#system-status"),
   metrics: document.querySelector("#metrics"),
   followupsOverdue: document.querySelector("#followups-overdue"),
@@ -62,6 +64,7 @@ const elements = {
 };
 
 let activeOpportunityId = "";
+let activeTab = "dashboard";
 
 function apiHeaders() {
   return {
@@ -96,6 +99,7 @@ function setLoginStatus(message, tone = "neutral") {
 function showApp() {
   elements.loginScreen.classList.add("hidden");
   elements.appShell.classList.remove("hidden");
+  activateTab(activeTab);
 }
 
 function showLogin() {
@@ -172,6 +176,37 @@ function renderFollowups(data) {
   renderFollowupList(elements.followupsOverdue, data.overdue || []);
   renderFollowupList(elements.followupsToday, data.today || []);
   renderFollowupList(elements.followupsUpcoming, data.upcoming || []);
+}
+
+function canSeeTab(tab) {
+  const tabLink = document.querySelector(`[data-tab="${tab}"]`);
+  return Boolean(tabLink && !tabLink.classList.contains("role-hidden"));
+}
+
+function firstVisibleTab() {
+  const tab = Array.from(elements.tabs).find((node) => !node.classList.contains("role-hidden"));
+  return tab?.dataset.tab || "dashboard";
+}
+
+function activateTab(tab, updateHash = false) {
+  const requestedTab = tab || "dashboard";
+  activeTab = canSeeTab(requestedTab) ? requestedTab : firstVisibleTab();
+
+  elements.tabs.forEach((node) => {
+    const isActive = node.dataset.tab === activeTab;
+    node.classList.toggle("active", isActive);
+    if (isActive && updateHash) {
+      history.replaceState(null, "", node.getAttribute("href"));
+    }
+  });
+
+  elements.tabPanels.forEach((panel) => {
+    panel.classList.toggle("tab-hidden", panel.dataset.tabPanel !== activeTab);
+  });
+}
+
+function tabFromHash() {
+  return String(window.location.hash || "#dashboard").replace("#", "") || "dashboard";
 }
 
 function leadTypeLabel(type) {
@@ -292,9 +327,10 @@ function renderSearchHistory(searches) {
 function applyRoleVisibility() {
   const isAdmin = state.currentUser?.role === "admin";
   document.querySelectorAll(".admin-only").forEach((node) => {
-    node.classList.toggle("hidden", !isAdmin);
+    node.classList.toggle("role-hidden", !isAdmin);
   });
   renderSessionUser();
+  activateTab(tabFromHash() || activeTab);
 }
 
 function renderUsers() {
@@ -876,8 +912,16 @@ elements.leadCountry.addEventListener("keydown", (event) => {
 });
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
+elements.tabs.forEach((tab) => {
+  tab.addEventListener("click", (event) => {
+    event.preventDefault();
+    activateTab(tab.dataset.tab, true);
+  });
+});
+window.addEventListener("hashchange", () => activateTab(tabFromHash()));
 
 showLogin();
+activeTab = tabFromHash();
 loadPublicData()
   .then(loadPrivateData)
   .catch((error) => {

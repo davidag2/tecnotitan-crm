@@ -38,13 +38,13 @@
             <span>CRM Web</span>
           </div>
         </div>
-        <nav>
-          <a class="active" href="#dashboard">Dashboard</a>
-          <a href="#apollo">Apollo</a>
-          <a class="admin-only" href="#busquedas">Busquedas</a>
-          <a class="admin-only" href="#usuarios">Usuarios</a>
-          <a href="#pipeline">Pipeline</a>
-          <a href="#roadmap">Roadmap</a>
+        <nav id="main-tabs">
+          <a class="active" href="#dashboard" data-tab="dashboard">Dashboard</a>
+          <a href="#apollo" data-tab="apollo">Apollo</a>
+          <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
+          <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
+          <a href="#pipeline" data-tab="pipeline">Pipeline</a>
+          <a href="#roadmap" data-tab="roadmap">Roadmap</a>
         </nav>
       </aside>
 
@@ -61,14 +61,14 @@
           </div>
         </header>
 
-        <section class="notice">
+        <section class="notice tab-panel" data-tab-panel="dashboard">
           <strong id="system-status">Cargando estado del sistema...</strong>
           <p>La web usa funciones seguras en Vercel para llamar Apollo y guardar leads en Supabase.</p>
         </section>
 
-        <section class="metrics" id="metrics"></section>
+        <section class="metrics tab-panel" id="metrics" data-tab-panel="dashboard"></section>
 
-        <section class="panel" id="seguimientos">
+        <section class="panel tab-panel" id="seguimientos" data-tab-panel="dashboard">
           <div class="panel-title">
             <h2>Seguimientos</h2>
             <p>Leads con tareas vencidas, para hoy y proximas.</p>
@@ -89,7 +89,7 @@
           </div>
         </section>
 
-        <section class="panel admin-only" id="usuarios">
+        <section class="panel admin-only role-hidden tab-panel" id="usuarios" data-tab-panel="usuarios">
           <div class="panel-title">
             <h2>Usuarios</h2>
             <p>Crea, activa, desactiva y cambia contrasenas de usuarios autorizados.</p>
@@ -108,20 +108,20 @@
           <div class="user-list" id="user-list"></div>
         </section>
 
-        <section class="panel" id="apollo">
+        <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">
           <div class="panel-title">
             <h2>Plantillas Apollo</h2>
             <p>Busqueda inicial para clientes de consultoria e inversionistas.</p>
           </div>
           <div class="template-grid" id="templates"></div>
-          <div class="action-row admin-only">
+          <div class="action-row admin-only role-hidden">
             <button id="get-consulting-leads" type="button">Obtener 25 leads de consultoria</button>
             <button id="get-investor-leads" type="button">Obtener 25 leads de inversionista</button>
             <span id="search-status"></span>
           </div>
         </section>
 
-        <section class="panel admin-only" id="busquedas">
+        <section class="panel admin-only role-hidden tab-panel" id="busquedas" data-tab-panel="busquedas">
           <div class="panel-title">
             <h2>Historial Apollo</h2>
             <p>Consulta las busquedas guardadas, filtros usados y leads obtenidos.</p>
@@ -132,7 +132,7 @@
           <div class="search-results hidden" id="search-results"></div>
         </section>
 
-        <section class="panel" id="dashboard">
+        <section class="panel tab-panel" id="dashboard" data-tab-panel="dashboard">
           <div class="panel-title">
             <h2>Leads</h2>
             <p>Filtra contactos por tipo, region, score, estado, pais, empresa o cargo.</p>
@@ -172,7 +172,7 @@
           </div>
         </section>
 
-        <section class="panel" id="pipeline">
+        <section class="panel tab-panel" id="pipeline" data-tab-panel="pipeline">
           <div class="panel-title">
             <h2>Pipelines</h2>
             <p>Estados principales para administrar oportunidades.</p>
@@ -203,7 +203,7 @@
           </div>
         </section>
 
-        <section class="panel" id="roadmap">
+        <section class="panel tab-panel" id="roadmap" data-tab-panel="roadmap">
           <div class="panel-title">
             <h2>Siguiente fase web</h2>
             <p>Para convertir el preview en CRM web funcional.</p>
