@@ -44,6 +44,7 @@
           <a class="active" href="#dashboard" data-tab="dashboard">Dashboard</a>
           <a href="#leads" data-tab="leads">Leads</a>
           <a href="#clientes" data-tab="clientes">Clientes</a>
+          <a href="#kanban" data-tab="kanban">Kanban</a>
           <a href="#archivo" data-tab="archivo">Archivo</a>
           <a href="#seguimientos" data-tab="seguimientos">Seguimientos</a>
           <a href="#mensajes" data-tab="mensajes">Mensajes</a>
@@ -237,7 +238,7 @@
         <section class="panel tab-panel" id="clientes" data-tab-panel="clientes">
           <div class="panel-title">
             <h2>Clientes</h2>
-            <p>Centro de procesamiento para leads con detalles Apollo obtenidos.</p>
+            <p>Vista CRM clara para revisar contactos, datos disponibles y siguiente accion.</p>
           </div>
           <div class="client-toolbar">
             <select id="client-contact-filter">
@@ -254,6 +255,16 @@
           </div>
           <div class="lead-list" id="clients">
             <p class="empty">Aun no hay clientes procesados.</p>
+          </div>
+        </section>
+
+        <section class="panel tab-panel" id="kanban-panel" data-tab-panel="kanban">
+          <div class="panel-title">
+            <h2>Kanban</h2>
+            <p>Tablero visual para mover clientes por estado de pipeline.</p>
+          </div>
+          <div class="lead-list" id="kanban-board">
+            <p class="empty">Aun no hay clientes en el tablero.</p>
           </div>
         </section>
 

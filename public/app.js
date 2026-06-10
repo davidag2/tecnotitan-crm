@@ -34,6 +34,7 @@ const elements = {
   searchResults: document.querySelector("#search-results"),
   leads: document.querySelector("#leads"),
   clients: document.querySelector("#clients"),
+  kanban: document.querySelector("#kanban-board"),
   clientContactFilter: document.querySelector("#client-contact-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
@@ -809,17 +810,64 @@ function updateClientFilterSummary(total, visible) {
   elements.clientFilterSummary.textContent = `${visible} de ${total} clientes`;
 }
 
+function attachClientActions(container) {
+  if (!container) return;
+  applyRoleVisibility();
+  container.querySelectorAll("[data-assign]").forEach((select) => {
+    select.addEventListener("change", () => assignLead(select.dataset.assign, select.value));
+  });
+  container.querySelectorAll("[data-open-detail]").forEach((button) => {
+    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+  container.querySelectorAll("[data-open-company]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => openCompanyDetail(button.dataset.openCompany));
+  });
+  container.querySelectorAll("[data-pipeline-status]").forEach((select) => {
+    select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
+  });
+  container.querySelectorAll("[data-copy-value]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => copyValue(button.dataset.copyValue, button.dataset.copyLabel || "Valor"));
+  });
+  container.querySelectorAll("[data-open-url]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => openUrl(button.dataset.openUrl, button.dataset.openLabel || "Enlace"));
+  });
+  container.querySelectorAll("[data-register-activity]").forEach((button) => {
+    button.addEventListener("click", () => registerActivity(button.dataset.registerActivity, button.dataset.activityType, button));
+  });
+  container.querySelectorAll("[data-request-phone]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => requestPhone(button.dataset.requestPhone, button));
+  });
+  container.querySelectorAll("[data-archive-lead]").forEach((button) => {
+    button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
+  });
+  container.querySelectorAll("[data-schedule-task]").forEach((button) => {
+    button.addEventListener("click", () => scheduleTask(button.dataset.scheduleTask, button));
+  });
+  container.querySelectorAll("[data-send-kanban]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activateTab("kanban", true);
+      setStatus("Cliente enviado al tablero Kanban.", "ok");
+    });
+  });
+}
+
 function renderLeadCollections(leads) {
   state.leadRows = leads;
   const collections = splitLeadCollections(leads);
   renderLeads(collections.airportLeads);
   renderClients(collections.clients);
+  renderKanban(collections.clients);
   renderArchive(collections.archived);
 }
 
 function refreshClientContactFilter() {
   const collections = splitLeadCollections(state.leadRows || []);
   renderClients(collections.clients);
+  renderKanban(collections.clients);
 }
 
 function renderLeads(leads) {
@@ -916,13 +964,86 @@ function renderClients(clients) {
     return;
   }
 
+  elements.clients.innerHTML = `
+    <div class="crm-client-header">
+      <span>Contacto</span>
+      <span>Empresa</span>
+      <span>Contacto directo</span>
+      <span>Estado</span>
+      <span>Acciones</span>
+    </div>
+    ${visibleClients
+      .map((lead) => {
+        const contact = lead.contacts || {};
+        const company = lead.companies || {};
+        const phone = contact.mobile_phone || contact.phone || "";
+        const email = contact.email || "";
+        const contactState = clientContactState(lead);
+        const phoneButtonLabel = phone
+          ? "Telefono obtenido"
+          : contactState.phoneNotAvailable
+            ? "No disponible en Apollo"
+            : contactState.phoneRequested
+              ? "Telefono solicitado"
+              : "Solicitar telefono";
+        return `
+          <article class="crm-client-row">
+            <div>
+              <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+              <span>${contact.title || "Cargo no disponible"}</span>
+              <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)}</small>
+            </div>
+            <div>
+              <strong>${company.name || "Empresa no disponible"}</strong>
+              <span>${company.industry || "Industria no disponible"}</span>
+              <small>${company.country || contact.country || "Sin pais"}</small>
+            </div>
+            <div>
+              <span>${email || "Sin email"}</span>
+              <small>${phone || phoneButtonLabel}</small>
+            </div>
+            <div>
+              <select data-pipeline-status="${lead.id}">
+                ${pipelineStatusOptions(lead.pipeline_status)}
+              </select>
+              <small>Score ${lead.score} ${lead.score_label}</small>
+            </div>
+            <div class="crm-client-actions">
+              <button class="secondary" type="button" data-open-detail="${lead.id}">Detalle</button>
+              <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Empresa</button>
+              <button type="button" data-send-kanban="${lead.id}">Enviar a Kanban</button>
+              <button class="secondary" type="button" data-copy-value="${attr(email)}" data-copy-label="Email" ${email ? "" : "disabled"}>Copiar email</button>
+              <button class="secondary" type="button" data-copy-value="${attr(phone)}" data-copy-label="Telefono" ${phone ? "" : "disabled"}>Copiar telefono</button>
+            </div>
+            <div class="lead-actions admin-only">
+              <select data-assign="${lead.id}">
+                ${assignmentOptions(lead.owner_user_id)}
+              </select>
+            </div>
+          </article>
+        `;
+      })
+      .join("")}
+  `;
+
+  attachClientActions(elements.clients);
+}
+
+function renderKanban(clients) {
+  if (!elements.kanban) return;
+  if (!clients.length) {
+    elements.kanban.innerHTML = `<p class="empty">Aun no hay clientes en el tablero.</p>`;
+    return;
+  }
+
+  const visibleClients = clients;
   const grouped = PIPELINE_STATUSES.map(([status, label]) => ({
     status,
     label,
     rows: visibleClients.filter((client) => (client.pipeline_status || "nuevo") === status),
   }));
 
-  elements.clients.innerHTML = `
+  elements.kanban.innerHTML = `
     <div class="kanban-board">
       ${grouped
         .map(
@@ -1010,39 +1131,7 @@ function renderClients(clients) {
     </div>
   `;
 
-  applyRoleVisibility();
-  elements.clients.querySelectorAll("[data-assign]").forEach((select) => {
-    select.addEventListener("change", () => assignLead(select.dataset.assign, select.value));
-  });
-  elements.clients.querySelectorAll("[data-open-detail]").forEach((button) => {
-    button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
-  });
-  elements.clients.querySelectorAll("[data-open-company]").forEach((button) => {
-    if (button.disabled) return;
-    button.addEventListener("click", () => openCompanyDetail(button.dataset.openCompany));
-  });
-  elements.clients.querySelectorAll("[data-pipeline-status]").forEach((select) => {
-    select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
-  });
-  elements.clients.querySelectorAll("[data-copy-value]").forEach((button) => {
-    button.addEventListener("click", () => copyValue(button.dataset.copyValue, button.dataset.copyLabel || "Valor"));
-  });
-  elements.clients.querySelectorAll("[data-open-url]").forEach((button) => {
-    button.addEventListener("click", () => openUrl(button.dataset.openUrl, button.dataset.openLabel || "Enlace"));
-  });
-  elements.clients.querySelectorAll("[data-register-activity]").forEach((button) => {
-    button.addEventListener("click", () => registerActivity(button.dataset.registerActivity, button.dataset.activityType, button));
-  });
-  elements.clients.querySelectorAll("[data-request-phone]").forEach((button) => {
-    if (button.disabled) return;
-    button.addEventListener("click", () => requestPhone(button.dataset.requestPhone, button));
-  });
-  elements.clients.querySelectorAll("[data-archive-lead]").forEach((button) => {
-    button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
-  });
-  elements.clients.querySelectorAll("[data-schedule-task]").forEach((button) => {
-    button.addEventListener("click", () => scheduleTask(button.dataset.scheduleTask, button));
-  });
+  attachClientActions(elements.kanban);
 }
 
 function renderArchive(archived) {
@@ -1866,6 +1955,7 @@ function logout() {
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
+  elements.kanban.innerHTML = `<p class="empty">Aun no hay clientes en el tablero.</p>`;
   elements.archive.innerHTML = `<p class="empty">No hay clientes archivados.</p>`;
   elements.metrics.innerHTML = "";
   elements.executiveSummary.innerHTML = "";
