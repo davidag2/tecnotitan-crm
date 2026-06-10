@@ -56,6 +56,14 @@ async function updateRows(table, row, filter) {
   return payload || [];
 }
 
+async function deleteRows(table, filter) {
+  const { payload } = await supabaseFetch(`/${table}?${filter}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
+  return payload || [];
+}
+
 async function upsertRow(table, row, conflictColumns) {
   const conflict = encodeURIComponent(conflictColumns.join(","));
   const { payload } = await supabaseFetch(`/${table}?on_conflict=${conflict}`, {
@@ -66,4 +74,4 @@ async function upsertRow(table, row, conflictColumns) {
   return payload?.[0] || null;
 }
 
-module.exports = { countRows, insertRow, supabaseFetch, updateRows, upsertRow };
+module.exports = { countRows, deleteRows, insertRow, supabaseFetch, updateRows, upsertRow };

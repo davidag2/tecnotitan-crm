@@ -893,6 +893,40 @@ button.danger {
   font-size: 36px;
 }
 
+.score-edit-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.score-edit-form input,
+.score-edit-form select {
+  min-width: 0;
+}
+
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag-option span {
+  color: var(--tag-color);
+}
+
 .detail-form,
 .note-form {
   display: grid;

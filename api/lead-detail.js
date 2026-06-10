@@ -1,6 +1,13 @@
 const { requireUser } = require("./_auth");
 const { readJsonBody } = require("./_request");
-const { insertRow, supabaseFetch, updateRows } = require("./_supabase");
+const { deleteRows, insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
+
+const DEFAULT_TAGS = [
+  { name: "Prioridad alta", color: "#ef4444" },
+  { name: "Inversionista estrategico", color: "#7c3aed" },
+  { name: "Cliente ideal", color: "#16a34a" },
+  { name: "No contactar", color: "#6b7280" },
+];
 
 function getOpportunityId(req) {
   const url = new URL(req.url, "https://tecnotitan.local");
@@ -23,6 +30,29 @@ async function loadOpportunity(id, user) {
   return payload?.[0] || null;
 }
 
+async function ensureDefaultTags() {
+  const tags = [];
+  for (const tag of DEFAULT_TAGS) {
+    const saved = await upsertRow("tags", tag, ["name"]);
+    tags.push(saved);
+  }
+  return tags.filter(Boolean);
+}
+
+async function loadTagData(contactId) {
+  const defaultTags = await ensureDefaultTags();
+  const { payload: allTags } = await supabaseFetch("/tags?select=id,name,color&order=name.asc");
+  const { payload: contactTags } = contactId
+    ? await supabaseFetch(`/contact_tags?select=tags(id,name,color)&contact_id=eq.${encodeURIComponent(contactId)}`)
+    : { payload: [] };
+  const selectedIds = new Set((contactTags || []).map((row) => row.tags?.id).filter(Boolean));
+  const tags = (allTags?.length ? allTags : defaultTags).map((tag) => ({
+    ...tag,
+    selected: selectedIds.has(tag.id),
+  }));
+  return { tags };
+}
+
 async function loadNotes(id, user) {
   const opportunity = await loadOpportunity(id, user);
   if (!opportunity) return { opportunity: null, notes: [] };
@@ -38,7 +68,8 @@ async function loadNotes(id, user) {
       `/activities?select=id,activity_type,subject,body,activity_at,users(name,email)&opportunity_id=eq.${encodeURIComponent(id)}&order=activity_at.desc&limit=20`
     ),
   ]);
-  return { opportunity, notes: notes || [], events: events || [], activities: activities || [] };
+  const tagData = await loadTagData(opportunity.contacts?.id);
+  return { opportunity, notes: notes || [], events: events || [], activities: activities || [], ...tagData };
 }
 
 async function addNote(id, body, user) {
@@ -105,6 +136,16 @@ async function updateOpportunity(id, body, user) {
 
   const patch = { updated_at: new Date().toISOString() };
   const fromStatus = opportunity.pipeline_status;
+  if (body.score !== undefined) {
+    const score = Number(body.score);
+    if (!Number.isFinite(score) || score < 0 || score > 100) throw new Error("El score debe estar entre 0 y 100.");
+    patch.score = Math.round(score);
+  }
+  if (body.score_label !== undefined) {
+    const scoreLabel = String(body.score_label || "").trim();
+    if (!["hot", "warm", "cold", "unqualified"].includes(scoreLabel)) throw new Error("score_label no es valido.");
+    patch.score_label = scoreLabel;
+  }
   if (body.pipeline_status) patch.pipeline_status = body.pipeline_status;
   if (body.next_follow_up_at !== undefined) patch.next_follow_up_at = body.next_follow_up_at || null;
   if (body.next_follow_up_type !== undefined) patch.next_follow_up_type = body.next_follow_up_type || null;
@@ -113,6 +154,16 @@ async function updateOpportunity(id, body, user) {
   if (body.investment_thesis !== undefined) patch.investment_thesis = body.investment_thesis || null;
 
   await updateRows("opportunities", patch, `id=eq.${encodeURIComponent(id)}`);
+  if (Array.isArray(body.tag_ids) && opportunity.contacts?.id) {
+    const cleanTagIds = [...new Set(body.tag_ids.map((tagId) => String(tagId || "").trim()).filter(Boolean))];
+    await deleteRows("contact_tags", `contact_id=eq.${encodeURIComponent(opportunity.contacts.id)}`);
+    for (const tagId of cleanTagIds) {
+      await insertRow("contact_tags", {
+        contact_id: opportunity.contacts.id,
+        tag_id: tagId,
+      });
+    }
+  }
   if (body.pipeline_status && body.pipeline_status !== fromStatus) {
     await insertRow("pipeline_events", {
       opportunity_id: id,

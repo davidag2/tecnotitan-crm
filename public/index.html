@@ -279,6 +279,17 @@
           <article>
             <h3>Score</h3>
             <div id="detail-score"></div>
+            <div class="score-edit-form">
+              <input id="detail-score-input" type="number" min="0" max="100" step="1" placeholder="Score">
+              <select id="detail-score-label">
+                <option value="hot">Hot</option>
+                <option value="warm">Warm</option>
+                <option value="cold">Cold</option>
+                <option value="unqualified">No calificado</option>
+              </select>
+              <div class="tag-options" id="detail-tag-options"></div>
+              <button id="save-score-tags" type="button">Guardar score y etiquetas</button>
+            </div>
           </article>
           <article>
             <h3>Seguimiento</h3>

@@ -59,6 +59,10 @@ const elements = {
   detailContact: document.querySelector("#detail-contact"),
   detailCompany: document.querySelector("#detail-company"),
   detailScore: document.querySelector("#detail-score"),
+  detailScoreInput: document.querySelector("#detail-score-input"),
+  detailScoreLabel: document.querySelector("#detail-score-label"),
+  detailTagOptions: document.querySelector("#detail-tag-options"),
+  saveScoreTags: document.querySelector("#save-score-tags"),
   detailStatus: document.querySelector("#detail-status"),
   detailFollowupDate: document.querySelector("#detail-followup-date"),
   detailFollowupType: document.querySelector("#detail-followup-type"),
@@ -837,6 +841,18 @@ function renderLeadDetail(detail) {
     </div>
     <ul>${reasons.map((reason) => `<li>${reason.points} · ${reason.reason}</li>`).join("") || "<li>Sin razones registradas.</li>"}</ul>
   `;
+  elements.detailScoreInput.value = opportunity.score ?? 0;
+  elements.detailScoreLabel.value = opportunity.score_label || "unqualified";
+  elements.detailTagOptions.innerHTML = (detail.tags || [])
+    .map(
+      (tag) => `
+        <label class="tag-option">
+          <input type="checkbox" value="${attr(tag.id)}" ${tag.selected ? "checked" : ""}>
+          <span style="--tag-color: ${attr(tag.color || "#6b7280")}">${tag.name}</span>
+        </label>
+      `
+    )
+    .join("");
   elements.detailStatus.value = opportunity.pipeline_status || "nuevo";
   elements.detailFollowupDate.value = opportunity.next_follow_up_at ? opportunity.next_follow_up_at.slice(0, 10) : "";
   elements.detailFollowupType.value = opportunity.next_follow_up_type || "";
@@ -911,6 +927,26 @@ async function saveLeadDetail() {
     await reloadLeadsOnly();
     renderFollowups(await api("/api/followups"));
     setStatus("Detalle actualizado.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  }
+}
+
+async function saveScoreTags() {
+  if (!activeOpportunityId) return;
+  const selectedTags = Array.from(elements.detailTagOptions.querySelectorAll("input:checked")).map((input) => input.value);
+  try {
+    const detail = await api(`/api/lead-detail?id=${encodeURIComponent(activeOpportunityId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        score: elements.detailScoreInput.value,
+        score_label: elements.detailScoreLabel.value,
+        tag_ids: selectedTags,
+      }),
+    });
+    renderLeadDetail(detail);
+    await reloadLeadsOnly();
+    setStatus("Score y etiquetas actualizados.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
   }
@@ -1344,6 +1380,7 @@ elements.passwordInput.addEventListener("keydown", (event) => {
 elements.logoutButton.addEventListener("click", logout);
 elements.closeDetail.addEventListener("click", closeLeadDetail);
 elements.saveDetail.addEventListener("click", saveLeadDetail);
+elements.saveScoreTags.addEventListener("click", saveScoreTags);
 elements.addDetailNote.addEventListener("click", addLeadNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
