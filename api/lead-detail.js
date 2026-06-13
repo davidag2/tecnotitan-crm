@@ -241,10 +241,14 @@ async function updateOpportunity(id, body, user) {
     const cleanTagIds = [...new Set(body.tag_ids.map((tagId) => String(tagId || "").trim()).filter(Boolean))];
     await deleteRows("contact_tags", `contact_id=eq.${encodeURIComponent(opportunity.contacts.id)}`);
     for (const tagId of cleanTagIds) {
-      await insertRow("contact_tags", {
-        contact_id: opportunity.contacts.id,
-        tag_id: tagId,
-      });
+      await upsertRow(
+        "contact_tags",
+        {
+          contact_id: opportunity.contacts.id,
+          tag_id: tagId,
+        },
+        ["contact_id", "tag_id"]
+      );
     }
   }
   if (body.pipeline_status && body.pipeline_status !== fromStatus) {

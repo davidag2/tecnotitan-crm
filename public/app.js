@@ -1582,8 +1582,14 @@ async function saveLeadDetail() {
 }
 
 async function saveScoreTags() {
-  if (!activeOpportunityId) return;
+  if (!activeOpportunityId) {
+    setStatus("Abre primero el detalle de un cliente para guardar score y etiquetas.", "warning");
+    return;
+  }
   const selectedTags = Array.from(elements.detailTagOptions.querySelectorAll("input:checked")).map((input) => input.value);
+  const originalText = elements.saveScoreTags.textContent;
+  elements.saveScoreTags.disabled = true;
+  elements.saveScoreTags.textContent = "Guardando...";
   try {
     const detail = await api(`/api/lead-detail?id=${encodeURIComponent(activeOpportunityId)}`, {
       method: "PATCH",
@@ -1598,6 +1604,9 @@ async function saveScoreTags() {
     setStatus("Score y etiquetas actualizados.", "ok");
   } catch (error) {
     setStatus(error.message, "warning");
+  } finally {
+    elements.saveScoreTags.disabled = false;
+    elements.saveScoreTags.textContent = originalText;
   }
 }
 
