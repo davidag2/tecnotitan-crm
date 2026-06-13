@@ -870,6 +870,8 @@ function renderEmails(messages = state.emailMessages) {
   if (!elements.emailList) return;
   renderEmailStatus(state.emailStatus);
   renderEmailOpportunityOptions();
+  const emailShell = elements.emailList.closest(".email-shell");
+  if (emailShell) emailShell.classList.toggle("sent-only", state.emailMailbox === "sent");
   elements.emailMailboxButtons.forEach((button) => button.classList.toggle("active", button.dataset.emailMailbox === state.emailMailbox));
   const query = (state.emailSearch || "").trim().toLowerCase();
   const visible = (messages || []).filter((message) => {

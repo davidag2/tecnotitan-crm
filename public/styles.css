@@ -561,6 +561,16 @@ button.danger {
   min-width: 0;
 }
 
+.email-shell.sent-only {
+  grid-template-areas:
+    "mailbar"
+    "maillist";
+}
+
+.email-shell.sent-only .email-compose {
+  display: none;
+}
+
 .email-compose {
   grid-area: compose;
   display: grid;
