@@ -217,6 +217,15 @@ const MESSAGE_TEMPLATES = [
       "Hi {{primer_nombre}},\n\nI wanted to follow up on my previous note about Tecnotitan.\n\nWe are building practical AI and software infrastructure for Latin American companies, starting with CRM, sales automation, integrations and internal tools that make business operations more measurable and scalable.\n\nIf this is within your investment focus, I can send a concise overview with traction, product direction and the market thesis.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
   },
   {
+    id: "investors-english-deck-followup-1",
+    category: "seguimiento",
+    channel: "Email",
+    title: "Investors - send deck after interest EN",
+    subject: "Tecnotitan investor deck",
+    body:
+      "Hi {{primer_nombre}},\n\nThank you for your interest in Tecnotitan.\n\nI am attaching the investor deck with a concise overview of what we are building, the product direction, the market thesis and the opportunity we see around practical AI and software infrastructure for companies in Latin America.\n\nIf useful, I would be glad to schedule a 20-minute conversation to walk you through the strategy and answer any questions.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
     id: "investors-english-institutional-1",
     category: "institucional",
     channel: "Email",
@@ -1102,7 +1111,7 @@ function applyCampaignDefaults(force = false) {
     elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   }
   if (elements.campaignAttachDeck && force) {
-    elements.campaignAttachDeck.checked = elements.campaignType.value === "investor";
+    elements.campaignAttachDeck.checked = false;
   }
   if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
   if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
@@ -1117,7 +1126,7 @@ function applySelectedCampaignTemplate() {
     elements.campaignType.value = "investor";
     elements.campaignSender.value = "investors";
     if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "usa";
-    if (elements.campaignAttachDeck) elements.campaignAttachDeck.checked = true;
+    if (elements.campaignAttachDeck) elements.campaignAttachDeck.checked = template.id === "investors-english-deck-followup-1";
   }
   if (template.category === "consultoria") {
     elements.campaignType.value = "consulting_client";
