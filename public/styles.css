@@ -521,6 +521,18 @@ button.danger {
   padding-top: 12px;
 }
 
+.campaign-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #cfe0f6;
+  border-radius: 8px;
+  background: #edf6ff;
+  color: #315f99;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .campaign-list {
   display: grid;
   gap: 12px;
@@ -542,7 +554,7 @@ button.danger {
 
 .campaign-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
 }
 

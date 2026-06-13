@@ -55,6 +55,8 @@ const elements = {
   campaignSender: document.querySelector("#campaign-sender"),
   campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
   campaignBatchSize: document.querySelector("#campaign-batch-size"),
+  campaignMinDelay: document.querySelector("#campaign-min-delay"),
+  campaignMaxDelay: document.querySelector("#campaign-max-delay"),
   campaignSubject: document.querySelector("#campaign-subject"),
   campaignBody: document.querySelector("#campaign-body"),
   createCampaignButton: document.querySelector("#create-campaign-button"),
@@ -959,6 +961,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
     .map((campaign) => {
       const counts = campaign.counts || {};
       const remaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
+      const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
       return `
         <article class="campaign-card">
           <header>
@@ -966,16 +969,17 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
               <strong>${campaign.name}</strong>
               <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
             </div>
-            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !counts.queued ? "disabled" : ""}>Procesar ahora</button>
+            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !counts.due ? "disabled" : ""}>Procesar listos</button>
           </header>
           <div class="campaign-stats">
             <span><b>${counts.total || 0}</b>Total</span>
             <span><b>${counts.queued || 0}</b>En cola</span>
+            <span><b>${counts.due || 0}</b>Listos ahora</span>
             <span><b>${counts.sent || 0}</b>Enviados</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>
             <span><b>${remaining}</b>Restantes hoy</span>
           </div>
-          <small>Limite diario: ${campaign.daily_limit || 100} | Lote por ejecucion: ${campaign.batch_size || 10}</small>
+          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Proximo envio: ${nextSend}</small>
         </article>
       `;
     })
@@ -2404,12 +2408,14 @@ async function createCampaign() {
         sender_key: elements.campaignSender.value,
         daily_limit: elements.campaignDailyLimit.value,
         batch_size: elements.campaignBatchSize.value,
+        min_delay_minutes: elements.campaignMinDelay.value,
+        max_delay_minutes: elements.campaignMaxDelay.value,
         subject_template: elements.campaignSubject.value,
         body_template: elements.campaignBody.value,
       }),
     });
     elements.campaignName.value = "";
-    elements.campaignStatus.textContent = `Campana creada con ${result.campaign?.counts?.queued || 0} correos en cola.`;
+    elements.campaignStatus.textContent = `Campana creada: ${result.campaign?.counts?.queued || 0} correos programados con ritmo aleatorio.`;
     await reloadCampaignsOnly();
   } catch (error) {
     elements.campaignStatus.textContent = error.message;

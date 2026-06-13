@@ -1,0 +1,3 @@
+ALTER TABLE email_campaigns
+  ADD COLUMN IF NOT EXISTS min_delay_minutes INTEGER NOT NULL DEFAULT 6 CHECK (min_delay_minutes BETWEEN 1 AND 60),
+  ADD COLUMN IF NOT EXISTS max_delay_minutes INTEGER NOT NULL DEFAULT 12 CHECK (max_delay_minutes BETWEEN 1 AND 120);

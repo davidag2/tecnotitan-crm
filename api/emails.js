@@ -70,6 +70,28 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.round(number)));
 }
 
+function randomInteger(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes) {
+  let scheduledAt = Date.now();
+  return leads.map((lead, index) => {
+    if (index > 0) {
+      scheduledAt += randomInteger(minDelayMinutes, maxDelayMinutes) * 60 * 1000;
+    }
+    return {
+      campaign_id: campaignId,
+      opportunity_id: lead.id,
+      contact_id: lead.contact_id,
+      company_id: lead.company_id,
+      email: emailAddress(lead.contacts.email),
+      status: "queued",
+      scheduled_at: new Date(scheduledAt).toISOString(),
+    };
+  });
+}
+
 function renderTemplate(template, data) {
   const values = {
     nombre: data.contact?.full_name || "equipo",
@@ -83,6 +105,23 @@ function renderTemplate(template, data) {
 
 function requireCampaignAdmin(user) {
   if (user.role !== "admin") throw new Error("Solo el usuario maestro puede gestionar campanas automaticas.");
+}
+
+function isAuthorizedCron(req) {
+  const configuredSecret = process.env.CAMPAIGN_CRON_SECRET || "";
+  const receivedSecret = String(req.query.token || req.headers["x-cron-token"] || "").trim();
+  if (configuredSecret) return receivedSecret === configuredSecret;
+  return String(req.headers["user-agent"] || "").includes("vercel-cron/1.0");
+}
+
+function systemCampaignUser() {
+  return {
+    username: "system",
+    name: "Tecnotitan Scheduler",
+    email: "system@tecnotitanmarketing.com",
+    role: "admin",
+    db_user_id: null,
+  };
 }
 
 async function loadOpportunity(id, user) {
@@ -275,14 +314,19 @@ async function listMessages(user, req) {
 
 async function campaignCounts(campaignId) {
   const { payload } = await supabaseFetch(
-    `/email_campaign_recipients?select=status,sent_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+    `/email_campaign_recipients?select=status,sent_at,scheduled_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
   );
   const today = todayStartIso();
-  const counts = { queued: 0, sent: 0, failed: 0, skipped: 0, sent_today: 0, total: 0 };
+  const counts = { queued: 0, due: 0, sent: 0, failed: 0, skipped: 0, sent_today: 0, total: 0, next_scheduled_at: null };
+  const now = new Date().toISOString();
   for (const row of payload || []) {
     counts.total += 1;
     counts[row.status] = (counts[row.status] || 0) + 1;
     if (row.status === "sent" && row.sent_at && row.sent_at >= today) counts.sent_today += 1;
+    if (row.status === "queued" && row.scheduled_at <= now) counts.due += 1;
+    if (row.status === "queued" && (!counts.next_scheduled_at || row.scheduled_at < counts.next_scheduled_at)) {
+      counts.next_scheduled_at = row.scheduled_at;
+    }
   }
   return counts;
 }
@@ -290,7 +334,7 @@ async function campaignCounts(campaignId) {
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
   );
   const campaigns = [];
   for (const campaign of payload || []) {
@@ -328,6 +372,10 @@ async function createCampaign(user, body) {
   const subject = String(body.subject_template || "").trim();
   const text = String(body.body_template || "").trim();
   const targetRegion = String(body.target_region || "").trim() || null;
+  const dailyLimit = clampNumber(body.daily_limit, 1, 100, 100);
+  const batchSize = clampNumber(body.batch_size, 1, 25, 1);
+  const minDelay = clampNumber(body.min_delay_minutes, 1, 60, 6);
+  const maxDelay = Math.max(minDelay, clampNumber(body.max_delay_minutes, 1, 120, 12));
   if (!name) throw new Error("El nombre de la campana es requerido.");
   if (!subject) throw new Error("El asunto de la campana es requerido.");
   if (!text) throw new Error("El cuerpo de la campana es requerido.");
@@ -336,8 +384,10 @@ async function createCampaign(user, body) {
     name,
     campaign_type: campaignType,
     sender_key: senderKey,
-    daily_limit: clampNumber(body.daily_limit, 1, 100, 100),
-    batch_size: clampNumber(body.batch_size, 1, 25, 10),
+    daily_limit: dailyLimit,
+    batch_size: batchSize,
+    min_delay_minutes: minDelay,
+    max_delay_minutes: maxDelay,
     subject_template: subject,
     body_template: text,
     target_region: targetRegion,
@@ -346,14 +396,7 @@ async function createCampaign(user, body) {
   });
 
   const leads = await campaignLeadPool(campaignType, targetRegion);
-  const recipients = leads.map((lead) => ({
-    campaign_id: campaign.id,
-    opportunity_id: lead.id,
-    contact_id: lead.contact_id,
-    company_id: lead.company_id,
-    email: emailAddress(lead.contacts.email),
-    status: "queued",
-  }));
+  const recipients = scheduleRecipients(campaign.id, leads, minDelay, maxDelay);
   if (recipients.length) {
     await supabaseFetch("/email_campaign_recipients", {
       method: "POST",
@@ -437,6 +480,28 @@ async function processCampaign(user, body) {
     await updateRows("email_campaigns", { status: "completed", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
   }
   return { sent, failed, remaining_today: Math.max(0, campaign.daily_limit - nextCounts.sent_today), counts: nextCounts };
+}
+
+async function processDueCampaigns() {
+  const { payload } = await supabaseFetch(
+    "/email_campaigns?select=id,name,status&status=eq.active&order=created_at.asc&limit=20"
+  );
+  const user = systemCampaignUser();
+  const results = [];
+  for (const campaign of payload || []) {
+    try {
+      const result = await processCampaign(user, { campaign_id: campaign.id });
+      results.push({ campaign_id: campaign.id, name: campaign.name, ...result });
+    } catch (error) {
+      results.push({ campaign_id: campaign.id, name: campaign.name, sent: 0, failed: 0, error: error.message });
+    }
+  }
+  return {
+    campaigns_checked: results.length,
+    sent: results.reduce((sum, item) => sum + (item.sent || 0), 0),
+    failed: results.reduce((sum, item) => sum + (item.failed || 0), 0),
+    results,
+  };
 }
 
 async function sendEmail(user, body) {
@@ -523,6 +588,19 @@ module.exports = async function handler(req, res) {
   if (req.method === "POST" && req.query.webhook === "resend") {
     try {
       await handleResendWebhook(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && req.query.cron === "campaigns") {
+    try {
+      if (!isAuthorizedCron(req)) {
+        res.status(401).json({ error: "Cron no autorizado." });
+        return;
+      }
+      res.status(200).json(await processDueCampaigns());
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

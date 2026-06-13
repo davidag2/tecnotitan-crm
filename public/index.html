@@ -174,10 +174,11 @@
         <section class="panel admin-only role-hidden tab-panel" id="campanas" data-tab-panel="campanas">
           <div class="panel-title">
             <h2>Campanas automaticas</h2>
-            <p>Envios controlados por lote y limite diario para prospeccion con Resend.</p>
+            <p>Envios controlados por lote, limite diario y ritmo aleatorio entre cada destinatario.</p>
           </div>
           <div class="campaign-builder">
             <div class="campaign-form">
+              <p class="campaign-note">Cada lead queda programada con una separacion aleatoria. En Vercel Hobby se procesan los correos listos con el boton manual; con Vercel Pro o un cron externo se puede automatizar cada pocos minutos.</p>
               <input id="campaign-name" type="text" placeholder="Nombre de la campana">
               <select id="campaign-type">
                 <option value="consulting_client">Consultoria LATAM</option>
@@ -188,7 +189,9 @@
                 <option value="investors">tecnotitaninvestors.com</option>
               </select>
               <input id="campaign-daily-limit" type="number" min="1" max="100" value="100" placeholder="Limite diario">
-              <input id="campaign-batch-size" type="number" min="1" max="25" value="10" placeholder="Lote por ejecucion">
+              <input id="campaign-batch-size" type="number" min="1" max="25" value="1" placeholder="Maximo por ejecucion">
+              <input id="campaign-min-delay" type="number" min="1" max="60" value="6" placeholder="Minutos minimos entre envios">
+              <input id="campaign-max-delay" type="number" min="1" max="120" value="12" placeholder="Minutos maximos entre envios">
               <input id="campaign-subject" type="text" placeholder="Asunto con variables">
               <textarea id="campaign-body" rows="8" placeholder="Mensaje con variables: {{nombre}}, {{empresa}}, {{pais}}, {{industria}}, {{cargo}}"></textarea>
               <button id="create-campaign-button" type="button">Crear campana automatica</button>
