@@ -1017,6 +1017,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${counts.followups_sent || 0}</b>Follow-ups</span>
             <span><b>${counts.replied || 0}</b>Respuestas</span>
             <span><b>${counts.followups_due || 0}</b>Seguimientos listos</span>
+            <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>
             <span><b>${remaining}</b>Restantes hoy</span>
           </div>

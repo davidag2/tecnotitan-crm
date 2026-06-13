@@ -1,6 +1,7 @@
 const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
 const { insertRow, supabaseFetch, updateRows } = require("./_supabase");
+const crypto = require("crypto");
 
 function cleanEmail(value) {
   return String(value || "").trim();
@@ -104,6 +105,78 @@ function snippet(text) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 220);
+}
+
+function normalizeFingerprintText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\b[\w.+-]+@[\w.-]+\.\w+\b/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\d+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function messageFingerprint(subject, text) {
+  return crypto.createHash("sha256").update(`${normalizeFingerprintText(subject)}\n${normalizeFingerprintText(text)}`).digest("hex");
+}
+
+function linkCount(text) {
+  return (String(text || "").match(/https?:\/\/|www\./gi) || []).length;
+}
+
+function senderDomain(from) {
+  return emailAddress(from).split("@")[1] || "";
+}
+
+function expectedSenderDomain(senderKey) {
+  return senderKey === "investors" ? "tecnotitaninvestors.com" : "tecnotitanconsultoria.com";
+}
+
+function hasClearSignature(text) {
+  const normalized = String(text || "").toLowerCase();
+  return normalized.includes("david arias") && normalized.includes("tecnotitan");
+}
+
+function subjectLooksNatural(subject) {
+  const value = String(subject || "").trim();
+  if (value.length < 6 || value.length > 95) return false;
+  if (/[!]{2,}/.test(value)) return false;
+  if (/[A-ZÁÉÍÓÚÑ]{10,}/.test(value)) return false;
+  const spamWords = /\b(gratis|urgente|oferta|promocion|compra ahora|gana dinero|garantizado)\b/i;
+  return !spamWords.test(value);
+}
+
+function personalizationSignals(subject, text, data) {
+  const content = `${subject}\n${text}`.toLowerCase();
+  const signals = [
+    data.contact?.full_name,
+    data.contact?.full_name?.split(/\s+/)[0],
+    data.company?.name,
+    data.company?.industry,
+    data.contact?.country || data.company?.country,
+    data.contact?.title,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase())
+    .filter((value) => value.length >= 3);
+  return signals.filter((value) => content.includes(value)).length;
+}
+
+function reputationIssues({ subject, text, sender, senderKey, opportunity, contact, company, duplicateFingerprint }) {
+  const issues = [];
+  if (!subjectLooksNatural(subject)) issues.push("Asunto poco natural o con señales de spam.");
+  if (String(text || "").trim().length < 220) issues.push("Texto demasiado corto para prospeccion personalizada.");
+  if (personalizationSignals(subject, text, { opportunity, contact, company }) < 2) {
+    issues.push("Faltan señales de personalizacion reales.");
+  }
+  if (linkCount(text) > 1) issues.push("Demasiados enlaces en el cuerpo.");
+  if (!hasClearSignature(text)) issues.push("Falta firma clara con David Arias y Tecnotitan.");
+  if (senderDomain(sender?.from) !== expectedSenderDomain(senderKey)) {
+    issues.push("Dominio remitente no coincide con el tipo de campana.");
+  }
+  if (duplicateFingerprint) issues.push("Mensaje demasiado parecido a otro ya preparado.");
+  return issues;
 }
 
 function todayStartIso() {
@@ -395,7 +468,7 @@ async function listMessages(user, req) {
 
 async function campaignCounts(campaignId) {
   const { payload } = await supabaseFetch(
-    `/email_campaign_recipients?select=status,sent_at,scheduled_at,reply_received_at,followup_step,next_followup_at,last_followup_sent_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+    `/email_campaign_recipients?select=status,sent_at,scheduled_at,reply_received_at,followup_step,next_followup_at,last_followup_sent_at,reputation_status&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
   );
   const today = todayStartIso();
   const counts = {
@@ -404,6 +477,7 @@ async function campaignCounts(campaignId) {
     sent: 0,
     failed: 0,
     skipped: 0,
+    reputation_blocked: 0,
     replied: 0,
     followups_due: 0,
     followups_sent: 0,
@@ -416,6 +490,7 @@ async function campaignCounts(campaignId) {
     counts.total += 1;
     counts[row.status] = (counts[row.status] || 0) + 1;
     if (row.status === "sent" && row.sent_at && row.sent_at >= today) counts.sent_today += 1;
+    if (row.reputation_status === "blocked") counts.reputation_blocked += 1;
     if (row.last_followup_sent_at && row.last_followup_sent_at >= today) counts.sent_today += 1;
     if (row.reply_received_at) counts.replied += 1;
     counts.followups_sent += Number(row.followup_step || 0);
@@ -527,6 +602,7 @@ async function processCampaign(user, body) {
   const campaign = payload?.[0];
   if (!campaign) throw new Error("Campana no encontrada.");
   if (campaign.status !== "active") throw new Error("La campana debe estar activa para enviar.");
+  const sender = senderFor(campaign.sender_key);
 
   const counts = await campaignCounts(campaign.id);
   const remainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
@@ -534,6 +610,10 @@ async function processCampaign(user, body) {
   if (!sendLimit) return { sent: 0, failed: 0, remaining_today: 0, message: "Limite diario alcanzado." };
 
   const now = new Date().toISOString();
+  const { payload: campaignFingerprints } = await supabaseFetch(
+    `/email_campaign_recipients?select=id,message_fingerprint&campaign_id=eq.${encodeURIComponent(campaign.id)}&message_fingerprint=not.is.null&limit=5000`
+  );
+  const existingFingerprints = new Set((campaignFingerprints || []).map((row) => row.message_fingerprint).filter(Boolean));
   const { payload: recipients } = await supabaseFetch(
     `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
   );
@@ -545,6 +625,36 @@ async function processCampaign(user, body) {
     const opportunity = recipient.opportunities || {};
     const subject = renderTemplate(campaign.subject_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
     const text = renderTemplate(campaign.body_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
+    const fingerprint = messageFingerprint(subject, text);
+    const duplicate = existingFingerprints.has(fingerprint);
+    const issues = campaign.reputation_checks_enabled
+      ? reputationIssues({
+          subject,
+          text,
+          sender,
+          senderKey: campaign.sender_key,
+          opportunity,
+          contact: opportunity.contacts,
+          company: opportunity.companies,
+          duplicateFingerprint: duplicate,
+        })
+      : [];
+    if (issues.length) {
+      await updateRows(
+        "email_campaign_recipients",
+        {
+          status: "skipped",
+          reputation_status: "blocked",
+          reputation_issues: issues,
+          message_fingerprint: fingerprint,
+          last_error: issues.join(" "),
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(recipient.id)}`
+      );
+      failed += 1;
+      continue;
+    }
     try {
       const message = await sendEmail(user, {
         opportunity_id: recipient.opportunity_id,
@@ -557,6 +667,9 @@ async function processCampaign(user, body) {
         "email_campaign_recipients",
         {
           status: "sent",
+          reputation_status: "passed",
+          reputation_issues: [],
+          message_fingerprint: fingerprint,
           sent_at: new Date().toISOString(),
           next_followup_at:
             campaign.followup_enabled && campaign.followup_delays_days?.[0]
@@ -569,6 +682,7 @@ async function processCampaign(user, body) {
         `id=eq.${encodeURIComponent(recipient.id)}`
       );
       sent += 1;
+      existingFingerprints.add(fingerprint);
     } catch (error) {
       await updateRows(
         "email_campaign_recipients",
@@ -603,6 +717,35 @@ async function processCampaign(user, body) {
         company: opportunity.companies,
         followupStep: nextStep,
       });
+      const fingerprint = messageFingerprint(subject, text);
+      const issues = campaign.reputation_checks_enabled
+        ? reputationIssues({
+            subject,
+            text,
+            sender,
+            senderKey: campaign.sender_key,
+            opportunity,
+            contact: opportunity.contacts,
+            company: opportunity.companies,
+            duplicateFingerprint: existingFingerprints.has(fingerprint),
+          })
+        : [];
+      if (issues.length) {
+        await updateRows(
+          "email_campaign_recipients",
+          {
+            reputation_status: "blocked",
+            reputation_issues: issues,
+            message_fingerprint: fingerprint,
+            next_followup_at: null,
+            last_error: issues.join(" "),
+            updated_at: new Date().toISOString(),
+          },
+          `id=eq.${encodeURIComponent(recipient.id)}`
+        );
+        failed += 1;
+        continue;
+      }
       try {
         const message = await sendEmail(user, {
           opportunity_id: recipient.opportunity_id,
@@ -618,6 +761,9 @@ async function processCampaign(user, body) {
             followup_step: nextStep,
             next_followup_at: nextDelay ? addDaysIso(new Date().toISOString(), nextDelay) : null,
             last_followup_sent_at: new Date().toISOString(),
+            reputation_status: "passed",
+            reputation_issues: [],
+            message_fingerprint: fingerprint,
             provider_message_id: message.provider_message_id || null,
             last_error: null,
             updated_at: new Date().toISOString(),
@@ -625,6 +771,7 @@ async function processCampaign(user, body) {
           `id=eq.${encodeURIComponent(recipient.id)}`
         );
         followupsSent += 1;
+        existingFingerprints.add(fingerprint);
       } catch (error) {
         await updateRows(
           "email_campaign_recipients",
