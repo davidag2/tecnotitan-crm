@@ -732,13 +732,24 @@ button.danger {
   min-width: 0;
 }
 
-.email-shell.sent-only {
+.email-shell.compose-only {
+  grid-template-areas:
+    "mailbar"
+    "compose";
+}
+
+.email-shell.compose-only .email-list-panel,
+.email-shell.compose-only .email-sidebar input {
+  display: none;
+}
+
+.email-shell.read-only {
   grid-template-areas:
     "mailbar"
     "maillist";
 }
 
-.email-shell.sent-only .email-compose {
+.email-shell.read-only .email-compose {
   display: none;
 }
 

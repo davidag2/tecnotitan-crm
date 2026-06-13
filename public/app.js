@@ -10,7 +10,7 @@ const state = {
   emailExclusions: [],
   emailWarmups: [],
   emailStatus: null,
-  emailMailbox: "all",
+  emailMailbox: "compose",
   emailSearch: "",
   leadPage: 1,
   assignmentWorkload: null,
@@ -946,12 +946,19 @@ function renderEmails(messages = state.emailMessages) {
   renderEmailStatus(state.emailStatus);
   renderEmailOpportunityOptions();
   const emailShell = elements.emailList.closest(".email-shell");
-  if (emailShell) emailShell.classList.toggle("sent-only", state.emailMailbox === "sent");
+  if (emailShell) {
+    emailShell.classList.toggle("compose-only", state.emailMailbox === "compose");
+    emailShell.classList.toggle("read-only", state.emailMailbox !== "compose");
+  }
   elements.emailMailboxButtons.forEach((button) => button.classList.toggle("active", button.dataset.emailMailbox === state.emailMailbox));
+  if (state.emailMailbox === "compose") {
+    elements.emailList.innerHTML = "";
+    return;
+  }
   const query = (state.emailSearch || "").trim().toLowerCase();
   const visible = (messages || []).filter((message) => {
     const mailboxOk =
-      (state.emailMailbox === "all" && message.direction !== "outbound") ||
+      state.emailMailbox === "all" ||
       (state.emailMailbox === "inbox" && message.direction === "inbound") ||
       (state.emailMailbox === "sent" && message.direction === "outbound");
     if (!mailboxOk) return false;
@@ -2734,7 +2741,7 @@ function logout() {
   state.emailExclusions = [];
   state.emailWarmups = [];
   state.emailStatus = null;
-  state.emailMailbox = "all";
+  state.emailMailbox = "compose";
   state.emailSearch = "";
   state.leadRows = [];
   state.leadPage = 1;
