@@ -529,28 +529,65 @@ button.danger {
 
 .email-shell {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr) minmax(300px, 380px);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  grid-template-areas:
+    "mailbar compose"
+    "maillist compose";
+  gap: 12px;
   align-items: start;
+  max-width: 1180px;
 }
 
 .email-sidebar,
 .email-compose {
-  display: grid;
-  gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcff;
 }
 
+.email-sidebar {
+  grid-area: mailbar;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.email-list-panel {
+  grid-area: maillist;
+  min-width: 0;
+}
+
+.email-compose {
+  grid-area: compose;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.email-compose input,
+.email-compose select,
+.email-compose textarea,
+.email-sidebar input {
+  width: 100%;
+  min-width: 0;
+}
+
 .email-sidebar button {
-  justify-content: flex-start;
+  min-width: 104px;
+  justify-content: center;
 }
 
 .email-sidebar button.active {
   background: var(--nav);
   color: #ffffff;
+}
+
+.email-sidebar input {
+  flex: 1 1 220px;
+  max-width: 320px;
 }
 
 .email-list {
@@ -585,7 +622,8 @@ button.danger {
 
 .email-compose textarea {
   resize: vertical;
-  min-height: 190px;
+  min-height: 220px;
+  padding-top: 12px;
 }
 
 #email-compose-status {
@@ -1689,11 +1727,19 @@ li {
   }
 
   .email-shell {
-    grid-template-columns: 150px minmax(0, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "mailbar"
+      "maillist"
+      "compose";
   }
 
   .email-compose {
-    grid-column: 1 / -1;
+    grid-column: auto;
+  }
+
+  .email-sidebar input {
+    max-width: none;
   }
 }
 
@@ -1776,7 +1822,6 @@ li {
   .followup-grid,
   .user-form,
   .lead-filters,
-  .email-shell,
   .template-grid,
   .message-template-grid,
   .search-card,
