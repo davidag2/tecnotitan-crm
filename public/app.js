@@ -12,6 +12,7 @@ const state = {
   clientSearch: "",
   clientContactFilter: "all",
   clientCountryFilter: "all",
+  clientCategoryFilter: "all",
   clientTagFilter: "all",
   clientPage: 1,
   kanbanSearch: "",
@@ -45,6 +46,7 @@ const elements = {
   clientSearch: document.querySelector("#client-search"),
   clientContactFilter: document.querySelector("#client-contact-filter"),
   clientCountryFilter: document.querySelector("#client-country-filter"),
+  clientCategoryFilter: document.querySelector("#client-category-filter"),
   clientTagFilter: document.querySelector("#client-tag-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
@@ -864,6 +866,20 @@ function filterClientsByCountry(clients) {
   return clients.filter((lead) => normalizeFilterValue(clientCountry(lead)) === filter);
 }
 
+function filterClientsByCategory(clients) {
+  const filter = normalizeFilterValue(state.clientCategoryFilter);
+  if (!filter || filter === "all") return clients;
+  return clients.filter((lead) => {
+    if (filter === "consulting_latam") {
+      return lead.lead_type === "consulting_client" && normalizeFilterValue(lead.target_region) === "latam";
+    }
+    if (filter === "investors") {
+      return lead.lead_type === "investor";
+    }
+    return true;
+  });
+}
+
 function clientTags(lead) {
   const rows = lead.contacts?.contact_tags || [];
   return rows.map((row) => row.tags).filter(Boolean);
@@ -908,7 +924,7 @@ function filterClientsByTag(clients) {
 }
 
 function filteredClients(clients) {
-  return filterClientsByTag(filterClientsBySearch(filterClientsByCountry(filterClientsByContact(clients))));
+  return filterClientsByTag(filterClientsBySearch(filterClientsByCategory(filterClientsByCountry(filterClientsByContact(clients)))));
 }
 
 function renderClientCountryOptions(clients) {
@@ -1114,6 +1130,9 @@ function renderClients(clients) {
   }
   if (elements.clientSearch) {
     elements.clientSearch.value = state.clientSearch || "";
+  }
+  if (elements.clientCategoryFilter) {
+    elements.clientCategoryFilter.value = state.clientCategoryFilter || "all";
   }
   renderClientCountryOptions(clients);
   renderClientTagOptions(clients);
@@ -2198,6 +2217,7 @@ function logout() {
   state.clientSearch = "";
   state.clientContactFilter = "all";
   state.clientCountryFilter = "all";
+  state.clientCategoryFilter = "all";
   state.clientTagFilter = "all";
   state.clientPage = 1;
   state.kanbanPage = 1;
@@ -2251,6 +2271,11 @@ elements.clientContactFilter.addEventListener("change", () => {
 });
 elements.clientCountryFilter.addEventListener("change", () => {
   state.clientCountryFilter = elements.clientCountryFilter.value;
+  state.clientPage = 1;
+  refreshClientContactFilter();
+});
+elements.clientCategoryFilter.addEventListener("change", () => {
+  state.clientCategoryFilter = elements.clientCategoryFilter.value;
   state.clientPage = 1;
   refreshClientContactFilter();
 });
