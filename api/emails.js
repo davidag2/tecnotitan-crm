@@ -108,6 +108,10 @@ function requireCampaignAdmin(user) {
 }
 
 function isAuthorizedCron(req) {
+  const vercelCronSecret = process.env.CRON_SECRET || "";
+  const authorization = String(req.headers.authorization || "");
+  if (vercelCronSecret && authorization === `Bearer ${vercelCronSecret}`) return true;
+
   const configuredSecret = process.env.CAMPAIGN_CRON_SECRET || "";
   const receivedSecret = String(req.query.token || req.headers["x-cron-token"] || "").trim();
   if (configuredSecret) return receivedSecret === configuredSecret;
