@@ -253,6 +253,7 @@
             <p>Vista CRM clara para revisar contactos, datos disponibles y siguiente accion.</p>
           </div>
           <div class="client-toolbar">
+            <input id="client-search" type="search" placeholder="Buscar cliente, empresa, email o cargo" autocomplete="off">
             <select id="client-contact-filter">
               <option value="all">Todos los clientes</option>
               <option value="contactable">Contactables</option>
@@ -265,6 +266,9 @@
             </select>
             <select id="client-country-filter">
               <option value="all">Todos los paises</option>
+            </select>
+            <select id="client-tag-filter">
+              <option value="all">Todas las etiquetas</option>
             </select>
             <span id="client-filter-summary"></span>
           </div>

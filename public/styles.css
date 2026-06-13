@@ -594,15 +594,42 @@ button.danger {
   margin-bottom: 14px;
 }
 
-.client-toolbar select {
+.client-toolbar select,
+.client-toolbar input {
   max-width: 280px;
   min-width: 190px;
+}
+
+.client-toolbar input {
+  max-width: 340px;
 }
 
 .client-toolbar span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.client-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.client-tags span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f7f7fb;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.client-tags.muted span {
+  color: var(--muted);
+  background: transparent;
 }
 
 .lead-filters {
@@ -1588,8 +1615,10 @@ li {
     justify-content: stretch;
   }
 
-  .client-toolbar select {
+  .client-toolbar select,
+  .client-toolbar input {
     max-width: none;
+    width: 100%;
   }
 
   .message-toolbar {

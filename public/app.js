@@ -9,8 +9,10 @@ const state = {
   assignmentWorkload: null,
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
+  clientSearch: "",
   clientContactFilter: "all",
   clientCountryFilter: "all",
+  clientTagFilter: "all",
   clientPage: 1,
   kanbanSearch: "",
   kanbanPage: 1,
@@ -40,8 +42,10 @@ const elements = {
   leads: document.querySelector("#leads"),
   clients: document.querySelector("#clients"),
   kanban: document.querySelector("#kanban-board"),
+  clientSearch: document.querySelector("#client-search"),
   clientContactFilter: document.querySelector("#client-contact-filter"),
   clientCountryFilter: document.querySelector("#client-country-filter"),
+  clientTagFilter: document.querySelector("#client-tag-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
   userList: document.querySelector("#user-list"),
@@ -860,8 +864,51 @@ function filterClientsByCountry(clients) {
   return clients.filter((lead) => normalizeFilterValue(clientCountry(lead)) === filter);
 }
 
+function clientTags(lead) {
+  const rows = lead.contacts?.contact_tags || [];
+  return rows.map((row) => row.tags).filter(Boolean);
+}
+
+function clientSearchText(lead) {
+  const contact = lead.contacts || {};
+  const company = lead.companies || {};
+  const tags = clientTags(lead).map((tag) => tag.name).join(" ");
+  return [
+    contact.full_name,
+    contact.title,
+    contact.email,
+    contact.phone,
+    contact.mobile_phone,
+    contact.linkedin_url,
+    clientCountry(lead),
+    company.name,
+    company.industry,
+    company.domain,
+    company.website_url,
+    company.linkedin_url,
+    lead.lead_type,
+    lead.target_region,
+    tags,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterClientsBySearch(clients) {
+  const query = normalizeFilterValue(state.clientSearch);
+  if (!query) return clients;
+  return clients.filter((lead) => clientSearchText(lead).includes(query));
+}
+
+function filterClientsByTag(clients) {
+  const filter = normalizeFilterValue(state.clientTagFilter);
+  if (!filter || filter === "all") return clients;
+  return clients.filter((lead) => clientTags(lead).some((tag) => normalizeFilterValue(tag.name) === filter));
+}
+
 function filteredClients(clients) {
-  return filterClientsByCountry(filterClientsByContact(clients));
+  return filterClientsByTag(filterClientsBySearch(filterClientsByCountry(filterClientsByContact(clients))));
 }
 
 function renderClientCountryOptions(clients) {
@@ -875,6 +922,25 @@ function renderClientCountryOptions(clients) {
   const hasCurrent = current === "all" || countries.some((country) => normalizeFilterValue(country) === normalizeFilterValue(current));
   if (!hasCurrent) state.clientCountryFilter = "all";
   elements.clientCountryFilter.value = state.clientCountryFilter || "all";
+}
+
+function renderClientTagOptions(clients) {
+  if (!elements.clientTagFilter) return;
+  const tags = [...new Map(
+    clients
+      .flatMap(clientTags)
+      .filter((tag) => tag.name)
+      .map((tag) => [normalizeFilterValue(tag.name), tag.name])
+  ).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], "es"));
+  const current = state.clientTagFilter || "all";
+  elements.clientTagFilter.innerHTML = [
+    `<option value="all">Todas las etiquetas</option>`,
+    ...tags.map(([value, label]) => `<option value="${attr(value)}">${label}</option>`),
+  ].join("");
+  const hasCurrent = current === "all" || tags.some(([value]) => value === normalizeFilterValue(current));
+  if (!hasCurrent) state.clientTagFilter = "all";
+  elements.clientTagFilter.value = state.clientTagFilter || "all";
 }
 
 function updateClientFilterSummary(total, visible) {
@@ -1046,7 +1112,11 @@ function renderClients(clients) {
   if (elements.clientContactFilter) {
     elements.clientContactFilter.value = state.clientContactFilter || "all";
   }
+  if (elements.clientSearch) {
+    elements.clientSearch.value = state.clientSearch || "";
+  }
   renderClientCountryOptions(clients);
+  renderClientTagOptions(clients);
   const visibleClients = filteredClients(clients);
   const totalPages = Math.max(1, Math.ceil(visibleClients.length / CLIENTS_PER_PAGE));
   if (state.clientPage > totalPages) state.clientPage = totalPages;
@@ -1059,7 +1129,7 @@ function renderClients(clients) {
     return;
   }
   if (!visibleClients.length) {
-    elements.clients.innerHTML = `<p class="empty">No hay clientes que coincidan con el filtro de contacto.</p>`;
+    elements.clients.innerHTML = `<p class="empty">No hay clientes que coincidan con los filtros actuales.</p>`;
     return;
   }
 
@@ -1077,6 +1147,7 @@ function renderClients(clients) {
         const company = lead.companies || {};
         const phone = contact.mobile_phone || contact.phone || "";
         const email = contact.email || "";
+        const tags = clientTags(lead);
         const contactState = clientContactState(lead);
         const emailLabel = email || (contactState.apolloHasEmail ? "Email disponible en Apollo" : "Sin email");
         const phoneButtonLabel = phone
@@ -1095,6 +1166,11 @@ function renderClients(clients) {
               <strong>${contact.full_name || "Contacto sin nombre"}</strong>
               <span>${contact.title || "Cargo no disponible"}</span>
               <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)} | ${clientCountry(lead) || "Sin pais"}</small>
+              ${
+                tags.length
+                  ? `<div class="client-tags">${tags.map((tag) => `<span>${tag.name}</span>`).join("")}</div>`
+                  : `<div class="client-tags muted"><span>Sin etiquetas</span></div>`
+              }
             </div>
             <div>
               <strong>${company.name || "Empresa no disponible"}</strong>
@@ -2119,8 +2195,10 @@ function logout() {
   state.leadRows = [];
   state.leadPage = 1;
   state.assignmentWorkload = null;
+  state.clientSearch = "";
   state.clientContactFilter = "all";
   state.clientCountryFilter = "all";
+  state.clientTagFilter = "all";
   state.clientPage = 1;
   state.kanbanPage = 1;
   sessionStorage.removeItem("tecnotitan_crm_session");
@@ -2161,6 +2239,11 @@ elements.messageTemplateFilter.addEventListener("change", () => {
   state.messageTemplateFilter = elements.messageTemplateFilter.value;
   renderMessageTemplates();
 });
+elements.clientSearch.addEventListener("input", () => {
+  state.clientSearch = elements.clientSearch.value;
+  state.clientPage = 1;
+  refreshClientContactFilter();
+});
 elements.clientContactFilter.addEventListener("change", () => {
   state.clientContactFilter = elements.clientContactFilter.value;
   state.clientPage = 1;
@@ -2168,6 +2251,11 @@ elements.clientContactFilter.addEventListener("change", () => {
 });
 elements.clientCountryFilter.addEventListener("change", () => {
   state.clientCountryFilter = elements.clientCountryFilter.value;
+  state.clientPage = 1;
+  refreshClientContactFilter();
+});
+elements.clientTagFilter.addEventListener("change", () => {
+  state.clientTagFilter = elements.clientTagFilter.value;
   state.clientPage = 1;
   refreshClientContactFilter();
 });
