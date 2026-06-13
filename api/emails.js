@@ -501,25 +501,25 @@ function addLocalDays(parts, days) {
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
-function strategicSendTime(dateValue, lead = {}) {
+function strategicSendTime(dateValue, lead = {}, options = {}) {
   const timeZone = leadTimeZone(lead);
   let candidate = new Date(dateValue || Date.now());
+  const windowStart = Number.isFinite(options.windowStartMinutes) ? options.windowStartMinutes : 9 * 60 + 15;
+  const windowEnd = Number.isFinite(options.windowEndMinutes) ? options.windowEndMinutes : 11 * 60 + 45;
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const local = zonedParts(candidate, timeZone);
     const localNoon = zonedTimeToUtc({ ...local, hour: 12, minute: 0 }, timeZone);
     const day = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(localNoon);
     const isWeekend = day === "Sat" || day === "Sun";
     const minutes = local.hour * 60 + local.minute;
-    const windowStart = 9 * 60 + 15;
-    const windowEnd = 11 * 60 + 45;
     if (!isWeekend && minutes >= windowStart && minutes <= windowEnd) return candidate;
     const nextDay = isWeekend || minutes > windowEnd ? addLocalDays(local, 1) : local;
     const localStart = {
       year: nextDay.year,
       month: nextDay.month,
       day: nextDay.day,
-      hour: 9,
-      minute: 15 + randomInteger(0, 120),
+      hour: Math.floor(windowStart / 60),
+      minute: (windowStart % 60) + randomInteger(0, Math.min(120, Math.max(0, windowEnd - windowStart))),
     };
     candidate = zonedTimeToUtc(localStart, timeZone);
   }
@@ -532,15 +532,35 @@ function addDaysStrategicIso(dateValue, days, lead) {
   return strategicSendTime(date, lead).toISOString();
 }
 
-function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes) {
-  let scheduledAt = Date.now();
-  return leads.map((lead, index) => {
+function parseScheduleDate(value, timeZone = "America/Bogota") {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/Z$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (match) {
+    const [, year, month, day, hour, minute] = match.map(Number);
+    return zonedTimeToUtc({ year, month, day, hour, minute }, timeZone);
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes, options = {}) {
+  let scheduledAt = (options.startAt || new Date()).getTime();
+  const endAt = options.endAt ? options.endAt.getTime() : null;
+  const windowStartMinutes = options.windowStartMinutes ?? 9 * 60 + 15;
+  const windowEndMinutes = options.windowEndMinutes ?? 11 * 60 + 45;
+  return leads.reduce((rows, lead, index) => {
     if (index > 0) {
       scheduledAt += randomInteger(minDelayMinutes, maxDelayMinutes) * 60 * 1000;
     }
-    const strategicAt = strategicSendTime(scheduledAt, lead);
+    const strategicAt = strategicSendTime(scheduledAt, lead, { windowStartMinutes, windowEndMinutes });
     scheduledAt = strategicAt.getTime();
-    return {
+    if (endAt && scheduledAt > endAt) return rows;
+    rows.push({
       campaign_id: campaignId,
       opportunity_id: lead.id,
       contact_id: lead.contact_id,
@@ -548,8 +568,9 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes)
       email: emailAddress(lead.contacts.email),
       status: "queued",
       scheduled_at: strategicAt.toISOString(),
-    };
-  });
+    });
+    return rows;
+  }, []);
 }
 
 function renderTemplate(template, data) {
@@ -899,7 +920,7 @@ async function campaignCounts(campaignId) {
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,attach_investor_deck,last_processed_at,created_at&order=created_at.desc&limit=50"
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,attach_investor_deck,start_at,end_at,max_recipients,schedule_timezone,send_window_start_minutes,send_window_end_minutes,last_processed_at,created_at&order=created_at.desc&limit=50"
   );
   const campaigns = [];
   for (const campaign of payload || []) {
@@ -1109,7 +1130,8 @@ function campaignTemplateKey(campaignType, targetRegion) {
 async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCount) {
   let pool = await campaignLeadPool(campaignType, targetRegion);
   let searches = 0;
-  while (pool.length < desiredCount && searches < 4) {
+  const maxSearches = Math.min(40, Math.ceil(Math.max(0, desiredCount - pool.length) / 25));
+  while (pool.length < desiredCount && searches < maxSearches) {
     searches += 1;
     await runApolloSearch(user, {
       template_key: campaignTemplateKey(campaignType, targetRegion),
@@ -1144,6 +1166,12 @@ async function createCampaign(user, body) {
   const batchSize = clampNumber(body.batch_size, 1, 25, 1);
   const minDelay = clampNumber(body.min_delay_minutes, 1, 60, 6);
   const maxDelay = Math.max(minDelay, clampNumber(body.max_delay_minutes, 1, 120, 12));
+  const scheduleTimezone = String(body.schedule_timezone || "America/Bogota").trim() || "America/Bogota";
+  const startAt = parseScheduleDate(body.start_at, scheduleTimezone);
+  const endAt = parseScheduleDate(body.end_at, scheduleTimezone);
+  const maxRecipients = clampNumber(body.queue_size || body.max_recipients, 1, 1000, 100);
+  const sendWindowStart = clampNumber(body.send_window_start_minutes, 0, 1439, 9 * 60 + 15);
+  const sendWindowEnd = Math.max(sendWindowStart + 1, clampNumber(body.send_window_end_minutes, 0, 1439, 11 * 60 + 45));
   const followupSubject = String(body.followup_subject_template || "Re: {{empresa}}").trim();
   const followupBody = String(
     body.followup_body_template ||
@@ -1153,7 +1181,8 @@ async function createCampaign(user, body) {
   if (!subject) throw new Error("El asunto de la campana es requerido.");
   if (!text) throw new Error("El cuerpo de la campana es requerido.");
 
-  const desiredQueue = clampNumber(body.queue_size, 1, 100, 100);
+  if (startAt && endAt && endAt <= startAt) throw new Error("La fecha final debe ser posterior al inicio.");
+  const desiredQueue = maxRecipients;
   const leads = await buildCampaignLeadPool(user, campaignType, targetRegion, desiredQueue);
   if (!leads.length) {
     throw new Error("No se encontraron leads con email disponible para esta campana.");
@@ -1175,6 +1204,12 @@ async function createCampaign(user, body) {
     body_template: text,
     target_region: targetRegion,
     attach_investor_deck: Boolean(body.attach_investor_deck) && senderKey === "investors",
+    start_at: startAt ? startAt.toISOString() : null,
+    end_at: endAt ? endAt.toISOString() : null,
+    max_recipients: maxRecipients,
+    schedule_timezone: scheduleTimezone,
+    send_window_start_minutes: sendWindowStart,
+    send_window_end_minutes: sendWindowEnd,
     created_by: user.db_user_id || null,
     status: "active",
   });
@@ -1200,7 +1235,15 @@ async function createCampaign(user, body) {
       allowedLeads.push(lead);
     }
   }
-  const recipients = [...scheduleRecipients(campaign.id, allowedLeads, minDelay, maxDelay), ...blockedRecipients];
+  const recipients = [
+    ...scheduleRecipients(campaign.id, allowedLeads, minDelay, maxDelay, {
+      startAt: startAt || new Date(),
+      endAt,
+      windowStartMinutes: sendWindowStart,
+      windowEndMinutes: sendWindowEnd,
+    }),
+    ...blockedRecipients,
+  ];
   if (recipients.length) {
     await supabaseFetch("/email_campaign_recipients", {
       method: "POST",
@@ -1222,13 +1265,26 @@ async function processCampaign(user, body) {
   const campaign = payload?.[0];
   if (!campaign) throw new Error("Campana no encontrada.");
   if (campaign.status !== "active") throw new Error("La campana debe estar activa para enviar.");
+  const nowDate = new Date();
+  if (campaign.start_at && nowDate < new Date(campaign.start_at)) {
+    return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, waiting_until: campaign.start_at };
+  }
+  if (campaign.end_at && nowDate >= new Date(campaign.end_at)) {
+    await updateRows("email_campaigns", { status: "completed", updated_at: nowDate.toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
+    return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, completed: true, reason: "campaign_window_ended" };
+  }
   const sender = senderFor(campaign.sender_key);
 
   const counts = await campaignCounts(campaign.id);
+  if (campaign.max_recipients && counts.sent >= campaign.max_recipients) {
+    await updateRows("email_campaigns", { status: "completed", updated_at: nowDate.toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
+    return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, completed: true, reason: "max_recipients_reached" };
+  }
   const warmup = await warmupStatus(campaign.sender_key);
   const campaignRemainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
+  const campaignRemainingTotal = campaign.max_recipients ? Math.max(0, campaign.max_recipients - counts.sent) : campaign.daily_limit;
   const remainingToday = Math.min(campaignRemainingToday, warmup.remaining_today);
-  const sendLimit = Math.min(remainingToday, campaign.batch_size, clampNumber(body.max_send, 1, 25, campaign.batch_size));
+  const sendLimit = Math.min(campaignRemainingTotal, remainingToday, campaign.batch_size, clampNumber(body.max_send, 1, 25, campaign.batch_size));
   if (!sendLimit) {
     return {
       sent: 0,

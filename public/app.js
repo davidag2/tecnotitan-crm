@@ -62,6 +62,10 @@ const elements = {
   campaignTemplate: document.querySelector("#campaign-template"),
   campaignAttachDeck: document.querySelector("#campaign-attach-deck"),
   campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
+  campaignQueueSize: document.querySelector("#campaign-queue-size"),
+  campaignStartAt: document.querySelector("#campaign-start-at"),
+  campaignEndAt: document.querySelector("#campaign-end-at"),
+  campaignTimezone: document.querySelector("#campaign-timezone"),
   campaignBatchSize: document.querySelector("#campaign-batch-size"),
   campaignMinDelay: document.querySelector("#campaign-min-delay"),
   campaignMaxDelay: document.querySelector("#campaign-max-delay"),
@@ -1149,6 +1153,8 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
       const campaignRemaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
       const remaining = Math.min(campaignRemaining, warmup?.remaining_today ?? campaignRemaining);
       const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
+      const startAt = campaign.start_at ? new Date(campaign.start_at).toLocaleString("es-CO") : "Inmediato";
+      const endAt = campaign.end_at ? new Date(campaign.end_at).toLocaleString("es-CO") : "Sin fin";
       return `
         <article class="campaign-card">
           <header>
@@ -1174,9 +1180,10 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>
             <span><b>${remaining}</b>Restantes hoy</span>
+            <span><b>${campaign.max_recipients || 100}</b>Max total</span>
             <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
           </div>
-          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Follow-ups: 3, 7 y 14 dias | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
+          <small>Inicio: ${startAt} | Fin: ${endAt} | Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Ventana: ${Math.floor((campaign.send_window_start_minutes || 555) / 60)}:${String((campaign.send_window_start_minutes || 555) % 60).padStart(2, "0")}-${Math.floor((campaign.send_window_end_minutes || 705) / 60)}:${String((campaign.send_window_end_minutes || 705) % 60).padStart(2, "0")} | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
         </article>
       `;
     })
@@ -2749,6 +2756,13 @@ async function createCampaign() {
         sender_key: elements.campaignSender.value,
         target_region: elements.campaignTargetRegion.value,
         daily_limit: elements.campaignDailyLimit.value,
+        queue_size: elements.campaignQueueSize.value,
+        max_recipients: elements.campaignQueueSize.value,
+        start_at: elements.campaignStartAt.value,
+        end_at: elements.campaignEndAt.value,
+        schedule_timezone: elements.campaignTimezone.value,
+        send_window_start_minutes: 7 * 60,
+        send_window_end_minutes: 17 * 60 + 45,
         batch_size: elements.campaignBatchSize.value,
         min_delay_minutes: elements.campaignMinDelay.value,
         max_delay_minutes: elements.campaignMaxDelay.value,
