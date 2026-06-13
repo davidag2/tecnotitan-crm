@@ -367,10 +367,113 @@ function randomInteger(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function addDaysIso(dateValue, days) {
+const COUNTRY_TIME_ZONES = {
+  argentina: "America/Argentina/Buenos_Aires",
+  brasil: "America/Sao_Paulo",
+  brazil: "America/Sao_Paulo",
+  chile: "America/Santiago",
+  colombia: "America/Bogota",
+  mexico: "America/Mexico_City",
+  peru: "America/Lima",
+  "united states": "America/New_York",
+  usa: "America/New_York",
+  "estados unidos": "America/New_York",
+  spain: "Europe/Madrid",
+  espana: "Europe/Madrid",
+  españa: "Europe/Madrid",
+  france: "Europe/Paris",
+  germany: "Europe/Berlin",
+  italy: "Europe/Rome",
+  "united kingdom": "Europe/London",
+  uk: "Europe/London",
+};
+
+function normalizeCountryKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function leadTimeZone(lead = {}) {
+  const country = normalizeCountryKey(lead.contacts?.country || lead.companies?.country);
+  if (COUNTRY_TIME_ZONES[country]) return COUNTRY_TIME_ZONES[country];
+  if (lead.target_region === "usa") return "America/New_York";
+  if (lead.target_region === "europe") return "Europe/Madrid";
+  return "America/Bogota";
+}
+
+function zonedParts(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour === "24" ? 0 : parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+function timeZoneOffsetMs(date, timeZone) {
+  const parts = zonedParts(date, timeZone);
+  const utcTime = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return utcTime - date.getTime();
+}
+
+function zonedTimeToUtc(parts, timeZone) {
+  const firstGuess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute || 0, 0));
+  const firstOffset = timeZoneOffsetMs(firstGuess, timeZone);
+  const secondGuess = new Date(firstGuess.getTime() - firstOffset);
+  const secondOffset = timeZoneOffsetMs(secondGuess, timeZone);
+  return new Date(firstGuess.getTime() - secondOffset);
+}
+
+function addLocalDays(parts, days) {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days, 12, 0, 0));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+function strategicSendTime(dateValue, lead = {}) {
+  const timeZone = leadTimeZone(lead);
+  let candidate = new Date(dateValue || Date.now());
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const local = zonedParts(candidate, timeZone);
+    const localNoon = zonedTimeToUtc({ ...local, hour: 12, minute: 0 }, timeZone);
+    const day = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(localNoon);
+    const isWeekend = day === "Sat" || day === "Sun";
+    const minutes = local.hour * 60 + local.minute;
+    const windowStart = 9 * 60 + 15;
+    const windowEnd = 11 * 60 + 45;
+    if (!isWeekend && minutes >= windowStart && minutes <= windowEnd) return candidate;
+    const nextDay = isWeekend || minutes > windowEnd ? addLocalDays(local, 1) : local;
+    const localStart = {
+      year: nextDay.year,
+      month: nextDay.month,
+      day: nextDay.day,
+      hour: 9,
+      minute: 15 + randomInteger(0, 120),
+    };
+    candidate = zonedTimeToUtc(localStart, timeZone);
+  }
+  return candidate;
+}
+
+function addDaysStrategicIso(dateValue, days, lead) {
   const date = new Date(dateValue || Date.now());
   date.setUTCDate(date.getUTCDate() + Number(days || 0));
-  return date.toISOString();
+  return strategicSendTime(date, lead).toISOString();
 }
 
 function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes) {
@@ -379,6 +482,8 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes)
     if (index > 0) {
       scheduledAt += randomInteger(minDelayMinutes, maxDelayMinutes) * 60 * 1000;
     }
+    const strategicAt = strategicSendTime(scheduledAt, lead);
+    scheduledAt = strategicAt.getTime();
     return {
       campaign_id: campaignId,
       opportunity_id: lead.id,
@@ -386,7 +491,7 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes)
       company_id: lead.company_id,
       email: emailAddress(lead.contacts.email),
       status: "queued",
-      scheduled_at: new Date(scheduledAt).toISOString(),
+      scheduled_at: strategicAt.toISOString(),
     };
   });
 }
@@ -1013,7 +1118,7 @@ async function processCampaign(user, body) {
           sent_at: new Date().toISOString(),
           next_followup_at:
             campaign.followup_enabled && campaign.followup_delays_days?.[0]
-              ? addDaysIso(new Date().toISOString(), campaign.followup_delays_days[0])
+              ? addDaysStrategicIso(new Date().toISOString(), campaign.followup_delays_days[0], opportunity)
               : null,
           provider_message_id: message.provider_message_id || null,
           last_error: null,
@@ -1099,7 +1204,7 @@ async function processCampaign(user, body) {
           "email_campaign_recipients",
           {
             followup_step: nextStep,
-            next_followup_at: nextDelay ? addDaysIso(new Date().toISOString(), nextDelay) : null,
+            next_followup_at: nextDelay ? addDaysStrategicIso(new Date().toISOString(), nextDelay, opportunity) : null,
             last_followup_sent_at: new Date().toISOString(),
             reputation_status: "passed",
             reputation_issues: [],

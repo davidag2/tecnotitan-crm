@@ -194,6 +194,33 @@ const MESSAGE_TEMPLATES = [
       "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de software e inteligencia artificial enfocada en resolver problemas operativos reales de empresas en America Latina.\n\nNuestro punto de partida combina CRM interno, automatizacion comercial, prospeccion B2B, integraciones y herramientas de IA para pymes y equipos en crecimiento.\n\nVi tu relacion con {{industria}} en {{pais}} y tu perfil como {{tipo_lead}}; por eso pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen ejecutivo o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
+    id: "investors-english-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Investors - strategic intro EN",
+    subject: "Tecnotitan | AI software infrastructure for LATAM companies",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building a software and AI company focused on solving real operational and commercial problems for companies in Latin America.\n\nOur current platform combines internal CRM, B2B prospecting, workflow automation, integrations and practical AI tools for growing businesses that need better systems without adding operational friction.\n\nI noticed your connection to {{industria}} in {{pais}}, and thought Tecnotitan could be relevant from an investment and market-expansion perspective.\n\nIf it makes sense, I would be glad to share a short executive summary or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
+    id: "investors-english-followup-1",
+    category: "seguimiento",
+    channel: "Email",
+    title: "Investors - follow-up EN",
+    subject: "Re: Tecnotitan and the LATAM software opportunity",
+    body:
+      "Hi {{primer_nombre}},\n\nI wanted to follow up on my previous note about Tecnotitan.\n\nWe are building practical AI and software infrastructure for Latin American companies, starting with CRM, sales automation, integrations and internal tools that make business operations more measurable and scalable.\n\nIf this is within your investment focus, I can send a concise overview with traction, product direction and the market thesis.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
+    id: "investors-english-institutional-1",
+    category: "institucional",
+    channel: "Email",
+    title: "Tecnotitan institutional intro EN",
+    subject: "Introducing Tecnotitan",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan.\n\nTecnotitan is a software, automation and artificial intelligence company building practical systems for Latin American businesses: CRM, commercial automation, integrations, internal tools and AI solutions for real operational workflows.\n\nOur approach is simple: understand the process, identify measurable friction and build software that helps teams sell better, operate with more clarity and reduce manual work.\n\nI would be glad to briefly introduce what we are building and explore whether there could be a strategic conversation with {{empresa}}.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
     id: "inversionistas-linkedin-1",
     category: "inversionistas",
     channel: "LinkedIn",
@@ -979,7 +1006,7 @@ function campaignTypeLabel(type) {
 }
 
 function defaultCampaignTemplate(type) {
-  const templateId = type === "investor" ? "inversionistas-email-1" : "consultoria-latam-email-1";
+  const templateId = type === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   const template = MESSAGE_TEMPLATES.find((item) => item.id === templateId);
   return { subject: template?.subject || "", body: template?.body || "" };
 }
@@ -991,7 +1018,7 @@ function applyCampaignDefaults(force = false) {
   if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
   if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
   if (elements.campaignTemplate && force) {
-    elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "inversionistas-email-1" : "consultoria-latam-email-1";
+    elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   }
   if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
   if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
