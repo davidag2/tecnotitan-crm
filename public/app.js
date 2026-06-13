@@ -12,6 +12,7 @@ const state = {
   emailStatus: null,
   emailMailbox: "compose",
   emailSearch: "",
+  selectedEmailId: "",
   leadPage: 1,
   assignmentWorkload: null,
   currentUser: null,
@@ -52,6 +53,7 @@ const elements = {
   sendEmailButton: document.querySelector("#send-email-button"),
   emailComposeStatus: document.querySelector("#email-compose-status"),
   emailMailboxButtons: document.querySelectorAll("[data-email-mailbox]"),
+  refreshEmailButton: document.querySelector("#refresh-email-button"),
   campaignName: document.querySelector("#campaign-name"),
   campaignType: document.querySelector("#campaign-type"),
   campaignSender: document.querySelector("#campaign-sender"),
@@ -941,6 +943,60 @@ function fillEmailFromLead() {
   }
 }
 
+function emailSenderForMessage(message) {
+  if (message?.opportunity?.lead_type === "investor") return "investors";
+  const toText = (message?.to_emails || []).join(" ").toLowerCase();
+  if (toText.includes("tecnotitaninvestors.com")) return "investors";
+  return "consulting";
+}
+
+function emailReplySubject(subject) {
+  const value = String(subject || "").trim() || "(sin asunto)";
+  return /^re:/i.test(value) ? value : `Re: ${value}`;
+}
+
+function emailReferenceHeader(message) {
+  return [message.references_header, message.message_id].filter(Boolean).join(" ").trim();
+}
+
+function renderEmailDetail(message) {
+  const contact = message.contact || {};
+  const company = message.company || {};
+  const date = new Date(message.sent_at || message.received_at || message.created_at).toLocaleString("es-CO");
+  const body = message.text_body || message.snippet || "Sin cuerpo disponible.";
+  const canReply = message.direction === "inbound" && message.from_email;
+  elements.emailList.innerHTML = `
+    <article class="email-detail">
+      <header>
+        <div>
+          <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${attr(message.subject || "(sin asunto)")}</strong>
+          <span>${message.direction === "inbound" ? attr(message.from_email) : attr((message.to_emails || []).join(", "))}</span>
+          <small>${attr(contact.full_name || "Contacto no vinculado")} | ${attr(company.name || "Empresa no vinculada")} | ${date} | ${emailEventLabel(message.last_event_type || message.status)}</small>
+        </div>
+        <button class="secondary" type="button" data-back-emails>Volver</button>
+      </header>
+      <pre>${attr(body)}</pre>
+      ${
+        canReply
+          ? `
+            <div class="email-reply-box">
+              <h3>Responder</h3>
+              <textarea data-reply-body rows="8" placeholder="Escribe tu respuesta"></textarea>
+              <button type="button" data-reply-email="${attr(message.id)}">Enviar respuesta</button>
+              <span data-reply-status></span>
+            </div>
+          `
+          : ""
+      }
+    </article>
+  `;
+  elements.emailList.querySelector("[data-back-emails]")?.addEventListener("click", () => {
+    state.selectedEmailId = "";
+    renderEmails(state.emailMessages);
+  });
+  elements.emailList.querySelector("[data-reply-email]")?.addEventListener("click", (event) => replyToEmail(event.currentTarget.dataset.replyEmail));
+}
+
 function renderEmails(messages = state.emailMessages) {
   if (!elements.emailList) return;
   renderEmailStatus(state.emailStatus);
@@ -953,6 +1009,11 @@ function renderEmails(messages = state.emailMessages) {
   elements.emailMailboxButtons.forEach((button) => button.classList.toggle("active", button.dataset.emailMailbox === state.emailMailbox));
   if (state.emailMailbox === "compose") {
     elements.emailList.innerHTML = "";
+    return;
+  }
+  const selected = (messages || []).find((message) => message.id === state.selectedEmailId);
+  if (selected) {
+    renderEmailDetail(selected);
     return;
   }
   const query = (state.emailSearch || "").trim().toLowerCase();
@@ -980,17 +1041,23 @@ function renderEmails(messages = state.emailMessages) {
       const date = new Date(message.sent_at || message.received_at || message.created_at).toLocaleString("es-CO");
       const eventLabel = emailEventLabel(message.last_event_type || message.status);
       return `
-        <article class="email-row">
+        <button class="email-row" type="button" data-open-email="${attr(message.id)}">
           <div>
-            <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${message.subject || "(sin asunto)"}</strong>
-            <span>${message.direction === "inbound" ? message.from_email : (message.to_emails || []).join(", ")}</span>
-            <small>${contact.full_name || "Contacto no vinculado"} | ${company.name || "Empresa no vinculada"} | ${date} | ${eventLabel}</small>
+            <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${attr(message.subject || "(sin asunto)")}</strong>
+            <span>${attr(message.direction === "inbound" ? message.from_email : (message.to_emails || []).join(", "))}</span>
+            <small>${attr(contact.full_name || "Contacto no vinculado")} | ${attr(company.name || "Empresa no vinculada")} | ${date} | ${eventLabel}</small>
           </div>
-          <p>${message.snippet || "Sin vista previa."}</p>
-        </article>
+          <p>${attr(message.snippet || "Sin vista previa.")}</p>
+        </button>
       `;
     })
     .join("");
+  elements.emailList.querySelectorAll("[data-open-email]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedEmailId = button.dataset.openEmail;
+      renderEmails(state.emailMessages);
+    });
+  });
 }
 
 function emailEventLabel(eventType) {
@@ -2383,6 +2450,9 @@ async function reloadEmailsOnly() {
     const emails = await api("/api/emails");
     state.emailStatus = emails.status || null;
     state.emailMessages = emails.messages || [];
+    if (state.selectedEmailId && !state.emailMessages.some((message) => message.id === state.selectedEmailId)) {
+      state.selectedEmailId = "";
+    }
     renderEmails(state.emailMessages);
   } catch (error) {
     if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">${error.message}</p>`;
@@ -2572,12 +2642,72 @@ async function sendEmail() {
     elements.emailBody.value = "";
     elements.emailComposeStatus.textContent = "Correo enviado.";
     state.emailMailbox = "sent";
+    state.selectedEmailId = "";
     await reloadEmailsOnly();
     renderFollowups(await api("/api/followups"));
   } catch (error) {
     elements.emailComposeStatus.textContent = error.message;
   } finally {
     elements.sendEmailButton.disabled = false;
+  }
+}
+
+async function refreshEmails() {
+  if (!state.token) {
+    setStatus("Inicia sesion primero.", "warning");
+    return;
+  }
+  elements.refreshEmailButton.disabled = true;
+  const originalText = elements.refreshEmailButton.textContent;
+  elements.refreshEmailButton.textContent = "Actualizando...";
+  try {
+    await reloadEmailsOnly();
+    setStatus("Correos actualizados.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    elements.refreshEmailButton.disabled = false;
+    elements.refreshEmailButton.textContent = originalText;
+  }
+}
+
+async function replyToEmail(messageId) {
+  const message = state.emailMessages.find((item) => item.id === messageId);
+  if (!message) return;
+  const replyBox = elements.emailList.querySelector(".email-reply-box");
+  const textarea = replyBox?.querySelector("[data-reply-body]");
+  const status = replyBox?.querySelector("[data-reply-status]");
+  const button = replyBox?.querySelector("[data-reply-email]");
+  const text = textarea?.value.trim() || "";
+  if (!text) {
+    if (status) status.textContent = "Escribe una respuesta.";
+    return;
+  }
+  if (button) button.disabled = true;
+  if (status) status.textContent = "Enviando respuesta...";
+  try {
+    await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        opportunity_id: message.opportunity_id || message.opportunity?.id || "",
+        sender_key: emailSenderForMessage(message),
+        to: message.from_email,
+        subject: emailReplySubject(message.subject),
+        text,
+        in_reply_to: message.message_id || message.provider_message_id || "",
+        references: emailReferenceHeader(message),
+      }),
+    });
+    if (textarea) textarea.value = "";
+    state.emailMailbox = "sent";
+    state.selectedEmailId = "";
+    if (status) status.textContent = "Respuesta enviada.";
+    await reloadEmailsOnly();
+    renderFollowups(await api("/api/followups"));
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -2743,6 +2873,7 @@ function logout() {
   state.emailStatus = null;
   state.emailMailbox = "compose";
   state.emailSearch = "";
+  state.selectedEmailId = "";
   state.leadRows = [];
   state.leadPage = 1;
   state.assignmentWorkload = null;
@@ -2800,15 +2931,18 @@ elements.messageTemplateFilter.addEventListener("change", () => {
 elements.emailMailboxButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.emailMailbox = button.dataset.emailMailbox || "all";
+    state.selectedEmailId = "";
     renderEmails(state.emailMessages);
   });
 });
 elements.emailSearch.addEventListener("input", () => {
   state.emailSearch = elements.emailSearch.value;
+  state.selectedEmailId = "";
   renderEmails(state.emailMessages);
 });
 elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
 elements.sendEmailButton.addEventListener("click", sendEmail);
+elements.refreshEmailButton.addEventListener("click", refreshEmails);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);

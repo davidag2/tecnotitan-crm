@@ -195,6 +195,12 @@ function negativeReplyReason(text) {
   return "";
 }
 
+function headerText(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value.filter(Boolean).join(" ");
+  return String(value);
+}
+
 async function upsertExclusion({ email, reason = "manual", source = "crm", contact_id = null, company_id = null, opportunity_id = null, note = "" }) {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
@@ -625,6 +631,8 @@ async function storeInbound(event) {
     status: "received",
     provider_message_id: meta.email_id || full?.id || null,
     message_id: full?.message_id || meta.message_id || null,
+    in_reply_to: headerText(full?.in_reply_to || meta.in_reply_to),
+    references_header: headerText(full?.references || meta.references),
     from_email: full?.from || meta.from || "",
     to_emails: full?.to || meta.to || [],
     cc_emails: full?.cc || meta.cc || [],
@@ -737,6 +745,7 @@ function normalizeMessage(row) {
     thread_id: row.thread_id,
     direction: row.direction,
     status: row.status,
+    opportunity_id: row.opportunity_id || row.opportunities?.id || null,
     from_email: row.from_email,
     to_emails: row.to_emails || [],
     subject: row.subject || "",
@@ -747,6 +756,9 @@ function normalizeMessage(row) {
     sent_at: row.sent_at,
     received_at: row.received_at,
     provider_message_id: row.provider_message_id,
+    message_id: row.message_id || "",
+    in_reply_to: row.in_reply_to || "",
+    references_header: row.references_header || "",
     last_event_type: row.last_event_type || row.status || "",
     last_event_at: row.last_event_at || null,
     contact: row.contacts || null,
@@ -759,7 +771,7 @@ async function listMessages(user, req) {
   const mailbox = String(req.query.mailbox || "all");
   const q = String(req.query.q || "").trim().toLowerCase();
   const filters = [
-    "select=id,thread_id,direction,status,provider_message_id,message_id,from_email,to_emails,subject,snippet,text_body,html_body,sent_at,received_at,created_at,last_event_type,last_event_at,opportunities(id,lead_type,target_region,owner_user_id),contacts(id,full_name,email,title),companies(id,name,domain)",
+    "select=id,thread_id,opportunity_id,direction,status,provider_message_id,message_id,in_reply_to,references_header,from_email,to_emails,subject,snippet,text_body,html_body,sent_at,received_at,created_at,last_event_type,last_event_at,opportunities(id,lead_type,target_region,owner_user_id),contacts(id,full_name,email,title),companies(id,name,domain)",
     mailbox === "inbox" ? "direction=eq.inbound" : "",
     mailbox === "sent" ? "direction=eq.outbound" : "",
     req.query.opportunity_id ? `opportunity_id=eq.${encodeURIComponent(req.query.opportunity_id)}` : "",
@@ -1340,6 +1352,8 @@ async function sendEmail(user, body) {
     subject,
     text_body: text,
     html_body: html,
+    in_reply_to: headerText(body.in_reply_to),
+    references_header: headerText(body.references),
     snippet: snippet(text),
     raw_payload: data,
     sent_at: new Date().toISOString(),
