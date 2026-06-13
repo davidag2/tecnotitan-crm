@@ -1154,6 +1154,60 @@ async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCo
   return pool.slice(0, desiredCount);
 }
 
+async function existingCampaignEmails(campaignId) {
+  const { payload } = await supabaseFetch(
+    `/email_campaign_recipients?select=email&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+  );
+  return new Set((payload || []).map((row) => normalizeEmail(row.email)).filter(Boolean));
+}
+
+async function addCampaignRecipients(user, campaign, count, startAt = new Date()) {
+  const maxRecipients = Number(campaign.max_recipients || 100);
+  if (count <= 0) return 0;
+  const existingEmails = await existingCampaignEmails(campaign.id);
+  const leads = await buildCampaignLeadPool(user, campaign.campaign_type, campaign.target_region, Math.min(count * 3, 100));
+  const allowedLeads = [];
+  const blockedRecipients = [];
+  for (const lead of leads) {
+    if (allowedLeads.length >= count) break;
+    const email = normalizeEmail(lead.contacts?.email);
+    if (!email || existingEmails.has(email)) continue;
+    existingEmails.add(email);
+    const exclusion = await findExclusion(email);
+    if (exclusion) {
+      blockedRecipients.push({
+        campaign_id: campaign.id,
+        opportunity_id: lead.id,
+        contact_id: lead.contact_id,
+        company_id: lead.company_id,
+        email,
+        status: "skipped",
+        reputation_status: "blocked",
+        reputation_issues: [`Lista global no contactar: ${exclusion.reason}`],
+        last_error: `Lista global no contactar: ${exclusion.reason}`,
+      });
+    } else {
+      allowedLeads.push(lead);
+    }
+  }
+  const rows = [
+    ...scheduleRecipients(campaign.id, allowedLeads, campaign.min_delay_minutes || 4, campaign.max_delay_minutes || 9, {
+      startAt,
+      endAt: campaign.end_at ? new Date(campaign.end_at) : null,
+      windowStartMinutes: campaign.send_window_start_minutes || 7 * 60,
+      windowEndMinutes: campaign.send_window_end_minutes || 17 * 60 + 45,
+    }),
+    ...blockedRecipients,
+  ].slice(0, Math.max(0, maxRecipients));
+  if (!rows.length) return 0;
+  await supabaseFetch("/email_campaign_recipients", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(rows),
+  });
+  return rows.filter((row) => row.status === "queued").length;
+}
+
 async function createCampaign(user, body) {
   requireCampaignAdmin(user);
   const campaignType = body.campaign_type === "investor" ? "investor" : "consulting_client";
@@ -1182,11 +1236,7 @@ async function createCampaign(user, body) {
   if (!text) throw new Error("El cuerpo de la campana es requerido.");
 
   if (startAt && endAt && endAt <= startAt) throw new Error("La fecha final debe ser posterior al inicio.");
-  const desiredQueue = maxRecipients;
-  const leads = await buildCampaignLeadPool(user, campaignType, targetRegion, desiredQueue);
-  if (!leads.length) {
-    throw new Error("No se encontraron leads con email disponible para esta campana.");
-  }
+  const desiredQueue = Math.min(maxRecipients, clampNumber(body.initial_queue_size, 1, 100, Math.min(100, maxRecipients)));
 
   const campaign = await insertRow("email_campaigns", {
     name,
@@ -1214,43 +1264,7 @@ async function createCampaign(user, body) {
     status: "active",
   });
 
-  const allowedLeads = [];
-  const blockedRecipients = [];
-  for (const lead of leads) {
-    const email = normalizeEmail(lead.contacts.email);
-    const exclusion = await findExclusion(email);
-    if (exclusion) {
-      blockedRecipients.push({
-        campaign_id: campaign.id,
-        opportunity_id: lead.id,
-        contact_id: lead.contact_id,
-        company_id: lead.company_id,
-        email,
-        status: "skipped",
-        reputation_status: "blocked",
-        reputation_issues: [`Lista global no contactar: ${exclusion.reason}`],
-        last_error: `Lista global no contactar: ${exclusion.reason}`,
-      });
-    } else {
-      allowedLeads.push(lead);
-    }
-  }
-  const recipients = [
-    ...scheduleRecipients(campaign.id, allowedLeads, minDelay, maxDelay, {
-      startAt: startAt || new Date(),
-      endAt,
-      windowStartMinutes: sendWindowStart,
-      windowEndMinutes: sendWindowEnd,
-    }),
-    ...blockedRecipients,
-  ];
-  if (recipients.length) {
-    await supabaseFetch("/email_campaign_recipients", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify(recipients),
-    });
-  }
+  await addCampaignRecipients(user, campaign, desiredQueue, startAt || new Date());
 
   return { ...campaign, counts: await campaignCounts(campaign.id) };
 }
@@ -1275,10 +1289,16 @@ async function processCampaign(user, body) {
   }
   const sender = senderFor(campaign.sender_key);
 
-  const counts = await campaignCounts(campaign.id);
+  let counts = await campaignCounts(campaign.id);
   if (campaign.max_recipients && counts.sent >= campaign.max_recipients) {
     await updateRows("email_campaigns", { status: "completed", updated_at: nowDate.toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
     return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, completed: true, reason: "max_recipients_reached" };
+  }
+  const queuedAndSent = (counts.queued || 0) + (counts.sent || 0);
+  const remainingToQueue = campaign.max_recipients ? Math.max(0, campaign.max_recipients - queuedAndSent) : 0;
+  if (remainingToQueue > 0 && (counts.queued || 0) < Math.max(5, campaign.batch_size || 1)) {
+    await addCampaignRecipients(user, campaign, Math.min(25, remainingToQueue), nowDate);
+    counts = await campaignCounts(campaign.id);
   }
   const warmup = await warmupStatus(campaign.sender_key);
   const campaignRemainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
@@ -1482,7 +1502,7 @@ async function processCampaign(user, body) {
 
   const nextCounts = await campaignCounts(campaign.id);
   const nextWarmup = await warmupStatus(campaign.sender_key);
-  if (nextCounts.queued === 0 && !nextCounts.next_scheduled_at) {
+  if (campaign.max_recipients && nextCounts.sent >= campaign.max_recipients) {
     await updateRows("email_campaigns", { status: "completed", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
   }
   return {
