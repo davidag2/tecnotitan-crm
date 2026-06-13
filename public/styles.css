@@ -521,6 +521,37 @@ button.danger {
   padding-top: 12px;
 }
 
+.attachment-toggle {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.attachment-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+.attachment-toggle span {
+  line-height: 1.3;
+}
+
+.attachment-toggle:hover {
+  border-color: rgba(31, 94, 255, 0.28);
+  box-shadow: 0 10px 24px rgba(31, 94, 255, 0.08);
+}
+
 .campaign-note {
   margin: 0;
   padding: 10px 12px;

@@ -47,6 +47,7 @@ const elements = {
   emailSearch: document.querySelector("#email-search"),
   emailOpportunity: document.querySelector("#email-opportunity"),
   emailSender: document.querySelector("#email-sender"),
+  emailAttachDeck: document.querySelector("#email-attach-deck"),
   emailTo: document.querySelector("#email-to"),
   emailSubject: document.querySelector("#email-subject"),
   emailBody: document.querySelector("#email-body"),
@@ -59,6 +60,7 @@ const elements = {
   campaignSender: document.querySelector("#campaign-sender"),
   campaignTargetRegion: document.querySelector("#campaign-target-region"),
   campaignTemplate: document.querySelector("#campaign-template"),
+  campaignAttachDeck: document.querySelector("#campaign-attach-deck"),
   campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
   campaignBatchSize: document.querySelector("#campaign-batch-size"),
   campaignMinDelay: document.querySelector("#campaign-min-delay"),
@@ -938,6 +940,7 @@ function fillEmailFromLead() {
   const company = lead.companies || {};
   elements.emailTo.value = contact.email || "";
   elements.emailSender.value = lead.lead_type === "investor" ? "investors" : "consulting";
+  if (elements.emailAttachDeck) elements.emailAttachDeck.checked = lead.lead_type === "investor";
   if (!elements.emailSubject.value.trim()) {
     elements.emailSubject.value =
       lead.lead_type === "investor" ? `Tecnotitan - ${company.name || "oportunidad"}` : `Idea rapida para ${company.name || "tu equipo"}`;
@@ -1098,6 +1101,9 @@ function applyCampaignDefaults(force = false) {
   if (elements.campaignTemplate && force) {
     elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   }
+  if (elements.campaignAttachDeck && force) {
+    elements.campaignAttachDeck.checked = elements.campaignType.value === "investor";
+  }
   if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
   if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
 }
@@ -1111,11 +1117,13 @@ function applySelectedCampaignTemplate() {
     elements.campaignType.value = "investor";
     elements.campaignSender.value = "investors";
     if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "usa";
+    if (elements.campaignAttachDeck) elements.campaignAttachDeck.checked = true;
   }
   if (template.category === "consultoria") {
     elements.campaignType.value = "consulting_client";
     elements.campaignSender.value = "consulting";
     if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "latam";
+    if (elements.campaignAttachDeck) elements.campaignAttachDeck.checked = false;
   }
 }
 
@@ -1159,7 +1167,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${remaining}</b>Restantes hoy</span>
             <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
           </div>
-          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Follow-ups: 3, 7 y 14 dias | Proximo envio: ${nextSend}</small>
+          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Follow-ups: 3, 7 y 14 dias | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
         </article>
       `;
     })
@@ -2643,9 +2651,11 @@ async function sendEmail() {
         to,
         subject: elements.emailSubject.value,
         text: elements.emailBody.value,
+        attach_investor_deck: Boolean(elements.emailAttachDeck?.checked),
       }),
     });
     elements.emailBody.value = "";
+    if (elements.emailAttachDeck) elements.emailAttachDeck.checked = false;
     elements.emailComposeStatus.textContent = "Correo enviado.";
     state.emailMailbox = "sent";
     state.selectedEmailId = "";
@@ -2735,6 +2745,7 @@ async function createCampaign() {
         max_delay_minutes: elements.campaignMaxDelay.value,
         subject_template: elements.campaignSubject.value,
         body_template: elements.campaignBody.value,
+        attach_investor_deck: Boolean(elements.campaignAttachDeck?.checked),
       }),
     });
     elements.campaignName.value = "";
@@ -2948,6 +2959,9 @@ elements.emailSearch.addEventListener("input", () => {
   renderEmails(state.emailMessages);
 });
 elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
+elements.emailSender.addEventListener("change", () => {
+  if (elements.emailAttachDeck) elements.emailAttachDeck.checked = elements.emailSender.value === "investors";
+});
 elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.refreshEmailButton.addEventListener("click", refreshEmails);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));

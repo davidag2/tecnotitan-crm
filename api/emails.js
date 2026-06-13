@@ -3,6 +3,8 @@ const { emailStatus, resendFetch, senderFor } = require("./_resend");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
 function cleanEmail(value) {
   return String(value || "").trim();
@@ -58,6 +60,24 @@ function unsubscribeUrl(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return "";
   return `${publicBaseUrl()}/api/unsubscribe?email=${encodeURIComponent(normalized)}&token=${unsubscribeToken(normalized)}`;
+}
+
+function investorDeckAttachment() {
+  const filePath = [
+    path.join(process.cwd(), "public", "Tecnotitan-Investor-Deck-EN.pdf"),
+    path.join(__dirname, "..", "public", "Tecnotitan-Investor-Deck-EN.pdf"),
+  ].find((candidate) => fs.existsSync(candidate));
+  if (!filePath) throw new Error("Investor deck PDF no esta disponible en public/.");
+  return {
+    filename: "Tecnotitan-Investor-Deck-EN.pdf",
+    content: fs.readFileSync(filePath).toString("base64"),
+  };
+}
+
+function emailAttachments(body) {
+  const attachments = [];
+  if (body.attach_investor_deck) attachments.push(investorDeckAttachment());
+  return attachments;
 }
 
 function brandedEmailHtml(text, senderKey, unsubscribeLink = "") {
@@ -879,7 +899,7 @@ async function campaignCounts(campaignId) {
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,attach_investor_deck,last_processed_at,created_at&order=created_at.desc&limit=50"
   );
   const campaigns = [];
   for (const campaign of payload || []) {
@@ -1154,6 +1174,7 @@ async function createCampaign(user, body) {
     subject_template: subject,
     body_template: text,
     target_region: targetRegion,
+    attach_investor_deck: Boolean(body.attach_investor_deck) && senderKey === "investors",
     created_by: user.db_user_id || null,
     status: "active",
   });
@@ -1271,6 +1292,7 @@ async function processCampaign(user, body) {
         to: recipient.email,
         subject,
         text,
+        attach_investor_deck: Boolean(campaign.attach_investor_deck),
       });
       await updateRows(
         "email_campaign_recipients",
@@ -1362,6 +1384,7 @@ async function processCampaign(user, body) {
           to: recipient.email,
           subject,
           text,
+          attach_investor_deck: Boolean(campaign.attach_investor_deck),
         });
         const nextDelay = campaign.followup_delays_days?.[nextStep] || null;
         await updateRows(
@@ -1619,6 +1642,7 @@ async function sendEmail(user, body) {
   if (opportunity?.id) {
     tags.push({ name: "opportunity", value: opportunity.id.replace(/-/g, "_").slice(0, 256) });
   }
+  const attachments = emailAttachments(body);
 
   const data = await resendFetch("/emails", {
     method: "POST",
@@ -1632,6 +1656,7 @@ async function sendEmail(user, body) {
       html,
       headers,
       tags,
+      ...(attachments.length ? { attachments } : {}),
     }),
   });
 
@@ -1654,6 +1679,7 @@ async function sendEmail(user, body) {
     in_reply_to: headerText(body.in_reply_to),
     references_header: headerText(body.references),
     snippet: snippet(text),
+    attachments: attachments.map((attachment) => ({ filename: attachment.filename })),
     raw_payload: data,
     sent_at: new Date().toISOString(),
   });
