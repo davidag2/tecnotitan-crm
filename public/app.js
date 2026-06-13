@@ -874,7 +874,7 @@ function renderEmails(messages = state.emailMessages) {
   const query = (state.emailSearch || "").trim().toLowerCase();
   const visible = (messages || []).filter((message) => {
     const mailboxOk =
-      state.emailMailbox === "all" ||
+      (state.emailMailbox === "all" && message.direction !== "outbound") ||
       (state.emailMailbox === "inbox" && message.direction === "inbound") ||
       (state.emailMailbox === "sent" && message.direction === "outbound");
     if (!mailboxOk) return false;
@@ -2291,6 +2291,7 @@ async function sendEmail() {
     });
     elements.emailBody.value = "";
     elements.emailComposeStatus.textContent = "Correo enviado.";
+    state.emailMailbox = "sent";
     await reloadEmailsOnly();
     renderFollowups(await api("/api/followups"));
   } catch (error) {
