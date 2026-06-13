@@ -12,6 +12,7 @@ const state = {
   clientCountryFilter: "all",
   clientPage: 1,
   kanbanSearch: "",
+  kanbanPage: 1,
   messageTemplateFilter: "all",
 };
 
@@ -118,6 +119,7 @@ const PIPELINE_STATUSES = [
 
 const ARCHIVE_STATUS = "archivado";
 const CLIENTS_PER_PAGE = 25;
+const KANBAN_CLIENTS_PER_PAGE = 25;
 
 const MESSAGE_TEMPLATES = [
   {
@@ -1143,10 +1145,18 @@ function renderKanban(clients) {
           .includes(query);
       })
     : clients;
+  const totalPages = Math.max(1, Math.ceil(visibleClients.length / KANBAN_CLIENTS_PER_PAGE));
+  if (state.kanbanPage > totalPages) state.kanbanPage = totalPages;
+  if (state.kanbanPage < 1) state.kanbanPage = 1;
+  const pageStart = (state.kanbanPage - 1) * KANBAN_CLIENTS_PER_PAGE;
+  const pageClients = visibleClients.slice(pageStart, pageStart + KANBAN_CLIENTS_PER_PAGE);
+  const pageLabelStart = visibleClients.length ? pageStart + 1 : 0;
+  const pageLabelEnd = Math.min(pageStart + KANBAN_CLIENTS_PER_PAGE, visibleClients.length);
   const grouped = PIPELINE_STATUSES.map(([status, label]) => ({
     status,
     label,
-    rows: visibleClients.filter((client) => (client.pipeline_status || "nuevo") === status),
+    rows: pageClients.filter((client) => (client.pipeline_status || "nuevo") === status),
+    totalRows: visibleClients.filter((client) => (client.pipeline_status || "nuevo") === status).length,
   }));
   const wonCount = visibleClients.filter((client) => client.pipeline_status === "ganado").length;
   const proposalCount = visibleClients.filter((client) => client.pipeline_status === "propuesta_enviada").length;
@@ -1168,7 +1178,7 @@ function renderKanban(clients) {
             <section class="kanban-column">
               <div class="kanban-column-title">
                 <h3>${group.label}</h3>
-                <span>${group.rows.length}</span>
+                <span>${group.totalRows}</span>
               </div>
               <div class="kanban-cards">
                 ${
@@ -1213,6 +1223,15 @@ function renderKanban(clients) {
         )
         .join("")}
     </div>
+    <div class="client-pagination kanban-pagination">
+      <span>Mostrando ${pageLabelStart}-${pageLabelEnd} de ${visibleClients.length}</span>
+      <div>
+        ${Array.from({ length: totalPages }, (_, index) => {
+          const page = index + 1;
+          return `<button class="${page === state.kanbanPage ? "" : "secondary"}" type="button" data-kanban-page="${page}">Pagina ${page}</button>`;
+        }).join("")}
+      </div>
+    </div>
   `;
 
   const searchInput = elements.kanban.querySelector("#kanban-search");
@@ -1220,6 +1239,7 @@ function renderKanban(clients) {
     searchInput.addEventListener("input", () => {
       const cursorPosition = searchInput.selectionStart || searchInput.value.length;
       state.kanbanSearch = searchInput.value;
+      state.kanbanPage = 1;
       renderKanban(clients);
       const nextSearchInput = elements.kanban.querySelector("#kanban-search");
       if (nextSearchInput) {
@@ -1229,6 +1249,12 @@ function renderKanban(clients) {
     });
   }
   attachClientActions(elements.kanban);
+  elements.kanban.querySelectorAll("[data-kanban-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.kanbanPage = Number(button.dataset.kanbanPage || 1);
+      renderKanban(clients);
+    });
+  });
 }
 
 function renderArchive(archived) {
@@ -2057,6 +2083,7 @@ function logout() {
   state.clientContactFilter = "all";
   state.clientCountryFilter = "all";
   state.clientPage = 1;
+  state.kanbanPage = 1;
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
