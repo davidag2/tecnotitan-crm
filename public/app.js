@@ -203,9 +203,9 @@ const MESSAGE_TEMPLATES = [
     category: "inversionistas",
     channel: "Email",
     title: "Investors - strategic intro EN",
-    subject: "Tecnotitan | AI software infrastructure for LATAM companies",
+    subject: "Tecnotitan | AI implementation platform for LATAM",
     body:
-      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building a software and AI company focused on solving real operational and commercial problems for companies in Latin America.\n\nOur current platform combines internal CRM, B2B prospecting, workflow automation, integrations and practical AI tools for growing businesses that need better systems without adding operational friction.\n\nI noticed your connection to {{industria}} in {{pais}}, and thought Tecnotitan could be relevant from an investment and market-expansion perspective.\n\nIf it makes sense, I would be glad to share a short executive summary or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an applied technology company from Colombia for companies that need AI implementation, not more slideware.\n\nThe problem we see across Latin America is clear: manual workflows, scattered data, pressure to adopt AI and teams without the internal capacity to turn ideas into working products.\n\nTecnotitan enters through real operational pain. We diagnose, build, implement and then convert recurring use cases into reusable IP, sector knowledge and operating playbooks. The model is service revenue today, scalable SaaS and licensing tomorrow.\n\nOur roadmap is to validate paid cases and MVPs in 2026, compound product and IP in 2027, and scale as a regional technology platform by 2028.\n\nWe are raising a US$500K pre-seed to fund 18 months toward paid pilots, product engineering, AI delivery and a repeatable product platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought Tecnotitan could be relevant to your thesis around AI, software infrastructure and emerging markets.\n\nIf this is close to your investment focus, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
   },
   {
     id: "investors-english-followup-1",
