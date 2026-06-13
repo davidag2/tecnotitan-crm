@@ -42,9 +42,30 @@ function textToHtml(text) {
     .join("");
 }
 
-function brandedEmailHtml(text, senderKey) {
+function publicBaseUrl() {
+  return String(process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://www.tecnotitanmarketing.com").replace(/\/+$/, "");
+}
+
+function unsubscribeSecret() {
+  return process.env.UNSUBSCRIBE_SECRET || process.env.CRM_SESSION_SECRET || process.env.RESEND_WEBHOOK_TOKEN || "tecnotitan-local-unsubscribe";
+}
+
+function unsubscribeToken(email) {
+  return crypto.createHmac("sha256", unsubscribeSecret()).update(normalizeEmail(email)).digest("hex");
+}
+
+function unsubscribeUrl(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return "";
+  return `${publicBaseUrl()}/api/unsubscribe?email=${encodeURIComponent(normalized)}&token=${unsubscribeToken(normalized)}`;
+}
+
+function brandedEmailHtml(text, senderKey, unsubscribeLink = "") {
   const accent = senderKey === "investors" ? "#1f5eff" : "#16856e";
   const label = senderKey === "investors" ? "Tecnotitan Investors" : "Tecnotitan Consultoria";
+  const unsubscribeHtml = unsubscribeLink
+    ? `<br><br>No enviarme mas correos / Unsubscribe: <a href="${escapeHtml(unsubscribeLink)}" style="color:${accent};text-decoration:none;">click aqui</a>`
+    : "";
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#13213a;">
@@ -80,6 +101,7 @@ function brandedEmailHtml(text, senderKey) {
                 <strong style="color:#13213a;">Tecnotitan</strong><br>
                 Software, automatizacion e inteligencia artificial para empresas en crecimiento.<br>
                 <a href="https://www.tecnotitan.com" style="color:${accent};text-decoration:none;">tecnotitan.com</a>
+                ${unsubscribeHtml}
               </td>
             </tr>
           </table>
@@ -1554,6 +1576,7 @@ async function sendDailyCampaignReport() {
     to: "info@tecnotitan.com",
     subject: `Reporte diario de campanas Tecnotitan - ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`,
     text,
+    include_unsubscribe: false,
   });
   return { ok: true, to: "info@tecnotitan.com", campaigns: campaigns.length, message_id: message.provider_message_id || message.id || null };
 }
@@ -1582,12 +1605,16 @@ async function sendEmail(user, body) {
 
   const sender = senderFor(body.sender_key, opportunity);
   if (!sender?.from) throw new Error("Configura RESEND_FROM_CONSULTING o RESEND_FROM_INVESTORS en Vercel.");
-  const html = brandedEmailHtml(text, sender.key);
+  const shouldIncludeUnsubscribe = body.include_unsubscribe !== false && !to.every((email) => normalizeEmail(email).endsWith("@tecnotitan.com"));
+  const unsubscribeLink = shouldIncludeUnsubscribe ? unsubscribeUrl(to[0]) : "";
+  const html = brandedEmailHtml(text, sender.key, unsubscribeLink);
 
   const thread = await findOrCreateThread({ opportunity, subject });
   const headers = {};
   if (body.in_reply_to) headers["In-Reply-To"] = body.in_reply_to;
   if (body.references) headers.References = body.references;
+  if (unsubscribeLink) headers["List-Unsubscribe"] = `<${unsubscribeLink}>`;
+  if (unsubscribeLink) headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
   const tags = [{ name: "crm", value: "tecnotitan" }];
   if (opportunity?.id) {
     tags.push({ name: "opportunity", value: opportunity.id.replace(/-/g, "_").slice(0, 256) });
