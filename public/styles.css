@@ -529,13 +529,14 @@ button.danger {
 
 .email-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "mailbar compose"
-    "maillist compose";
+    "mailbar"
+    "compose"
+    "maillist";
   gap: 12px;
   align-items: start;
-  max-width: 1180px;
+  max-width: 980px;
 }
 
 .email-sidebar,
@@ -563,7 +564,7 @@ button.danger {
   grid-area: compose;
   display: grid;
   gap: 10px;
-  width: 100%;
+  width: min(680px, 100%);
   min-width: 0;
 }
 
@@ -1724,18 +1725,6 @@ li {
 
   .kanban-board {
     grid-template-columns: repeat(7, minmax(185px, 1fr));
-  }
-
-  .email-shell {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "mailbar"
-      "maillist"
-      "compose";
-  }
-
-  .email-compose {
-    grid-column: auto;
   }
 
   .email-sidebar input {
