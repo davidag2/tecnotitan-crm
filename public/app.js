@@ -942,18 +942,34 @@ function renderEmails(messages = state.emailMessages) {
       const contact = message.contact || {};
       const company = message.company || {};
       const date = new Date(message.sent_at || message.received_at || message.created_at).toLocaleString("es-CO");
+      const eventLabel = emailEventLabel(message.last_event_type || message.status);
       return `
         <article class="email-row">
           <div>
             <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${message.subject || "(sin asunto)"}</strong>
             <span>${message.direction === "inbound" ? message.from_email : (message.to_emails || []).join(", ")}</span>
-            <small>${contact.full_name || "Contacto no vinculado"} | ${company.name || "Empresa no vinculada"} | ${date}</small>
+            <small>${contact.full_name || "Contacto no vinculado"} | ${company.name || "Empresa no vinculada"} | ${date} | ${eventLabel}</small>
           </div>
           <p>${message.snippet || "Sin vista previa."}</p>
         </article>
       `;
     })
     .join("");
+}
+
+function emailEventLabel(eventType) {
+  const labels = {
+    sent: "Enviado",
+    delivered: "Entregado",
+    opened: "Abierto",
+    clicked: "Clic",
+    bounced: "Rebotado",
+    failed: "Error",
+    complained: "Queja spam",
+    suppressed: "Suprimido",
+    received: "Respuesta",
+  };
+  return labels[eventType] || eventType || "Sin tracking";
 }
 
 function campaignTypeLabel(type) {
@@ -1021,6 +1037,11 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${counts.sent || 0}</b>Enviados</span>
             <span><b>${counts.followups_sent || 0}</b>Follow-ups</span>
             <span><b>${counts.replied || 0}</b>Respuestas</span>
+            <span><b>${counts.delivered || 0}</b>Entregados</span>
+            <span><b>${counts.opened || 0}</b>Abiertos</span>
+            <span><b>${counts.clicked || 0}</b>Clics</span>
+            <span><b>${counts.bounced || 0}</b>Rebotes</span>
+            <span><b>${counts.failed_events || 0}</b>Errores</span>
             <span><b>${counts.followups_due || 0}</b>Seguimientos listos</span>
             <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>

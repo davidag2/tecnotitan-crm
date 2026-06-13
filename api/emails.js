@@ -243,6 +243,111 @@ async function createExclusion(user, body) {
   return exclusion;
 }
 
+function normalizedEventType(type) {
+  return String(type || "").toLowerCase().replace(/^email\./, "");
+}
+
+function trackingTimestampColumn(eventType) {
+  const event = normalizedEventType(eventType);
+  const map = {
+    sent: "sent_at",
+    delivered: "delivered_at",
+    opened: "opened_at",
+    clicked: "clicked_at",
+    bounced: "bounced_at",
+    failed: "failed_at",
+    complained: "complained_at",
+    suppressed: "suppressed_at",
+  };
+  return map[event] || "";
+}
+
+function eventEmail(meta) {
+  const raw = meta.to || meta.email || meta.recipient || meta.from || "";
+  return normalizeEmail(Array.isArray(raw) ? raw[0] : raw);
+}
+
+async function findMessageForProvider(providerMessageId) {
+  if (!providerMessageId) return null;
+  const { payload } = await supabaseFetch(
+    `/email_messages?select=id,opportunity_id,contact_id,company_id,provider_message_id,to_emails&provider_message_id=eq.${encodeURIComponent(providerMessageId)}&limit=1`
+  );
+  return payload?.[0] || null;
+}
+
+async function findRecipientForEvent(providerMessageId, email) {
+  if (providerMessageId) {
+    const { payload } = await supabaseFetch(
+      `/email_campaign_recipients?select=id,campaign_id,opportunity_id,contact_id,company_id,email&provider_message_id=eq.${encodeURIComponent(providerMessageId)}&order=created_at.desc&limit=1`
+    );
+    if (payload?.[0]) return payload[0];
+  }
+  if (!email) return null;
+  const { payload } = await supabaseFetch(
+    `/email_campaign_recipients?select=id,campaign_id,opportunity_id,contact_id,company_id,email&email=eq.${encodeURIComponent(email)}&order=created_at.desc&limit=1`
+  );
+  return payload?.[0] || null;
+}
+
+async function storeTrackingEvent(req, event) {
+  const meta = event.data || {};
+  const providerMessageId = meta.email_id || meta.id || meta.message_id || null;
+  const email = eventEmail(meta);
+  const eventType = normalizedEventType(event.type);
+  const occurredAt = meta.created_at || event.created_at || new Date().toISOString();
+  const message = await findMessageForProvider(providerMessageId);
+  const recipient = await findRecipientForEvent(providerMessageId, email);
+  const eventId = req.headers["svix-id"] || `${event.type}:${providerMessageId || email}:${occurredAt}`;
+
+  const stored = await supabaseFetch("/email_events?on_conflict=event_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    body: JSON.stringify({
+      event_id: eventId,
+      provider: "resend",
+      event_type: eventType,
+      provider_message_id: providerMessageId,
+      message_id: message?.id || null,
+      campaign_id: recipient?.campaign_id || null,
+      recipient_id: recipient?.id || null,
+      opportunity_id: recipient?.opportunity_id || message?.opportunity_id || null,
+      contact_id: recipient?.contact_id || message?.contact_id || null,
+      company_id: recipient?.company_id || message?.company_id || null,
+      email,
+      url: meta.link?.url || meta.click?.url || meta.url || null,
+      raw_payload: event,
+      occurred_at: occurredAt,
+    }),
+  });
+
+  const column = trackingTimestampColumn(event.type);
+  if (column && message?.id) {
+    await updateRows(
+      "email_messages",
+      {
+        [column]: occurredAt,
+        last_event_type: eventType,
+        last_event_at: occurredAt,
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(message.id)}`
+    );
+  }
+  if (column && recipient?.id) {
+    await updateRows(
+      "email_campaign_recipients",
+      {
+        [column]: occurredAt,
+        last_event_type: eventType,
+        last_event_at: occurredAt,
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(recipient.id)}`
+    );
+  }
+  return stored.payload?.[0] || null;
+}
+
 function todayStartIso() {
   const now = new Date();
   now.setUTCHours(0, 0, 0, 0);
@@ -488,6 +593,9 @@ async function handleResendWebhook(req, res) {
   }
   const event = req.body || {};
   const eventType = String(event.type || "").toLowerCase();
+  if (eventType.startsWith("email.")) {
+    await storeTrackingEvent(req, event).catch(() => null);
+  }
   if (eventType.includes("bounce") || eventType.includes("complain") || eventType.includes("unsubscribe")) {
     const exclusion = await storeSuppressionEvent(event);
     res.status(200).json({ ok: true, exclusion_id: exclusion?.id || null });
@@ -531,6 +639,8 @@ function normalizeMessage(row) {
     sent_at: row.sent_at,
     received_at: row.received_at,
     provider_message_id: row.provider_message_id,
+    last_event_type: row.last_event_type || row.status || "",
+    last_event_at: row.last_event_at || null,
     contact: row.contacts || null,
     company: row.companies || null,
     opportunity: row.opportunities || null,
@@ -541,7 +651,7 @@ async function listMessages(user, req) {
   const mailbox = String(req.query.mailbox || "all");
   const q = String(req.query.q || "").trim().toLowerCase();
   const filters = [
-    "select=id,thread_id,direction,status,provider_message_id,message_id,from_email,to_emails,subject,snippet,text_body,html_body,sent_at,received_at,created_at,opportunities(id,lead_type,target_region,owner_user_id),contacts(id,full_name,email,title),companies(id,name,domain)",
+    "select=id,thread_id,direction,status,provider_message_id,message_id,from_email,to_emails,subject,snippet,text_body,html_body,sent_at,received_at,created_at,last_event_type,last_event_at,opportunities(id,lead_type,target_region,owner_user_id),contacts(id,full_name,email,title),companies(id,name,domain)",
     mailbox === "inbox" ? "direction=eq.inbound" : "",
     mailbox === "sent" ? "direction=eq.outbound" : "",
     req.query.opportunity_id ? `opportunity_id=eq.${encodeURIComponent(req.query.opportunity_id)}` : "",
@@ -564,7 +674,7 @@ async function listMessages(user, req) {
 
 async function campaignCounts(campaignId) {
   const { payload } = await supabaseFetch(
-    `/email_campaign_recipients?select=status,sent_at,scheduled_at,reply_received_at,followup_step,next_followup_at,last_followup_sent_at,reputation_status&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+    `/email_campaign_recipients?select=status,sent_at,scheduled_at,reply_received_at,followup_step,next_followup_at,last_followup_sent_at,reputation_status,delivered_at,opened_at,clicked_at,bounced_at,failed_at,complained_at,suppressed_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
   );
   const today = todayStartIso();
   const counts = {
@@ -574,6 +684,13 @@ async function campaignCounts(campaignId) {
     failed: 0,
     skipped: 0,
     reputation_blocked: 0,
+    delivered: 0,
+    opened: 0,
+    clicked: 0,
+    bounced: 0,
+    failed_events: 0,
+    complained: 0,
+    suppressed: 0,
     replied: 0,
     followups_due: 0,
     followups_sent: 0,
@@ -587,6 +704,13 @@ async function campaignCounts(campaignId) {
     counts[row.status] = (counts[row.status] || 0) + 1;
     if (row.status === "sent" && row.sent_at && row.sent_at >= today) counts.sent_today += 1;
     if (row.reputation_status === "blocked") counts.reputation_blocked += 1;
+    if (row.delivered_at) counts.delivered += 1;
+    if (row.opened_at) counts.opened += 1;
+    if (row.clicked_at) counts.clicked += 1;
+    if (row.bounced_at) counts.bounced += 1;
+    if (row.failed_at) counts.failed_events += 1;
+    if (row.complained_at) counts.complained += 1;
+    if (row.suppressed_at) counts.suppressed += 1;
     if (row.last_followup_sent_at && row.last_followup_sent_at >= today) counts.sent_today += 1;
     if (row.reply_received_at) counts.replied += 1;
     counts.followups_sent += Number(row.followup_step || 0);
