@@ -1007,17 +1007,20 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
               <strong>${campaign.name}</strong>
               <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
             </div>
-            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !counts.due ? "disabled" : ""}>Procesar listos</button>
+            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
           </header>
           <div class="campaign-stats">
             <span><b>${counts.total || 0}</b>Total</span>
             <span><b>${counts.queued || 0}</b>En cola</span>
             <span><b>${counts.due || 0}</b>Listos ahora</span>
             <span><b>${counts.sent || 0}</b>Enviados</span>
+            <span><b>${counts.followups_sent || 0}</b>Follow-ups</span>
+            <span><b>${counts.replied || 0}</b>Respuestas</span>
+            <span><b>${counts.followups_due || 0}</b>Seguimientos listos</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>
             <span><b>${remaining}</b>Restantes hoy</span>
           </div>
-          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Proximo envio: ${nextSend}</small>
+          <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Follow-ups: 3, 7 y 14 dias | Proximo envio: ${nextSend}</small>
         </article>
       `;
     })
@@ -2475,7 +2478,7 @@ async function processCampaign(campaignId, button) {
         campaign_id: campaignId,
       }),
     });
-    elements.campaignStatus.textContent = `Lote terminado: ${result.sent || 0} enviados, ${result.failed || 0} fallidos.`;
+    elements.campaignStatus.textContent = `Lote terminado: ${result.sent || 0} iniciales, ${result.followups_sent || 0} follow-ups, ${result.failed || 0} fallidos.`;
     await Promise.all([reloadCampaignsOnly(), reloadEmailsOnly()]);
   } catch (error) {
     elements.campaignStatus.textContent = error.message;

@@ -122,6 +122,12 @@ function randomInteger(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function addDaysIso(dateValue, days) {
+  const date = new Date(dateValue || Date.now());
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString();
+}
+
 function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes) {
   let scheduledAt = Date.now();
   return leads.map((lead, index) => {
@@ -155,9 +161,10 @@ function renderTemplate(template, data) {
     tipo_lead: leadType,
     categoria: leadType,
     region: data.opportunity?.target_region || "",
+    seguimiento_numero: String(data.followupStep || ""),
   };
   return String(template || "").replace(
-    /\{\{\s*(nombre|primer_nombre|cargo|empresa|pais|ciudad|industria|tipo_lead|categoria|region)\s*\}\}/gi,
+    /\{\{\s*(nombre|primer_nombre|cargo|empresa|pais|ciudad|industria|tipo_lead|categoria|region|seguimiento_numero)\s*\}\}/gi,
     (_, key) => values[key.toLowerCase()] || ""
   );
 }
@@ -281,6 +288,17 @@ async function storeInbound(event) {
     received_at: full?.created_at || meta.created_at || event.created_at || new Date().toISOString(),
   });
   await touchThread(thread.id, subject);
+  if (fromEmail) {
+    await updateRows(
+      "email_campaign_recipients",
+      {
+        reply_received_at: new Date().toISOString(),
+        next_followup_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      `email=eq.${encodeURIComponent(fromEmail)}&reply_received_at=is.null`
+    );
+  }
   if (opportunity?.id) {
     await insertRow("activities", {
       opportunity_id: opportunity.id,
@@ -377,18 +395,37 @@ async function listMessages(user, req) {
 
 async function campaignCounts(campaignId) {
   const { payload } = await supabaseFetch(
-    `/email_campaign_recipients?select=status,sent_at,scheduled_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+    `/email_campaign_recipients?select=status,sent_at,scheduled_at,reply_received_at,followup_step,next_followup_at,last_followup_sent_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
   );
   const today = todayStartIso();
-  const counts = { queued: 0, due: 0, sent: 0, failed: 0, skipped: 0, sent_today: 0, total: 0, next_scheduled_at: null };
+  const counts = {
+    queued: 0,
+    due: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    replied: 0,
+    followups_due: 0,
+    followups_sent: 0,
+    sent_today: 0,
+    total: 0,
+    next_scheduled_at: null,
+  };
   const now = new Date().toISOString();
   for (const row of payload || []) {
     counts.total += 1;
     counts[row.status] = (counts[row.status] || 0) + 1;
     if (row.status === "sent" && row.sent_at && row.sent_at >= today) counts.sent_today += 1;
+    if (row.last_followup_sent_at && row.last_followup_sent_at >= today) counts.sent_today += 1;
+    if (row.reply_received_at) counts.replied += 1;
+    counts.followups_sent += Number(row.followup_step || 0);
+    if (row.status === "sent" && !row.reply_received_at && row.next_followup_at && row.next_followup_at <= now) counts.followups_due += 1;
     if (row.status === "queued" && row.scheduled_at <= now) counts.due += 1;
     if (row.status === "queued" && (!counts.next_scheduled_at || row.scheduled_at < counts.next_scheduled_at)) {
       counts.next_scheduled_at = row.scheduled_at;
+    }
+    if (row.status === "sent" && !row.reply_received_at && row.next_followup_at && (!counts.next_scheduled_at || row.next_followup_at < counts.next_scheduled_at)) {
+      counts.next_scheduled_at = row.next_followup_at;
     }
   }
   return counts;
@@ -397,7 +434,7 @@ async function campaignCounts(campaignId) {
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
   );
   const campaigns = [];
   for (const campaign of payload || []) {
@@ -439,6 +476,11 @@ async function createCampaign(user, body) {
   const batchSize = clampNumber(body.batch_size, 1, 25, 1);
   const minDelay = clampNumber(body.min_delay_minutes, 1, 60, 6);
   const maxDelay = Math.max(minDelay, clampNumber(body.max_delay_minutes, 1, 120, 12));
+  const followupSubject = String(body.followup_subject_template || "Re: {{empresa}}").trim();
+  const followupBody = String(
+    body.followup_body_template ||
+      "Hola {{primer_nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nSi este tema no es prioridad ahora, lo entiendo. Si tiene sentido revisarlo, puedo enviarte una idea concreta para {{empresa}}.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan"
+  ).trim();
   if (!name) throw new Error("El nombre de la campana es requerido.");
   if (!subject) throw new Error("El asunto de la campana es requerido.");
   if (!text) throw new Error("El cuerpo de la campana es requerido.");
@@ -451,6 +493,10 @@ async function createCampaign(user, body) {
     batch_size: batchSize,
     min_delay_minutes: minDelay,
     max_delay_minutes: maxDelay,
+    followup_enabled: body.followup_enabled !== false,
+    followup_delays_days: [3, 7, 14],
+    followup_subject_template: followupSubject,
+    followup_body_template: followupBody,
     subject_template: subject,
     body_template: text,
     target_region: targetRegion,
@@ -494,6 +540,7 @@ async function processCampaign(user, body) {
 
   let sent = 0;
   let failed = 0;
+  let followupsSent = 0;
   for (const recipient of recipients || []) {
     const opportunity = recipient.opportunities || {};
     const subject = renderTemplate(campaign.subject_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
@@ -511,6 +558,10 @@ async function processCampaign(user, body) {
         {
           status: "sent",
           sent_at: new Date().toISOString(),
+          next_followup_at:
+            campaign.followup_enabled && campaign.followup_delays_days?.[0]
+              ? addDaysIso(new Date().toISOString(), campaign.followup_delays_days[0])
+              : null,
           provider_message_id: message.provider_message_id || null,
           last_error: null,
           updated_at: new Date().toISOString(),
@@ -532,6 +583,62 @@ async function processCampaign(user, body) {
     }
   }
 
+  const remainingAfterInitial = Math.max(0, sendLimit - sent - failed);
+  if (remainingAfterInitial > 0 && campaign.followup_enabled) {
+    const { payload: followups } = await supabaseFetch(
+      `/email_campaign_recipients?select=id,email,opportunity_id,followup_step,next_followup_at,opportunities(id,lead_type,target_region,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.sent&reply_received_at=is.null&next_followup_at=lte.${encodeURIComponent(now)}&order=next_followup_at.asc&limit=${remainingAfterInitial}`
+    );
+    for (const recipient of followups || []) {
+      const opportunity = recipient.opportunities || {};
+      const nextStep = Number(recipient.followup_step || 0) + 1;
+      const subject = renderTemplate(campaign.followup_subject_template, {
+        opportunity,
+        contact: opportunity.contacts,
+        company: opportunity.companies,
+        followupStep: nextStep,
+      });
+      const text = renderTemplate(campaign.followup_body_template, {
+        opportunity,
+        contact: opportunity.contacts,
+        company: opportunity.companies,
+        followupStep: nextStep,
+      });
+      try {
+        const message = await sendEmail(user, {
+          opportunity_id: recipient.opportunity_id,
+          sender_key: campaign.sender_key,
+          to: recipient.email,
+          subject,
+          text,
+        });
+        const nextDelay = campaign.followup_delays_days?.[nextStep] || null;
+        await updateRows(
+          "email_campaign_recipients",
+          {
+            followup_step: nextStep,
+            next_followup_at: nextDelay ? addDaysIso(new Date().toISOString(), nextDelay) : null,
+            last_followup_sent_at: new Date().toISOString(),
+            provider_message_id: message.provider_message_id || null,
+            last_error: null,
+            updated_at: new Date().toISOString(),
+          },
+          `id=eq.${encodeURIComponent(recipient.id)}`
+        );
+        followupsSent += 1;
+      } catch (error) {
+        await updateRows(
+          "email_campaign_recipients",
+          {
+            last_error: error.message,
+            updated_at: new Date().toISOString(),
+          },
+          `id=eq.${encodeURIComponent(recipient.id)}`
+        );
+        failed += 1;
+      }
+    }
+  }
+
   await updateRows(
     "email_campaigns",
     { last_processed_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -539,10 +646,10 @@ async function processCampaign(user, body) {
   );
 
   const nextCounts = await campaignCounts(campaign.id);
-  if (nextCounts.queued === 0) {
+  if (nextCounts.queued === 0 && !nextCounts.next_scheduled_at) {
     await updateRows("email_campaigns", { status: "completed", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
   }
-  return { sent, failed, remaining_today: Math.max(0, campaign.daily_limit - nextCounts.sent_today), counts: nextCounts };
+  return { sent, followups_sent: followupsSent, failed, remaining_today: Math.max(0, campaign.daily_limit - nextCounts.sent_today), counts: nextCounts };
 }
 
 async function processDueCampaigns() {
