@@ -534,9 +534,10 @@ button.danger {
     "mailbar"
     "compose"
     "maillist";
-  gap: 12px;
+  gap: 14px;
   align-items: start;
-  max-width: 980px;
+  width: 100%;
+  max-width: 1280px;
 }
 
 .email-sidebar,
@@ -550,7 +551,7 @@ button.danger {
 .email-sidebar {
   grid-area: mailbar;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -563,9 +564,17 @@ button.danger {
 .email-compose {
   grid-area: compose;
   display: grid;
-  gap: 10px;
-  width: min(680px, 100%);
+  grid-template-columns: minmax(220px, 1.15fr) minmax(160px, 0.7fr) minmax(220px, 1fr);
+  gap: 12px;
+  width: 100%;
   min-width: 0;
+}
+
+.email-compose h3,
+.email-compose textarea,
+.email-compose button,
+#email-compose-status {
+  grid-column: 1 / -1;
 }
 
 .email-compose input,
@@ -577,18 +586,44 @@ button.danger {
 }
 
 .email-sidebar button {
-  min-width: 104px;
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: 16px;
   justify-content: center;
+  border-color: transparent;
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.email-sidebar button::before {
+  content: "";
+  width: 18px;
+  height: 14px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  border-top-width: 5px;
+  opacity: 0.75;
+}
+
+.email-sidebar button:hover {
+  border-color: #cfe0f6;
+  background: #edf6ff;
+  color: #16416f;
+  transform: translateY(-1px);
 }
 
 .email-sidebar button.active {
-  background: var(--nav);
-  color: #ffffff;
+  background: #d8ebff;
+  color: #16416f;
+  box-shadow: inset 0 0 0 1px #bad8f8;
 }
 
 .email-sidebar input {
-  flex: 1 1 220px;
-  max-width: 320px;
+  flex: 1 1 280px;
+  max-width: none;
+  min-height: 44px;
 }
 
 .email-list {
@@ -623,7 +658,7 @@ button.danger {
 
 .email-compose textarea {
   resize: vertical;
-  min-height: 220px;
+  min-height: 360px;
   padding-top: 12px;
 }
 
@@ -1729,6 +1764,14 @@ li {
 
   .email-sidebar input {
     max-width: none;
+  }
+
+  .email-compose {
+    grid-template-columns: 1fr;
+  }
+
+  .email-compose textarea {
+    min-height: 300px;
   }
 }
 
