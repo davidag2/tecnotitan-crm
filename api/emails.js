@@ -141,14 +141,25 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes)
 }
 
 function renderTemplate(template, data) {
+  const fullName = data.contact?.full_name || "";
+  const firstName = fullName.split(/\s+/).filter(Boolean)[0] || "";
+  const leadType = data.opportunity?.lead_type === "investor" ? "Inversionista" : "Consultoria LATAM";
   const values = {
-    nombre: data.contact?.full_name || "equipo",
+    nombre: fullName || "equipo",
+    primer_nombre: firstName || fullName || "equipo",
     cargo: data.contact?.title || "",
     empresa: data.company?.name || "tu empresa",
     pais: data.contact?.country || data.company?.country || "",
-    industria: data.company?.industry || "",
+    ciudad: data.contact?.city || data.company?.city || "",
+    industria: data.company?.industry || "tu sector",
+    tipo_lead: leadType,
+    categoria: leadType,
+    region: data.opportunity?.target_region || "",
   };
-  return String(template || "").replace(/\{\{\s*(nombre|cargo|empresa|pais|industria)\s*\}\}/gi, (_, key) => values[key.toLowerCase()] || "");
+  return String(template || "").replace(
+    /\{\{\s*(nombre|primer_nombre|cargo|empresa|pais|ciudad|industria|tipo_lead|categoria|region)\s*\}\}/gi,
+    (_, key) => values[key.toLowerCase()] || ""
+  );
 }
 
 function requireCampaignAdmin(user) {
@@ -179,7 +190,7 @@ function systemCampaignUser() {
 async function loadOpportunity(id, user) {
   if (!id) return null;
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country),companies(id,name,country,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
     `id=eq.${encodeURIComponent(id)}`,
     "deleted_at=is.null",
     "limit=1",
@@ -397,7 +408,7 @@ async function listCampaigns(user) {
 
 async function campaignLeadPool(campaignType, targetRegion) {
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country),companies(id,name,country,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
     "deleted_at=is.null",
@@ -478,15 +489,15 @@ async function processCampaign(user, body) {
 
   const now = new Date().toISOString();
   const { payload: recipients } = await supabaseFetch(
-    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,contacts(id,full_name,email,title,country),companies(id,name,country,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
+    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
   );
 
   let sent = 0;
   let failed = 0;
   for (const recipient of recipients || []) {
     const opportunity = recipient.opportunities || {};
-    const subject = renderTemplate(campaign.subject_template, { contact: opportunity.contacts, company: opportunity.companies });
-    const text = renderTemplate(campaign.body_template, { contact: opportunity.contacts, company: opportunity.companies });
+    const subject = renderTemplate(campaign.subject_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
+    const text = renderTemplate(campaign.body_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
     try {
       const message = await sendEmail(user, {
         opportunity_id: recipient.opportunity_id,

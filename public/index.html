@@ -197,7 +197,8 @@
               <input id="campaign-min-delay" type="number" min="1" max="60" value="6" placeholder="Minutos minimos entre envios">
               <input id="campaign-max-delay" type="number" min="1" max="120" value="12" placeholder="Minutos maximos entre envios">
               <input id="campaign-subject" type="text" placeholder="Asunto con variables">
-              <textarea id="campaign-body" rows="8" placeholder="Mensaje con variables: {{nombre}}, {{empresa}}, {{pais}}, {{industria}}, {{cargo}}"></textarea>
+              <textarea id="campaign-body" rows="8" placeholder="Variables: {{nombre}}, {{primer_nombre}}, {{empresa}}, {{pais}}, {{ciudad}}, {{industria}}, {{cargo}}, {{tipo_lead}}, {{region}}"></textarea>
+              <p class="campaign-variables">Variables: {{nombre}}, {{primer_nombre}}, {{empresa}}, {{pais}}, {{ciudad}}, {{industria}}, {{cargo}}, {{tipo_lead}}, {{region}}</p>
               <button id="create-campaign-button" type="button">Crear campana automatica</button>
               <span id="campaign-status"></span>
             </div>

@@ -166,7 +166,7 @@ const MESSAGE_TEMPLATES = [
     title: "Consultoria LATAM - primer contacto ejecutivo",
     subject: "Oportunidad de automatizacion para {{empresa}}",
     body:
-      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Vi el trabajo de {{empresa}} en {{industria}} y creo que podria existir una oportunidad concreta para mejorar procesos comerciales u operativos con software, automatizacion e IA aplicada.\n\nTecnotitan ayuda a empresas en America Latina a convertir tareas repetitivas, flujos manuales y datos dispersos en sistemas internos mas claros, medibles y escalables.\n\nSi tiene sentido para ti, puedo compartirte 2 o 3 ideas especificas para {{empresa}} en una llamada breve de 15 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Vi que {{empresa}} trabaja en {{industria}} en {{pais}} y creo que podria existir una oportunidad concreta para mejorar procesos comerciales u operativos con software, automatizacion e IA aplicada.\n\nTecnotitan ayuda a empresas en America Latina a convertir tareas repetitivas, flujos manuales y datos dispersos en sistemas internos mas claros, medibles y escalables.\n\nSi tiene sentido para ti, puedo compartirte 2 o 3 ideas especificas para {{empresa}} en una llamada breve de 15 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
     id: "consultoria-latam-linkedin-1",
@@ -184,7 +184,7 @@ const MESSAGE_TEMPLATES = [
     title: "Inversionistas - introduccion estrategica",
     subject: "Tecnotitan | software e IA para empresas en LATAM",
     body:
-      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de software e inteligencia artificial enfocada en resolver problemas operativos reales de empresas en America Latina.\n\nNuestro punto de partida combina CRM interno, automatizacion comercial, prospeccion B2B, integraciones y herramientas de IA para pymes y equipos en crecimiento.\n\nVi tu relacion con {{industria}} y pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen ejecutivo o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de software e inteligencia artificial enfocada en resolver problemas operativos reales de empresas en America Latina.\n\nNuestro punto de partida combina CRM interno, automatizacion comercial, prospeccion B2B, integraciones y herramientas de IA para pymes y equipos en crecimiento.\n\nVi tu relacion con {{industria}} en {{pais}} y tu perfil como {{tipo_lead}}; por eso pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen ejecutivo o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
     id: "inversionistas-linkedin-1",
@@ -202,7 +202,7 @@ const MESSAGE_TEMPLATES = [
     title: "Seguimiento - segundo contacto profesional",
     subject: "Re: oportunidad para {{empresa}}",
     body:
-      "Hola {{nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nCreo que podria haber una oportunidad interesante para {{empresa}} en automatizacion, integracion de sistemas o uso practico de IA en procesos comerciales y operativos.\n\nSi no eres la persona correcta, con gusto me indicas quien podria revisar este tema internamente.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
+      "Hola {{primer_nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nCreo que podria haber una oportunidad interesante para {{empresa}} en {{industria}}, especialmente en automatizacion, integracion de sistemas o uso practico de IA en procesos comerciales y operativos.\n\nSi no eres la persona correcta, con gusto me indicas quien podria revisar este tema internamente.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
   },
   {
     id: "seguimiento-linkedin-1",
@@ -220,7 +220,7 @@ const MESSAGE_TEMPLATES = [
     title: "Reactivacion - retomar oportunidad",
     subject: "Retomamos la conversacion sobre {{empresa}}?",
     body:
-      "Hola {{nombre}},\n\nHace un tiempo dejamos pendiente conversar sobre posibles mejoras para {{empresa}}.\n\nTe escribo porque en Tecnotitan hemos avanzado en soluciones de software, automatizacion e IA que pueden aplicar muy bien a equipos que buscan crecer sin aumentar friccion operativa.\n\nSi sigue siendo relevante, puedo enviarte una propuesta breve o agendar una llamada corta.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
+      "Hola {{primer_nombre}},\n\nHace un tiempo dejamos pendiente conversar sobre posibles mejoras para {{empresa}} en {{pais}}.\n\nTe escribo porque en Tecnotitan hemos avanzado en soluciones de software, automatizacion e IA que pueden aplicar muy bien a equipos que buscan crecer sin aumentar friccion operativa.\n\nSi sigue siendo relevante, puedo enviarte una propuesta breve o agendar una llamada corta.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
   },
   {
     id: "reactivacion-linkedin-1",
@@ -238,7 +238,7 @@ const MESSAGE_TEMPLATES = [
     title: "Presentacion institucional - Tecnotitan",
     subject: "Presentacion institucional de Tecnotitan",
     body:
-      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan.\n\nTecnotitan es una compania de software, automatizacion e inteligencia artificial enfocada en construir sistemas practicos para empresas en America Latina: CRM, automatizacion comercial, integraciones, herramientas internas y soluciones de IA aplicadas a operaciones reales.\n\nNuestro enfoque es simple: entender el proceso, identificar fricciones medibles y construir software que ayude a vender mejor, operar con mas claridad y reducir trabajo manual.\n\nMe gustaria presentarte brevemente lo que estamos construyendo y explorar si existe una oportunidad de colaboracion con {{empresa}}.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan.\n\nTecnotitan es una compania de software, automatizacion e inteligencia artificial enfocada en construir sistemas practicos para empresas en America Latina: CRM, automatizacion comercial, integraciones, herramientas internas y soluciones de IA aplicadas a operaciones reales.\n\nNuestro enfoque es simple: entender el proceso, identificar fricciones medibles y construir software que ayude a vender mejor, operar con mas claridad y reducir trabajo manual.\n\nMe gustaria presentarte brevemente lo que estamos construyendo y explorar si existe una oportunidad de colaboracion con {{empresa}} en {{industria}}.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
 ];
 
