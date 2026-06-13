@@ -21,6 +21,10 @@ function cleanEmailList(value) {
     .filter(Boolean);
 }
 
+function normalizeEmail(value) {
+  return emailAddress(value);
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -177,6 +181,66 @@ function reputationIssues({ subject, text, sender, senderKey, opportunity, conta
   }
   if (duplicateFingerprint) issues.push("Mensaje demasiado parecido a otro ya preparado.");
   return issues;
+}
+
+function negativeReplyReason(text) {
+  const value = String(text || "").toLowerCase();
+  if (/\b(unsubscribe|remove me|do not contact|don't contact|stop emailing|not interested)\b/i.test(value)) return "negative_reply";
+  if (/\b(no contactar|no me contacten|no me escriban|dar de baja|darse de baja|no estoy interesado|no interesa|no me interesa)\b/i.test(value)) {
+    return "negative_reply";
+  }
+  return "";
+}
+
+async function upsertExclusion({ email, reason = "manual", source = "crm", contact_id = null, company_id = null, opportunity_id = null, note = "" }) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const row = {
+    email: normalized,
+    reason,
+    source,
+    contact_id,
+    company_id,
+    opportunity_id,
+    note,
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
+  const { payload } = await supabaseFetch("/email_exclusions?on_conflict=email", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row),
+  });
+  return payload?.[0] || null;
+}
+
+async function findExclusion(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const { payload } = await supabaseFetch(
+    `/email_exclusions?select=id,email,reason,source,note,active,created_at&email=eq.${encodeURIComponent(normalized)}&active=eq.true&limit=1`
+  );
+  return payload?.[0] || null;
+}
+
+async function listExclusions(user) {
+  requireCampaignAdmin(user);
+  const { payload } = await supabaseFetch(
+    "/email_exclusions?select=id,email,reason,source,note,active,created_at&active=eq.true&order=created_at.desc&limit=200"
+  );
+  return payload || [];
+}
+
+async function createExclusion(user, body) {
+  requireCampaignAdmin(user);
+  const exclusion = await upsertExclusion({
+    email: body.email,
+    reason: body.reason || "manual",
+    source: "crm_manual",
+    note: body.note || "",
+  });
+  if (!exclusion) throw new Error("Email invalido para exclusion.");
+  return exclusion;
 }
 
 function todayStartIso() {
@@ -361,6 +425,18 @@ async function storeInbound(event) {
     received_at: full?.created_at || meta.created_at || event.created_at || new Date().toISOString(),
   });
   await touchThread(thread.id, subject);
+  const negativeReason = negativeReplyReason(textBody || subject);
+  if (negativeReason) {
+    await upsertExclusion({
+      email: fromEmail,
+      reason: negativeReason,
+      source: "inbound_reply",
+      contact_id: contact?.id || null,
+      company_id: companyId || null,
+      opportunity_id: opportunity?.id || null,
+      note: snippet(textBody || subject),
+    });
+  }
   if (fromEmail) {
     await updateRows(
       "email_campaign_recipients",
@@ -385,6 +461,20 @@ async function storeInbound(event) {
   return row;
 }
 
+async function storeSuppressionEvent(event) {
+  const meta = event.data || {};
+  const rawEmail = meta.to || meta.email || meta.recipient || meta.from || "";
+  const email = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
+  const eventType = String(event.type || "").toLowerCase();
+  const reason = eventType.includes("bounce") ? "bounced" : eventType.includes("complain") ? "complained" : "unsubscribe";
+  return upsertExclusion({
+    email,
+    reason,
+    source: "resend_event",
+    note: eventType,
+  });
+}
+
 async function handleResendWebhook(req, res) {
   const expectedToken = process.env.RESEND_WEBHOOK_TOKEN || "";
   const receivedToken = String(req.query.token || req.headers["x-webhook-token"] || "");
@@ -397,6 +487,12 @@ async function handleResendWebhook(req, res) {
     return true;
   }
   const event = req.body || {};
+  const eventType = String(event.type || "").toLowerCase();
+  if (eventType.includes("bounce") || eventType.includes("complain") || eventType.includes("unsubscribe")) {
+    const exclusion = await storeSuppressionEvent(event);
+    res.status(200).json({ ok: true, exclusion_id: exclusion?.id || null });
+    return true;
+  }
   if (event.type !== "email.received") {
     res.status(200).json({ ok: true, ignored: true });
     return true;
@@ -580,7 +676,28 @@ async function createCampaign(user, body) {
   });
 
   const leads = await campaignLeadPool(campaignType, targetRegion);
-  const recipients = scheduleRecipients(campaign.id, leads, minDelay, maxDelay);
+  const allowedLeads = [];
+  const blockedRecipients = [];
+  for (const lead of leads) {
+    const email = normalizeEmail(lead.contacts.email);
+    const exclusion = await findExclusion(email);
+    if (exclusion) {
+      blockedRecipients.push({
+        campaign_id: campaign.id,
+        opportunity_id: lead.id,
+        contact_id: lead.contact_id,
+        company_id: lead.company_id,
+        email,
+        status: "skipped",
+        reputation_status: "blocked",
+        reputation_issues: [`Lista global no contactar: ${exclusion.reason}`],
+        last_error: `Lista global no contactar: ${exclusion.reason}`,
+      });
+    } else {
+      allowedLeads.push(lead);
+    }
+  }
+  const recipients = [...scheduleRecipients(campaign.id, allowedLeads, minDelay, maxDelay), ...blockedRecipients];
   if (recipients.length) {
     await supabaseFetch("/email_campaign_recipients", {
       method: "POST",
@@ -829,6 +946,10 @@ async function sendEmail(user, body) {
   if (!to.length) throw new Error("Escribe un destinatario o selecciona una lead con email.");
   if (!subject) throw new Error("El asunto es requerido.");
   if (!text) throw new Error("El mensaje no puede estar vacio.");
+  for (const recipientEmail of to) {
+    const exclusion = await findExclusion(recipientEmail);
+    if (exclusion) throw new Error(`Email en lista de no contactar: ${recipientEmail} (${exclusion.reason}).`);
+  }
   if (!opportunity && to[0]) {
     const linked = await findLeadByEmail(to[0]);
     if (linked.opportunity && (user.role === "admin" || linked.opportunity.owner_user_id === user.db_user_id)) {
@@ -930,6 +1051,10 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
+      if (req.query.mode === "exclusions") {
+        res.status(200).json({ exclusions: await listExclusions(user) });
+        return;
+      }
       if (req.query.mode === "campaigns") {
         res.status(200).json({ campaigns: await listCampaigns(user) });
         return;
@@ -940,6 +1065,10 @@ module.exports = async function handler(req, res) {
     if (req.method === "POST") {
       if (req.body?.action === "create_campaign") {
         res.status(201).json({ campaign: await createCampaign(user, req.body) });
+        return;
+      }
+      if (req.body?.action === "create_exclusion") {
+        res.status(201).json({ exclusion: await createExclusion(user, req.body) });
         return;
       }
       if (req.body?.action === "process_campaign") {

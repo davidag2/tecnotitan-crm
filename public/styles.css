@@ -546,6 +546,37 @@ button.danger {
   gap: 12px;
 }
 
+.campaign-side {
+  display: grid;
+  gap: 14px;
+}
+
+.exclusion-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.exclusion-panel h3 {
+  margin: 0;
+}
+
+.exclusion-row {
+  display: grid;
+  gap: 3px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.exclusion-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .campaign-card header,
 .campaign-card footer {
   display: flex;

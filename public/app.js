@@ -7,6 +7,7 @@ const state = {
   leadRows: [],
   emailMessages: [],
   emailCampaigns: [],
+  emailExclusions: [],
   emailStatus: null,
   emailMailbox: "all",
   emailSearch: "",
@@ -63,6 +64,10 @@ const elements = {
   createCampaignButton: document.querySelector("#create-campaign-button"),
   campaignStatus: document.querySelector("#campaign-status"),
   campaignList: document.querySelector("#campaign-list"),
+  exclusionEmail: document.querySelector("#exclusion-email"),
+  exclusionReason: document.querySelector("#exclusion-reason"),
+  addExclusionButton: document.querySelector("#add-exclusion-button"),
+  exclusionList: document.querySelector("#exclusion-list"),
   followupsOverdue: document.querySelector("#followups-overdue"),
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
@@ -1029,6 +1034,36 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
     button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
   });
+}
+
+function exclusionReasonLabel(reason) {
+  const labels = {
+    manual: "No contactar",
+    negative_reply: "Respuesta negativa",
+    bounced: "Rebotado",
+    unsubscribed: "Dado de baja",
+    complained: "Queja spam",
+  };
+  return labels[reason] || reason || "No contactar";
+}
+
+function renderExclusions(exclusions = state.emailExclusions) {
+  if (!elements.exclusionList) return;
+  if (!exclusions?.length) {
+    elements.exclusionList.innerHTML = `<p class="empty">No hay emails excluidos.</p>`;
+    return;
+  }
+  elements.exclusionList.innerHTML = exclusions
+    .slice(0, 8)
+    .map(
+      (item) => `
+        <article class="exclusion-row">
+          <strong>${item.email}</strong>
+          <span>${exclusionReasonLabel(item.reason)} | ${item.source || "crm"}</span>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function isProcessedClient(lead) {
@@ -2112,7 +2147,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -2120,6 +2155,7 @@ async function loadPrivateData() {
       api("/api/leads?mode=search_history").catch(() => ({ searches: [] })),
       api("/api/emails").catch(() => ({ status: null, messages: [] })),
       api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [] })),
+      api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -2127,6 +2163,7 @@ async function loadPrivateData() {
     state.emailStatus = emails.status || null;
     state.emailMessages = emails.messages || [];
     state.emailCampaigns = campaigns.campaigns || [];
+    state.emailExclusions = exclusions.exclusions || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -2141,6 +2178,7 @@ async function loadPrivateData() {
     renderLeadCollections(leadRows);
     renderEmails(state.emailMessages);
     renderCampaigns(state.emailCampaigns);
+    renderExclusions(state.emailExclusions);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -2254,9 +2292,14 @@ async function reloadEmailsOnly() {
 
 async function reloadCampaignsOnly() {
   try {
-    const data = await api("/api/emails?mode=campaigns");
+    const [data, exclusions] = await Promise.all([
+      api("/api/emails?mode=campaigns"),
+      api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
+    ]);
     state.emailCampaigns = data.campaigns || [];
+    state.emailExclusions = exclusions.exclusions || [];
     renderCampaigns(state.emailCampaigns);
+    renderExclusions(state.emailExclusions);
   } catch (error) {
     if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">${error.message}</p>`;
   }
@@ -2466,6 +2509,33 @@ async function createCampaign() {
   }
 }
 
+async function addExclusion() {
+  const email = elements.exclusionEmail.value.trim();
+  if (!email) {
+    elements.campaignStatus.textContent = "Escribe un email para excluir.";
+    return;
+  }
+  elements.addExclusionButton.disabled = true;
+  elements.campaignStatus.textContent = "Agregando a no contactar...";
+  try {
+    await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "create_exclusion",
+        email,
+        reason: elements.exclusionReason.value,
+      }),
+    });
+    elements.exclusionEmail.value = "";
+    elements.campaignStatus.textContent = "Email agregado a no contactar.";
+    await reloadCampaignsOnly();
+  } catch (error) {
+    elements.campaignStatus.textContent = error.message;
+  } finally {
+    elements.addExclusionButton.disabled = false;
+  }
+}
+
 async function processCampaign(campaignId, button) {
   const originalText = button.textContent;
   button.disabled = true;
@@ -2567,6 +2637,7 @@ function logout() {
   state.searches = [];
   state.emailMessages = [];
   state.emailCampaigns = [];
+  state.emailExclusions = [];
   state.emailStatus = null;
   state.emailMailbox = "all";
   state.emailSearch = "";
@@ -2595,6 +2666,7 @@ function logout() {
   if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">Inicia sesion para cargar correos.</p>`;
   if (elements.emailComposeStatus) elements.emailComposeStatus.textContent = "";
   if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">No hay campanas cargadas.</p>`;
+  if (elements.exclusionList) elements.exclusionList.innerHTML = `<p class="empty">No hay emails excluidos.</p>`;
   if (elements.campaignStatus) elements.campaignStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
   renderSessionUser();
@@ -2637,6 +2709,7 @@ elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
+elements.addExclusionButton.addEventListener("click", addExclusion);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;
   state.clientPage = 1;
