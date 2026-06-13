@@ -137,6 +137,9 @@ function expectedSenderDomain(senderKey) {
   return senderKey === "investors" ? "tecnotitaninvestors.com" : "tecnotitanconsultoria.com";
 }
 
+const WARMUP_LIMITS = [20, 40, 60, 100];
+const WARMUP_STAGE_DAYS = 7;
+
 function hasClearSignature(text) {
   const normalized = String(text || "").toLowerCase();
   return normalized.includes("david arias") && normalized.includes("tecnotitan");
@@ -738,6 +741,92 @@ async function listCampaigns(user) {
   return campaigns;
 }
 
+function warmupStageLimit(stage) {
+  return WARMUP_LIMITS[Math.max(1, Math.min(4, Number(stage) || 1)) - 1] || 20;
+}
+
+function defaultWarmup(senderKey) {
+  const key = senderKey === "investors" ? "investors" : "consulting";
+  return {
+    sender_key: key,
+    domain: expectedSenderDomain(key),
+    stage: 1,
+    daily_limit: 20,
+    stage_started_at: new Date().toISOString(),
+    is_active: true,
+  };
+}
+
+async function upsertWarmup(warmup) {
+  const row = {
+    sender_key: warmup.sender_key,
+    domain: warmup.domain || expectedSenderDomain(warmup.sender_key),
+    stage: warmup.stage || 1,
+    daily_limit: warmup.daily_limit || warmupStageLimit(warmup.stage),
+    stage_started_at: warmup.stage_started_at || new Date().toISOString(),
+    last_advanced_at: warmup.last_advanced_at || null,
+    is_active: warmup.is_active !== false,
+    updated_at: new Date().toISOString(),
+  };
+  const { payload } = await supabaseFetch("/email_sender_warmups?on_conflict=sender_key", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row),
+  });
+  return payload?.[0] || row;
+}
+
+async function loadWarmup(senderKey) {
+  const key = senderKey === "investors" ? "investors" : "consulting";
+  const { payload } = await supabaseFetch(`/email_sender_warmups?select=*&sender_key=eq.${encodeURIComponent(key)}&limit=1`);
+  let warmup = payload?.[0] || (await upsertWarmup(defaultWarmup(key)));
+  const currentStage = Math.max(1, Math.min(4, Number(warmup.stage) || 1));
+  const startedAt = new Date(warmup.stage_started_at || warmup.created_at || new Date().toISOString()).getTime();
+  const daysInStage = Number.isFinite(startedAt) ? (Date.now() - startedAt) / 86400000 : 0;
+  if (warmup.is_active !== false && currentStage < 4 && daysInStage >= WARMUP_STAGE_DAYS) {
+    const nextStage = currentStage + 1;
+    warmup = await upsertWarmup({
+      ...warmup,
+      stage: nextStage,
+      daily_limit: warmupStageLimit(nextStage),
+      stage_started_at: new Date().toISOString(),
+      last_advanced_at: new Date().toISOString(),
+    });
+  }
+  return warmup;
+}
+
+async function senderSentToday(senderKey) {
+  const { payload } = await supabaseFetch(
+    `/email_campaigns?select=id&sender_key=eq.${encodeURIComponent(senderKey)}&limit=500`
+  );
+  const campaigns = payload || [];
+  let total = 0;
+  for (const campaign of campaigns) {
+    const counts = await campaignCounts(campaign.id);
+    total += counts.sent_today || 0;
+  }
+  return total;
+}
+
+async function warmupStatus(senderKey) {
+  const warmup = await loadWarmup(senderKey);
+  const sentToday = await senderSentToday(warmup.sender_key);
+  const dailyLimit = warmup.is_active === false ? 100 : Number(warmup.daily_limit || 20);
+  return {
+    ...warmup,
+    daily_limit: dailyLimit,
+    sent_today: sentToday,
+    remaining_today: Math.max(0, dailyLimit - sentToday),
+    next_stage_limit: warmup.stage < 4 ? warmupStageLimit(Number(warmup.stage || 1) + 1) : null,
+  };
+}
+
+async function listWarmups(user) {
+  requireCampaignAdmin(user);
+  return Promise.all(["consulting", "investors"].map((senderKey) => warmupStatus(senderKey)));
+}
+
 async function campaignLeadPool(campaignType, targetRegion) {
   const filters = [
     "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
@@ -846,9 +935,19 @@ async function processCampaign(user, body) {
   const sender = senderFor(campaign.sender_key);
 
   const counts = await campaignCounts(campaign.id);
-  const remainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
+  const warmup = await warmupStatus(campaign.sender_key);
+  const campaignRemainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
+  const remainingToday = Math.min(campaignRemainingToday, warmup.remaining_today);
   const sendLimit = Math.min(remainingToday, campaign.batch_size, clampNumber(body.max_send, 1, 25, campaign.batch_size));
-  if (!sendLimit) return { sent: 0, failed: 0, remaining_today: 0, message: "Limite diario alcanzado." };
+  if (!sendLimit) {
+    return {
+      sent: 0,
+      failed: 0,
+      remaining_today: 0,
+      warmup,
+      message: warmup.remaining_today <= 0 ? "Limite diario del remitente alcanzado." : "Limite diario de la campana alcanzado.",
+    };
+  }
 
   const now = new Date().toISOString();
   const { payload: campaignFingerprints } = await supabaseFetch(
@@ -1034,10 +1133,18 @@ async function processCampaign(user, body) {
   );
 
   const nextCounts = await campaignCounts(campaign.id);
+  const nextWarmup = await warmupStatus(campaign.sender_key);
   if (nextCounts.queued === 0 && !nextCounts.next_scheduled_at) {
     await updateRows("email_campaigns", { status: "completed", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
   }
-  return { sent, followups_sent: followupsSent, failed, remaining_today: Math.max(0, campaign.daily_limit - nextCounts.sent_today), counts: nextCounts };
+  return {
+    sent,
+    followups_sent: followupsSent,
+    failed,
+    remaining_today: Math.min(Math.max(0, campaign.daily_limit - nextCounts.sent_today), nextWarmup.remaining_today),
+    warmup: nextWarmup,
+    counts: nextCounts,
+  };
 }
 
 async function processDueCampaigns() {
@@ -1180,7 +1287,7 @@ module.exports = async function handler(req, res) {
         return;
       }
       if (req.query.mode === "campaigns") {
-        res.status(200).json({ campaigns: await listCampaigns(user) });
+        res.status(200).json({ campaigns: await listCampaigns(user), warmups: await listWarmups(user) });
         return;
       }
       res.status(200).json({ status: emailStatus(), messages: await listMessages(user, req) });

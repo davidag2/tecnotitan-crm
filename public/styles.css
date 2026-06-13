@@ -551,7 +551,8 @@ button.danger {
   gap: 14px;
 }
 
-.exclusion-panel {
+.exclusion-panel,
+.warmup-panel {
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -560,8 +561,57 @@ button.danger {
   background: #fbfcff;
 }
 
-.exclusion-panel h3 {
+.exclusion-panel h3,
+.warmup-panel h3 {
   margin: 0;
+}
+
+.warmup-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.warmup-row header,
+.warmup-row footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.warmup-row small,
+.warmup-row footer span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.warmup-row header span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e5f4ee;
+  color: #16735c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.warmup-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.warmup-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f846e, #46b48f);
 }
 
 .exclusion-row {

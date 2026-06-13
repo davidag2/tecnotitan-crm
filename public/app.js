@@ -8,6 +8,7 @@ const state = {
   emailMessages: [],
   emailCampaigns: [],
   emailExclusions: [],
+  emailWarmups: [],
   emailStatus: null,
   emailMailbox: "all",
   emailSearch: "",
@@ -64,6 +65,7 @@ const elements = {
   createCampaignButton: document.querySelector("#create-campaign-button"),
   campaignStatus: document.querySelector("#campaign-status"),
   campaignList: document.querySelector("#campaign-list"),
+  senderWarmupList: document.querySelector("#sender-warmup-list"),
   exclusionEmail: document.querySelector("#exclusion-email"),
   exclusionReason: document.querySelector("#exclusion-reason"),
   addExclusionButton: document.querySelector("#add-exclusion-button"),
@@ -1019,7 +1021,9 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   elements.campaignList.innerHTML = campaigns
     .map((campaign) => {
       const counts = campaign.counts || {};
-      const remaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
+      const warmup = state.emailWarmups.find((item) => item.sender_key === campaign.sender_key);
+      const campaignRemaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
+      const remaining = Math.min(campaignRemaining, warmup?.remaining_today ?? campaignRemaining);
       const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
       return `
         <article class="campaign-card">
@@ -1046,6 +1050,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
             <span><b>${counts.sent_today || 0}</b>Hoy</span>
             <span><b>${remaining}</b>Restantes hoy</span>
+            <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
           </div>
           <small>Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Follow-ups: 3, 7 y 14 dias | Proximo envio: ${nextSend}</small>
         </article>
@@ -1055,6 +1060,43 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
     button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
   });
+}
+
+function warmupSenderLabel(senderKey) {
+  return senderKey === "investors" ? "Inversionistas" : "Consultoria";
+}
+
+function renderWarmups(warmups = state.emailWarmups) {
+  if (!elements.senderWarmupList) return;
+  if (!warmups?.length) {
+    elements.senderWarmupList.innerHTML = `<p class="empty">No hay calentamiento configurado.</p>`;
+    return;
+  }
+  elements.senderWarmupList.innerHTML = warmups
+    .map((item) => {
+      const used = Number(item.sent_today || 0);
+      const limit = Number(item.daily_limit || 20);
+      const progress = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+      const next = item.next_stage_limit ? `Proxima etapa: ${item.next_stage_limit}/dia` : "Etapa final";
+      return `
+        <article class="warmup-row">
+          <header>
+            <strong>${warmupSenderLabel(item.sender_key)}</strong>
+            <span>Etapa ${item.stage || 1}</span>
+          </header>
+          <small>${item.domain}</small>
+          <div class="warmup-meter" aria-label="Uso diario ${used} de ${limit}">
+            <span style="width: ${progress}%"></span>
+          </div>
+          <footer>
+            <span>${used}/${limit} hoy</span>
+            <span>${item.remaining_today || 0} restantes</span>
+            <span>${next}</span>
+          </footer>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function exclusionReasonLabel(reason) {
@@ -2184,6 +2226,7 @@ async function loadPrivateData() {
     state.emailStatus = emails.status || null;
     state.emailMessages = emails.messages || [];
     state.emailCampaigns = campaigns.campaigns || [];
+    state.emailWarmups = campaigns.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
@@ -2199,6 +2242,7 @@ async function loadPrivateData() {
     renderLeadCollections(leadRows);
     renderEmails(state.emailMessages);
     renderCampaigns(state.emailCampaigns);
+    renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
@@ -2318,8 +2362,10 @@ async function reloadCampaignsOnly() {
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
     ]);
     state.emailCampaigns = data.campaigns || [];
+    state.emailWarmups = data.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
     renderCampaigns(state.emailCampaigns);
+    renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
   } catch (error) {
     if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">${error.message}</p>`;
@@ -2659,6 +2705,7 @@ function logout() {
   state.emailMessages = [];
   state.emailCampaigns = [];
   state.emailExclusions = [];
+  state.emailWarmups = [];
   state.emailStatus = null;
   state.emailMailbox = "all";
   state.emailSearch = "";
@@ -2687,6 +2734,7 @@ function logout() {
   if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">Inicia sesion para cargar correos.</p>`;
   if (elements.emailComposeStatus) elements.emailComposeStatus.textContent = "";
   if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">No hay campanas cargadas.</p>`;
+  if (elements.senderWarmupList) elements.senderWarmupList.innerHTML = `<p class="empty">No hay calentamiento configurado.</p>`;
   if (elements.exclusionList) elements.exclusionList.innerHTML = `<p class="empty">No hay emails excluidos.</p>`;
   if (elements.campaignStatus) elements.campaignStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
