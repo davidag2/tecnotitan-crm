@@ -1065,6 +1065,7 @@ function renderLeads(leads) {
             </div>
             <div class="lead-actions">
               <button class="secondary" type="button" data-open-detail="${lead.id}">Ver detalle</button>
+              <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar lead</button>
             </div>
           </div>
           <div class="lead-company">
@@ -1111,6 +1112,9 @@ function renderLeads(leads) {
   });
   elements.leads.querySelectorAll("[data-open-detail]").forEach((button) => {
     button.addEventListener("click", () => openLeadDetail(button.dataset.openDetail));
+  });
+  elements.leads.querySelectorAll("[data-archive-lead]").forEach((button) => {
+    button.addEventListener("click", () => archiveLead(button.dataset.archiveLead));
   });
   elements.leads.querySelectorAll("[data-pipeline-status]").forEach((select) => {
     select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
