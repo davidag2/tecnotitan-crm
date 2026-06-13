@@ -53,6 +53,7 @@ const elements = {
   campaignName: document.querySelector("#campaign-name"),
   campaignType: document.querySelector("#campaign-type"),
   campaignSender: document.querySelector("#campaign-sender"),
+  campaignTemplate: document.querySelector("#campaign-template"),
   campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
   campaignBatchSize: document.querySelector("#campaign-batch-size"),
   campaignMinDelay: document.querySelector("#campaign-min-delay"),
@@ -159,31 +160,31 @@ const KANBAN_CLIENTS_PER_PAGE = 10;
 
 const MESSAGE_TEMPLATES = [
   {
-    id: "consultoria-email-1",
+    id: "consultoria-latam-email-1",
     category: "consultoria",
     channel: "Email",
-    title: "Consultoria - primer contacto",
-    subject: "Idea rapida para {{empresa}}",
+    title: "Consultoria LATAM - primer contacto ejecutivo",
+    subject: "Oportunidad de automatizacion para {{empresa}}",
     body:
-      "Hola {{nombre}},\n\nVi que {{empresa}} esta creciendo en {{industria}} y pense que podria tener sentido conversar.\n\nEn Tecnotitan ayudamos a empresas a crear software, automatizaciones e integraciones con IA para reducir trabajo manual y acelerar operaciones comerciales.\n\nSi te parece util, puedo proponerte 2 o 3 oportunidades concretas para {{empresa}} en una llamada corta de 15 minutos.\n\nSaludos,\nDavid Arias\nTecnotitan",
+      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Vi el trabajo de {{empresa}} en {{industria}} y creo que podria existir una oportunidad concreta para mejorar procesos comerciales u operativos con software, automatizacion e IA aplicada.\n\nTecnotitan ayuda a empresas en America Latina a convertir tareas repetitivas, flujos manuales y datos dispersos en sistemas internos mas claros, medibles y escalables.\n\nSi tiene sentido para ti, puedo compartirte 2 o 3 ideas especificas para {{empresa}} en una llamada breve de 15 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
-    id: "consultoria-linkedin-1",
+    id: "consultoria-latam-linkedin-1",
     category: "consultoria",
     channel: "LinkedIn",
-    title: "Consultoria - conexion LinkedIn",
+    title: "Consultoria LATAM - conexion LinkedIn",
     subject: "",
     body:
-      "Hola {{nombre}}, vi tu rol en {{empresa}}. En Tecnotitan trabajamos con software, automatizacion e IA para equipos que quieren operar mejor sin aumentar carga manual. Me gustaria conectar.",
+      "Hola {{nombre}}, vi tu rol en {{empresa}}. En Tecnotitan ayudamos a empresas en LATAM a mejorar procesos con software, automatizacion e IA practica. Me gustaria conectar.",
   },
   {
     id: "inversionistas-email-1",
     category: "inversionistas",
     channel: "Email",
-    title: "Inversionistas - intro Tecnotitan",
-    subject: "Tecnotitan - software e IA para LATAM",
+    title: "Inversionistas - introduccion estrategica",
+    subject: "Tecnotitan | software e IA para empresas en LATAM",
     body:
-      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una plataforma de software e IA orientada a empresas de America Latina, comenzando con automatizacion comercial, CRM interno y soluciones para pymes.\n\nVi tu foco en {{industria}} y pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen corto o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid",
+      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de software e inteligencia artificial enfocada en resolver problemas operativos reales de empresas en America Latina.\n\nNuestro punto de partida combina CRM interno, automatizacion comercial, prospeccion B2B, integraciones y herramientas de IA para pymes y equipos en crecimiento.\n\nVi tu relacion con {{industria}} y pense que podria tener sentido presentarte la vision, el avance y la oportunidad de mercado.\n\nSi estas abierto, puedo enviarte un resumen ejecutivo o coordinar una llamada de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
     id: "inversionistas-linkedin-1",
@@ -192,16 +193,16 @@ const MESSAGE_TEMPLATES = [
     title: "Inversionistas - conexion LinkedIn",
     subject: "",
     body:
-      "Hola {{nombre}}, estoy construyendo Tecnotitan, una compania de software e IA enfocada en LATAM. Vi tu perfil de inversion y me gustaria conectar para compartirte el avance cuando tenga sentido.",
+      "Hola {{nombre}}, estoy construyendo Tecnotitan, una compania de software e IA enfocada en empresas de LATAM. Vi tu perfil de inversion y me gustaria conectar para compartirte el avance cuando tenga sentido.",
   },
   {
     id: "seguimiento-email-1",
     category: "seguimiento",
     channel: "Email",
-    title: "Seguimiento - despues del primer mensaje",
-    subject: "Re: {{empresa}}",
+    title: "Seguimiento - segundo contacto profesional",
+    subject: "Re: oportunidad para {{empresa}}",
     body:
-      "Hola {{nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nCreo que hay una oportunidad interesante para {{empresa}} en automatizacion, integracion de sistemas o uso practico de IA en procesos comerciales/operativos.\n\nSi no eres la persona correcta, con gusto me indicas quien podria revisar este tema.\n\nSaludos,\nDavid",
+      "Hola {{nombre}},\n\nTe escribo para hacer seguimiento a mi mensaje anterior.\n\nCreo que podria haber una oportunidad interesante para {{empresa}} en automatizacion, integracion de sistemas o uso practico de IA en procesos comerciales y operativos.\n\nSi no eres la persona correcta, con gusto me indicas quien podria revisar este tema internamente.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
   },
   {
     id: "seguimiento-linkedin-1",
@@ -216,10 +217,10 @@ const MESSAGE_TEMPLATES = [
     id: "reactivacion-email-1",
     category: "reactivacion",
     channel: "Email",
-    title: "Reactivacion - lead archivado",
-    subject: "Retomamos conversacion?",
+    title: "Reactivacion - retomar oportunidad",
+    subject: "Retomamos la conversacion sobre {{empresa}}?",
     body:
-      "Hola {{nombre}},\n\nHace un tiempo dejamos pendiente conversar sobre posibles mejoras para {{empresa}}.\n\nTe escribo porque en Tecnotitan hemos avanzado en soluciones de software, automatizacion e IA que podrian aplicar muy bien a equipos que buscan crecer sin aumentar friccion operativa.\n\nSi sigue siendo relevante, puedo enviarte una propuesta breve o agendar una llamada corta.\n\nSaludos,\nDavid",
+      "Hola {{nombre}},\n\nHace un tiempo dejamos pendiente conversar sobre posibles mejoras para {{empresa}}.\n\nTe escribo porque en Tecnotitan hemos avanzado en soluciones de software, automatizacion e IA que pueden aplicar muy bien a equipos que buscan crecer sin aumentar friccion operativa.\n\nSi sigue siendo relevante, puedo enviarte una propuesta breve o agendar una llamada corta.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan",
   },
   {
     id: "reactivacion-linkedin-1",
@@ -229,6 +230,15 @@ const MESSAGE_TEMPLATES = [
     subject: "",
     body:
       "Hola {{nombre}}, retomo contacto. Si en {{empresa}} siguen explorando mejoras con software, automatizacion o IA, puedo compartirte una idea concreta y breve para evaluar.",
+  },
+  {
+    id: "institucional-email-1",
+    category: "institucional",
+    channel: "Email",
+    title: "Presentacion institucional - Tecnotitan",
+    subject: "Presentacion institucional de Tecnotitan",
+    body:
+      "Hola {{nombre}},\n\nSoy David Arias, fundador de Tecnotitan.\n\nTecnotitan es una compania de software, automatizacion e inteligencia artificial enfocada en construir sistemas practicos para empresas en America Latina: CRM, automatizacion comercial, integraciones, herramientas internas y soluciones de IA aplicadas a operaciones reales.\n\nNuestro enfoque es simple: entender el proceso, identificar fricciones medibles y construir software que ayude a vender mejor, operar con mas claridad y reducir trabajo manual.\n\nMe gustaria presentarte brevemente lo que estamos construyendo y explorar si existe una oportunidad de colaboracion con {{empresa}}.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
 ];
 
@@ -784,11 +794,29 @@ function categoryLabel(category) {
   if (category === "inversionistas") return "Inversionistas";
   if (category === "seguimiento") return "Seguimiento";
   if (category === "reactivacion") return "Reactivacion";
+  if (category === "institucional") return "Presentacion institucional";
   return category;
+}
+
+function campaignTemplateOptions() {
+  return MESSAGE_TEMPLATES.filter((template) => template.channel === "Email");
+}
+
+function renderCampaignTemplateOptions() {
+  if (!elements.campaignTemplate) return;
+  const current = elements.campaignTemplate.value;
+  elements.campaignTemplate.innerHTML = [
+    `<option value="">Plantilla corporativa</option>`,
+    ...campaignTemplateOptions().map(
+      (template) => `<option value="${template.id}">${categoryLabel(template.category)} | ${template.title}</option>`
+    ),
+  ].join("");
+  if (campaignTemplateOptions().some((template) => template.id === current)) elements.campaignTemplate.value = current;
 }
 
 function renderMessageTemplates() {
   if (!elements.messageTemplates) return;
+  renderCampaignTemplateOptions();
   const filter = state.messageTemplateFilter || "all";
   if (elements.messageTemplateFilter) elements.messageTemplateFilter.value = filter;
   const templates = filter === "all" ? MESSAGE_TEMPLATES : MESSAGE_TEMPLATES.filter((template) => template.category === filter);
@@ -928,27 +956,37 @@ function campaignTypeLabel(type) {
 }
 
 function defaultCampaignTemplate(type) {
-  if (type === "investor") {
-    return {
-      subject: "Tecnotitan | oportunidad estrategica para {{empresa}}",
-      body:
-        "Hola {{nombre}},\n\nSoy David Arias de Tecnotitan. Estoy contactando inversionistas y aliados estrategicos que puedan tener interes en software, automatizacion e inteligencia artificial aplicada a negocios en America Latina.\n\nMe gustaria compartirte una version breve de lo que estamos construyendo y evaluar si tiene sentido conversar.\n\nSaludos,\nDavid Arias\nTecnotitan",
-    };
-  }
-  return {
-    subject: "Idea rapida para {{empresa}}",
-    body:
-      "Hola {{nombre}},\n\nSoy David Arias de Tecnotitan. Vi a {{empresa}} y creo que podria haber una oportunidad para mejorar procesos comerciales u operativos usando software, automatizacion e IA.\n\nSi te parece, puedo enviarte una idea concreta y breve para evaluar si tiene sentido conversar.\n\nSaludos,\nDavid Arias\nTecnotitan",
-  };
+  const templateId = type === "investor" ? "inversionistas-email-1" : "consultoria-latam-email-1";
+  const template = MESSAGE_TEMPLATES.find((item) => item.id === templateId);
+  return { subject: template?.subject || "", body: template?.body || "" };
 }
 
 function applyCampaignDefaults(force = false) {
   if (!elements.campaignType) return;
+  renderCampaignTemplateOptions();
   const template = defaultCampaignTemplate(elements.campaignType.value);
   if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
   if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
+  if (elements.campaignTemplate && force) {
+    elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "inversionistas-email-1" : "consultoria-latam-email-1";
+  }
   if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
   if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
+}
+
+function applySelectedCampaignTemplate() {
+  const template = MESSAGE_TEMPLATES.find((item) => item.id === elements.campaignTemplate.value);
+  if (!template) return;
+  elements.campaignSubject.value = template.subject || "";
+  elements.campaignBody.value = template.body || "";
+  if (template.category === "inversionistas") {
+    elements.campaignType.value = "investor";
+    elements.campaignSender.value = "investors";
+  }
+  if (template.category === "consultoria") {
+    elements.campaignType.value = "consulting_client";
+    elements.campaignSender.value = "consulting";
+  }
 }
 
 function renderCampaigns(campaigns = state.emailCampaigns) {
@@ -2593,6 +2631,7 @@ elements.emailSearch.addEventListener("input", () => {
 elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
 elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
+elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;

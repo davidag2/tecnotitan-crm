@@ -36,6 +36,54 @@ function textToHtml(text) {
     .join("");
 }
 
+function brandedEmailHtml(text, senderKey) {
+  const accent = senderKey === "investors" ? "#1f5eff" : "#16856e";
+  const label = senderKey === "investors" ? "Tecnotitan Investors" : "Tecnotitan Consultoria";
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#13213a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7fb;padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #dfe6ef;border-radius:10px;overflow:hidden;">
+            <tr>
+              <td style="height:6px;background:${accent};"></td>
+            </tr>
+            <tr>
+              <td style="padding:22px 26px 10px 26px;">
+                <table role="presentation" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="vertical-align:middle;padding-right:12px;">
+                      <img src="https://www.tecnotitanmarketing.com/tecnotitan-marketing-icon.png" width="42" height="42" alt="Tecnotitan" style="display:block;border-radius:8px;">
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:18px;font-weight:700;color:#13213a;">Tecnotitan</div>
+                      <div style="font-size:12px;font-weight:700;color:${accent};letter-spacing:.02em;">${label}</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 26px 24px 26px;font-size:15px;line-height:1.58;color:#23334d;">
+                ${textToHtml(text)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 26px;background:#f8fafc;border-top:1px solid #e5ebf3;font-size:12px;line-height:1.5;color:#66758d;">
+                <strong style="color:#13213a;">Tecnotitan</strong><br>
+                Software, automatizacion e inteligencia artificial para empresas en crecimiento.<br>
+                <a href="https://www.tecnotitan.com" style="color:${accent};text-decoration:none;">tecnotitan.com</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
 function htmlToText(html) {
   return String(html || "")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -528,6 +576,7 @@ async function sendEmail(user, body) {
 
   const sender = senderFor(body.sender_key, opportunity);
   if (!sender?.from) throw new Error("Configura RESEND_FROM_CONSULTING o RESEND_FROM_INVESTORS en Vercel.");
+  const html = brandedEmailHtml(text, sender.key);
 
   const thread = await findOrCreateThread({ opportunity, subject });
   const headers = {};
@@ -547,7 +596,7 @@ async function sendEmail(user, body) {
       bcc: cleanEmailList(body.bcc),
       subject,
       text,
-      html: textToHtml(text),
+      html,
       headers,
       tags,
     }),
@@ -568,7 +617,7 @@ async function sendEmail(user, body) {
     bcc_emails: cleanEmailList(body.bcc),
     subject,
     text_body: text,
-    html_body: textToHtml(text),
+    html_body: html,
     snippet: snippet(text),
     raw_payload: data,
     sent_at: new Date().toISOString(),
