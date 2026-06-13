@@ -10,6 +10,7 @@ const state = {
   selectedTemplate: "consulting_client:latam",
   clientContactFilter: "all",
   clientCountryFilter: "all",
+  clientPage: 1,
   kanbanSearch: "",
   messageTemplateFilter: "all",
 };
@@ -116,6 +117,7 @@ const PIPELINE_STATUSES = [
 ];
 
 const ARCHIVE_STATUS = "archivado";
+const CLIENTS_PER_PAGE = 25;
 
 const MESSAGE_TEMPLATES = [
   {
@@ -1021,6 +1023,11 @@ function renderClients(clients) {
   }
   renderClientCountryOptions(clients);
   const visibleClients = filteredClients(clients);
+  const totalPages = Math.max(1, Math.ceil(visibleClients.length / CLIENTS_PER_PAGE));
+  if (state.clientPage > totalPages) state.clientPage = totalPages;
+  if (state.clientPage < 1) state.clientPage = 1;
+  const pageStart = (state.clientPage - 1) * CLIENTS_PER_PAGE;
+  const pageClients = visibleClients.slice(pageStart, pageStart + CLIENTS_PER_PAGE);
   updateClientFilterSummary(clients.length, visibleClients.length);
   if (!clients.length) {
     elements.clients.innerHTML = `<p class="empty">No hay clientes procesados para los filtros actuales.</p>`;
@@ -1039,7 +1046,7 @@ function renderClients(clients) {
       <span>Estado</span>
       <span>Acciones</span>
     </div>
-    ${visibleClients
+    ${pageClients
       .map((lead) => {
         const contact = lead.contacts || {};
         const company = lead.companies || {};
@@ -1097,9 +1104,24 @@ function renderClients(clients) {
         `;
       })
       .join("")}
+    <div class="client-pagination">
+      <span>Mostrando ${pageStart + 1}-${Math.min(pageStart + CLIENTS_PER_PAGE, visibleClients.length)} de ${visibleClients.length}</span>
+      <div>
+        ${Array.from({ length: totalPages }, (_, index) => {
+          const page = index + 1;
+          return `<button class="${page === state.clientPage ? "" : "secondary"}" type="button" data-client-page="${page}">Pagina ${page}</button>`;
+        }).join("")}
+      </div>
+    </div>
   `;
 
   attachClientActions(elements.clients);
+  elements.clients.querySelectorAll("[data-client-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clientPage = Number(button.dataset.clientPage || 1);
+      renderClients(clients);
+    });
+  });
 }
 
 function renderKanban(clients) {
@@ -2034,6 +2056,7 @@ function logout() {
   state.assignmentWorkload = null;
   state.clientContactFilter = "all";
   state.clientCountryFilter = "all";
+  state.clientPage = 1;
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
@@ -2074,10 +2097,12 @@ elements.messageTemplateFilter.addEventListener("change", () => {
 });
 elements.clientContactFilter.addEventListener("change", () => {
   state.clientContactFilter = elements.clientContactFilter.value;
+  state.clientPage = 1;
   refreshClientContactFilter();
 });
 elements.clientCountryFilter.addEventListener("change", () => {
   state.clientCountryFilter = elements.clientCountryFilter.value;
+  state.clientPage = 1;
   refreshClientContactFilter();
 });
 elements.leadSearch.addEventListener("keydown", (event) => {
