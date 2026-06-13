@@ -57,6 +57,7 @@ const elements = {
   campaignName: document.querySelector("#campaign-name"),
   campaignType: document.querySelector("#campaign-type"),
   campaignSender: document.querySelector("#campaign-sender"),
+  campaignTargetRegion: document.querySelector("#campaign-target-region"),
   campaignTemplate: document.querySelector("#campaign-template"),
   campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
   campaignBatchSize: document.querySelector("#campaign-batch-size"),
@@ -1091,6 +1092,9 @@ function applyCampaignDefaults(force = false) {
   const template = defaultCampaignTemplate(elements.campaignType.value);
   if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
   if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
+  if (force && elements.campaignTargetRegion) {
+    elements.campaignTargetRegion.value = elements.campaignType.value === "investor" ? "usa" : "latam";
+  }
   if (elements.campaignTemplate && force) {
     elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   }
@@ -1106,10 +1110,12 @@ function applySelectedCampaignTemplate() {
   if (template.category === "inversionistas") {
     elements.campaignType.value = "investor";
     elements.campaignSender.value = "investors";
+    if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "usa";
   }
   if (template.category === "consultoria") {
     elements.campaignType.value = "consulting_client";
     elements.campaignSender.value = "consulting";
+    if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "latam";
   }
 }
 
@@ -2722,6 +2728,7 @@ async function createCampaign() {
         name: elements.campaignName.value.trim(),
         campaign_type: elements.campaignType.value,
         sender_key: elements.campaignSender.value,
+        target_region: elements.campaignTargetRegion.value,
         daily_limit: elements.campaignDailyLimit.value,
         batch_size: elements.campaignBatchSize.value,
         min_delay_minutes: elements.campaignMinDelay.value,

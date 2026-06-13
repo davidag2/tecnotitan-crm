@@ -1,6 +1,7 @@
 const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
-const { insertRow, supabaseFetch, updateRows } = require("./_supabase");
+const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
+const { runApolloSearch } = require("./apollo-search");
 const crypto = require("crypto");
 
 function cleanEmail(value) {
@@ -221,6 +222,13 @@ async function upsertExclusion({ email, reason = "manual", source = "crm", conta
     body: JSON.stringify(row),
   });
   return payload?.[0] || null;
+}
+
+async function ensureContactTag(contactId, name, color = "#2563eb") {
+  if (!contactId) return null;
+  const tag = await upsertRow("tags", { name, color }, ["name"]);
+  if (!tag?.id) return null;
+  return upsertRow("contact_tags", { contact_id: contactId, tag_id: tag.id }, ["contact_id", "tag_id"]);
 }
 
 async function findExclusion(email) {
@@ -946,7 +954,7 @@ async function listWarmups(user) {
 
 async function campaignLeadPool(campaignType, targetRegion) {
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
     "deleted_at=is.null",
@@ -956,6 +964,7 @@ async function campaignLeadPool(campaignType, targetRegion) {
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   const seen = new Set();
   return (payload || [])
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
     .filter((opportunity) => opportunity.contacts?.email)
     .filter((opportunity) => {
       const email = emailAddress(opportunity.contacts.email);
@@ -963,6 +972,122 @@ async function campaignLeadPool(campaignType, targetRegion) {
       seen.add(email);
       return true;
     });
+}
+
+function hasContactTag(contact, name) {
+  const normalized = String(name || "").toLowerCase();
+  return (contact?.contact_tags || []).some((row) => String(row.tags?.name || "").toLowerCase() === normalized);
+}
+
+async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, limit = 100) {
+  const filters = [
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    `lead_type=eq.${encodeURIComponent(campaignType)}`,
+    targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
+    "deleted_at=is.null",
+    "order=score.desc",
+    `limit=${limit}`,
+  ].filter(Boolean);
+  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
+  return (payload || [])
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
+    .filter((opportunity) => !opportunity.contacts?.email)
+    .filter((opportunity) => opportunity.contacts?.apollo_enrichment_status !== "not_available");
+}
+
+function apolloKey() {
+  if (!process.env.APOLLO_API_KEY) throw new Error("APOLLO_API_KEY no esta configurada en Vercel.");
+  return process.env.APOLLO_API_KEY;
+}
+
+async function revealCampaignLeadEmail(opportunity) {
+  const contact = opportunity.contacts || {};
+  const company = opportunity.companies || {};
+  const params = new URLSearchParams();
+  if (contact.apollo_person_id) params.set("id", contact.apollo_person_id);
+  if (contact.linkedin_url) params.set("linkedin_url", contact.linkedin_url);
+  if (contact.first_name) params.set("first_name", contact.first_name);
+  if (contact.last_name) params.set("last_name", contact.last_name);
+  if (contact.full_name) params.set("name", contact.full_name);
+  if (company.domain) params.set("domain", company.domain);
+  if (company.name) params.set("organization_name", company.name);
+  params.set("reveal_personal_emails", "true");
+  params.set("reveal_phone_number", "false");
+
+  await updateRows("contacts", { apollo_enrichment_status: "requested", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(contact.id)}`);
+  const response = await fetch(`https://api.apollo.io/api/v1/people/match?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Cache-Control": "no-cache",
+      "Content-Type": "application/json",
+      "X-Api-Key": apolloKey(),
+    },
+  });
+  const apollo = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apollo?.message || apollo?.error || `Apollo respondio ${response.status}`);
+  const person = apollo.person || {};
+  const rawPayload = { ...(contact.apollo_raw_payload || {}), ...person, tecnotitan_email_revealed_at: new Date().toISOString() };
+  const rows = await updateRows(
+    "contacts",
+    {
+      apollo_person_id: contact.apollo_person_id || person.id || null,
+      email: person.email || null,
+      email_status: person.email_status || null,
+      apollo_raw_payload: rawPayload,
+      apollo_enriched_at: new Date().toISOString(),
+      apollo_enrichment_status: person.email ? "enriched" : "not_available",
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(contact.id)}`
+  );
+  await insertRow("apollo_sync_logs", {
+    operation: "campaign_email_reveal",
+    endpoint: "/api/v1/people/match",
+    request_payload: { opportunity_id: opportunity.id },
+    response_status: 200,
+    response_payload: apollo,
+    credits_used: person.email ? 1 : 0,
+    contact_id: contact.id,
+    company_id: company.id || null,
+  });
+  const updatedContact = rows[0] || contact;
+  return updatedContact.email ? { ...opportunity, contacts: updatedContact } : null;
+}
+
+function campaignTemplateKey(campaignType, targetRegion) {
+  if (campaignType === "investor") {
+    if (targetRegion === "europe") return "investor:europe";
+    if (targetRegion === "latam") return "investor:latam";
+    return "investor:usa";
+  }
+  return "consulting_client:latam";
+}
+
+async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCount) {
+  let pool = await campaignLeadPool(campaignType, targetRegion);
+  let searches = 0;
+  while (pool.length < desiredCount && searches < 4) {
+    searches += 1;
+    await runApolloSearch(user, {
+      template_key: campaignTemplateKey(campaignType, targetRegion),
+      per_page: 25,
+      name: `Auto campaña ${campaignType} ${targetRegion || ""}`.trim(),
+    });
+    pool = await campaignLeadPool(campaignType, targetRegion);
+  }
+
+  if (pool.length >= desiredCount) return pool.slice(0, desiredCount);
+
+  const candidates = await campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, desiredCount * 2);
+  for (const candidate of candidates) {
+    if (pool.length >= desiredCount) break;
+    const enriched = await revealCampaignLeadEmail(candidate).catch(() => null);
+    if (enriched?.contacts?.email && !pool.some((lead) => emailAddress(lead.contacts.email) === emailAddress(enriched.contacts.email))) {
+      pool.push(enriched);
+    }
+  }
+  return pool.slice(0, desiredCount);
 }
 
 async function createCampaign(user, body) {
@@ -986,6 +1111,12 @@ async function createCampaign(user, body) {
   if (!subject) throw new Error("El asunto de la campana es requerido.");
   if (!text) throw new Error("El cuerpo de la campana es requerido.");
 
+  const desiredQueue = clampNumber(body.queue_size, 1, 100, 100);
+  const leads = await buildCampaignLeadPool(user, campaignType, targetRegion, desiredQueue);
+  if (!leads.length) {
+    throw new Error("No se encontraron leads con email disponible para esta campana.");
+  }
+
   const campaign = await insertRow("email_campaigns", {
     name,
     campaign_type: campaignType,
@@ -1005,7 +1136,6 @@ async function createCampaign(user, body) {
     status: "active",
   });
 
-  const leads = await campaignLeadPool(campaignType, targetRegion);
   const allowedLeads = [];
   const blockedRecipients = [];
   for (const lead of leads) {
@@ -1358,6 +1488,9 @@ async function sendEmail(user, body) {
     raw_payload: data,
     sent_at: new Date().toISOString(),
   });
+  if (opportunity?.contact_id) {
+    await ensureContactTag(opportunity.contact_id, "Correo enviado", "#0f766e");
+  }
   await touchThread(thread.id, subject);
   if (opportunity?.id) {
     await insertRow("activities", {

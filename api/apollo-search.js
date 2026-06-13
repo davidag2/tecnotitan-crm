@@ -294,7 +294,42 @@ async function savePerson(person, template, leadSearchId, position, page) {
   return { contact, company, opportunity };
 }
 
-module.exports = async function handler(req, res) {
+async function runApolloSearch(user, body = {}) {
+  const template = getTemplate(body.template_key || "consulting_client:latam");
+  const page = Number(body.page || (await nextPageForTemplate(template.key)));
+  const perPage = Math.min(Number(body.per_page || template.default_per_page), 25);
+  const payload = { ...buildApolloPayload(template, body.filters), page, per_page: perPage };
+  const apollo = await searchApollo(payload);
+  const people = apollo.people || [];
+
+  const leadSearch = await insertRow("lead_searches", {
+    name: body.name || `${template.key} page ${page}`,
+    lead_type: template.lead_type,
+    target_region: template.target_region,
+    search_template: template.key,
+    filters: payload,
+    status: "completed",
+    total_entries: apollo.total_entries || null,
+    pages_requested: 1,
+    results_saved: people.length,
+    created_by: user.db_user_id || null,
+  });
+
+  const saved = [];
+  for (const [index, person] of people.entries()) {
+    saved.push(await savePerson(person, template, leadSearch.id, index + 1, page));
+  }
+
+  return {
+    lead_search_id: leadSearch.id,
+    total_entries: apollo.total_entries || null,
+    returned: people.length,
+    saved: saved.length,
+    leads: saved,
+  };
+}
+
+async function handler(req, res) {
   const user = requireAdmin(req, res);
   if (!user) return;
   if (req.method !== "POST") {
@@ -304,39 +339,11 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readJsonBody(req);
-    const template = getTemplate(body.template_key || "consulting_client:latam");
-    const page = Number(body.page || (await nextPageForTemplate(template.key)));
-    const perPage = Math.min(Number(body.per_page || template.default_per_page), 25);
-    const payload = { ...buildApolloPayload(template, body.filters), page, per_page: perPage };
-    const apollo = await searchApollo(payload);
-    const people = apollo.people || [];
-
-    const leadSearch = await insertRow("lead_searches", {
-      name: body.name || `${template.key} page ${page}`,
-      lead_type: template.lead_type,
-      target_region: template.target_region,
-      search_template: template.key,
-      filters: payload,
-      status: "completed",
-      total_entries: apollo.total_entries || null,
-      pages_requested: 1,
-      results_saved: people.length,
-      created_by: user.db_user_id || null,
-    });
-
-    const saved = [];
-    for (const [index, person] of people.entries()) {
-      saved.push(await savePerson(person, template, leadSearch.id, index + 1, page));
-    }
-
-    res.status(200).json({
-      lead_search_id: leadSearch.id,
-      total_entries: apollo.total_entries || null,
-      returned: people.length,
-      saved: saved.length,
-      leads: saved,
-    });
+    res.status(200).json(await runApolloSearch(user, body));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};
+}
+
+module.exports = handler;
+module.exports.runApolloSearch = runApolloSearch;
