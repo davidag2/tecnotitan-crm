@@ -5,6 +5,7 @@ const state = {
   users: [],
   searches: [],
   leadRows: [],
+  leadPage: 1,
   assignmentWorkload: null,
   currentUser: null,
   selectedTemplate: "consulting_client:latam",
@@ -118,6 +119,7 @@ const PIPELINE_STATUSES = [
 ];
 
 const ARCHIVE_STATUS = "archivado";
+const LEADS_PER_PAGE = 25;
 const CLIENTS_PER_PAGE = 25;
 const KANBAN_CLIENTS_PER_PAGE = 25;
 
@@ -945,6 +947,11 @@ function renderLeads(leads) {
     elements.leads.innerHTML = `<p class="empty">No hay leads nuevos para procesar con los filtros actuales.</p>`;
     return;
   }
+  const totalPages = Math.max(1, Math.ceil(leads.length / LEADS_PER_PAGE));
+  if (state.leadPage > totalPages) state.leadPage = totalPages;
+  if (state.leadPage < 1) state.leadPage = 1;
+  const pageStart = (state.leadPage - 1) * LEADS_PER_PAGE;
+  const pageLeads = leads.slice(pageStart, pageStart + LEADS_PER_PAGE);
 
   elements.leads.innerHTML = `
     <div class="lead-table-header">
@@ -954,7 +961,7 @@ function renderLeads(leads) {
       <span>Estado</span>
       <span>Score</span>
     </div>
-  ${leads
+  ${pageLeads
     .map((lead) => {
       const contact = lead.contacts || {};
       const company = lead.companies || {};
@@ -1000,7 +1007,17 @@ function renderLeads(leads) {
         </article>
       `;
     })
-    .join("")}`;
+    .join("")}
+    <div class="client-pagination lead-pagination">
+      <span>Mostrando ${pageStart + 1}-${Math.min(pageStart + LEADS_PER_PAGE, leads.length)} de ${leads.length}</span>
+      <div>
+        ${Array.from({ length: totalPages }, (_, index) => {
+          const page = index + 1;
+          return `<button class="${page === state.leadPage ? "" : "secondary"}" type="button" data-lead-page="${page}">Pagina ${page}</button>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
 
   applyRoleVisibility();
   elements.leads.querySelectorAll("[data-assign]").forEach((select) => {
@@ -1015,6 +1032,12 @@ function renderLeads(leads) {
   });
   elements.leads.querySelectorAll("[data-pipeline-status]").forEach((select) => {
     select.addEventListener("change", () => changePipelineStatus(select.dataset.pipelineStatus, select.value));
+  });
+  elements.leads.querySelectorAll("[data-lead-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.leadPage = Number(button.dataset.leadPage || 1);
+      renderLeads(leads);
+    });
   });
 }
 
@@ -1867,6 +1890,11 @@ async function reloadLeadsOnly() {
   }
 }
 
+function applyLeadFiltersFromFirstPage() {
+  state.leadPage = 1;
+  reloadLeadsOnly();
+}
+
 function clearLeadFilters() {
   elements.leadSearch.value = "";
   elements.leadCountry.value = "";
@@ -1874,6 +1902,7 @@ function clearLeadFilters() {
   elements.leadRegionFilter.value = "";
   elements.leadScoreFilter.value = "";
   elements.leadStatusFilter.value = "";
+  state.leadPage = 1;
   reloadLeadsOnly();
 }
 
@@ -2079,6 +2108,7 @@ function logout() {
   state.users = [];
   state.searches = [];
   state.leadRows = [];
+  state.leadPage = 1;
   state.assignmentWorkload = null;
   state.clientContactFilter = "all";
   state.clientCountryFilter = "all";
@@ -2116,7 +2146,7 @@ elements.saveScoreTags.addEventListener("click", saveScoreTags);
 elements.addDetailNote.addEventListener("click", addLeadNote);
 elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
-elements.applyLeadFilters.addEventListener("click", reloadLeadsOnly);
+elements.applyLeadFilters.addEventListener("click", applyLeadFiltersFromFirstPage);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);
 elements.messageTemplateFilter.addEventListener("change", () => {
   state.messageTemplateFilter = elements.messageTemplateFilter.value;
@@ -2133,10 +2163,10 @@ elements.clientCountryFilter.addEventListener("change", () => {
   refreshClientContactFilter();
 });
 elements.leadSearch.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") reloadLeadsOnly();
+  if (event.key === "Enter") applyLeadFiltersFromFirstPage();
 });
 elements.leadCountry.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") reloadLeadsOnly();
+  if (event.key === "Enter") applyLeadFiltersFromFirstPage();
 });
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
