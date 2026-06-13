@@ -88,9 +88,15 @@ async function findLeadByEmail(email) {
 }
 
 async function findOrCreateThread({ opportunity, subject }) {
+  if (!opportunity?.id) {
+    return insertRow("email_threads", {
+      subject,
+      last_message_at: new Date().toISOString(),
+    });
+  }
   const filters = [
     "select=*",
-    opportunity?.id ? `opportunity_id=eq.${encodeURIComponent(opportunity.id)}` : "",
+    `opportunity_id=eq.${encodeURIComponent(opportunity.id)}`,
     "order=last_message_at.desc",
     "limit=1",
   ].filter(Boolean);
@@ -241,15 +247,22 @@ async function listMessages(user, req) {
 }
 
 async function sendEmail(user, body) {
-  const opportunity = await loadOpportunity(body.opportunity_id, user);
-  if (!opportunity) throw new Error("Selecciona una lead valida o asignada para enviar correo.");
-
-  const to = cleanEmailList(body.to || opportunity.contacts?.email);
+  let opportunity = await loadOpportunity(body.opportunity_id, user);
+  const to = cleanEmailList(body.to || opportunity?.contacts?.email);
   const subject = String(body.subject || "").trim();
   const text = String(body.text || "").trim();
-  if (!to.length) throw new Error("La lead no tiene email o falta destinatario.");
+  if (!to.length) throw new Error("Escribe un destinatario o selecciona una lead con email.");
   if (!subject) throw new Error("El asunto es requerido.");
   if (!text) throw new Error("El mensaje no puede estar vacio.");
+  if (!opportunity && to[0]) {
+    const linked = await findLeadByEmail(to[0]);
+    if (linked.opportunity && (user.role === "admin" || linked.opportunity.owner_user_id === user.db_user_id)) {
+      opportunity = linked.opportunity;
+      opportunity.contact_id = linked.contact?.id || opportunity.contact_id;
+      opportunity.company_id = linked.company_id || opportunity.company_id;
+      opportunity.contacts = linked.contact || null;
+    }
+  }
 
   const sender = senderFor(body.sender_key, opportunity);
   if (!sender?.from) throw new Error("Configura RESEND_FROM_CONSULTING o RESEND_FROM_INVESTORS en Vercel.");
@@ -258,6 +271,10 @@ async function sendEmail(user, body) {
   const headers = {};
   if (body.in_reply_to) headers["In-Reply-To"] = body.in_reply_to;
   if (body.references) headers.References = body.references;
+  const tags = [{ name: "crm", value: "tecnotitan" }];
+  if (opportunity?.id) {
+    tags.push({ name: "opportunity", value: opportunity.id.replace(/-/g, "_").slice(0, 256) });
+  }
 
   const data = await resendFetch("/emails", {
     method: "POST",
@@ -270,18 +287,15 @@ async function sendEmail(user, body) {
       text,
       html: textToHtml(text),
       headers,
-      tags: [
-        { name: "crm", value: "tecnotitan" },
-        { name: "opportunity", value: opportunity.id.replace(/-/g, "_").slice(0, 256) },
-      ],
+      tags,
     }),
   });
 
   const saved = await insertRow("email_messages", {
     thread_id: thread.id,
-    opportunity_id: opportunity.id,
-    contact_id: opportunity.contact_id,
-    company_id: opportunity.company_id,
+    opportunity_id: opportunity?.id || null,
+    contact_id: opportunity?.contact_id || null,
+    company_id: opportunity?.company_id || null,
     user_id: user.db_user_id || null,
     direction: "outbound",
     status: "sent",
@@ -298,16 +312,18 @@ async function sendEmail(user, body) {
     sent_at: new Date().toISOString(),
   });
   await touchThread(thread.id, subject);
-  await insertRow("activities", {
-    opportunity_id: opportunity.id,
-    contact_id: opportunity.contact_id,
-    company_id: opportunity.company_id,
-    user_id: user.db_user_id || null,
-    activity_type: "email",
-    subject: `Email enviado: ${subject}`,
-    body: snippet(text),
-  });
-  return normalizeMessage({ ...saved, contacts: opportunity.contacts, companies: opportunity.companies, opportunities: opportunity });
+  if (opportunity?.id) {
+    await insertRow("activities", {
+      opportunity_id: opportunity.id,
+      contact_id: opportunity.contact_id,
+      company_id: opportunity.company_id,
+      user_id: user.db_user_id || null,
+      activity_type: "email",
+      subject: `Email enviado: ${subject}`,
+      body: snippet(text),
+    });
+  }
+  return normalizeMessage({ ...saved, contacts: opportunity?.contacts, companies: opportunity?.companies, opportunities: opportunity });
 }
 
 module.exports = async function handler(req, res) {

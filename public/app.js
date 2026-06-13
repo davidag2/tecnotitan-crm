@@ -837,7 +837,7 @@ function renderEmailOpportunityOptions() {
   const current = elements.emailOpportunity.value;
   const options = emailLeadOptions();
   elements.emailOpportunity.innerHTML = [
-    `<option value="">Selecciona una lead con email</option>`,
+    `<option value="">Opcional: vincular lead con email</option>`,
     ...options.map((lead) => {
       const contact = lead.contacts || {};
       const company = lead.companies || {};
@@ -2271,8 +2271,9 @@ async function importCsv() {
 
 async function sendEmail() {
   const opportunityId = elements.emailOpportunity.value;
-  if (!opportunityId) {
-    elements.emailComposeStatus.textContent = "Selecciona una lead con email.";
+  const to = elements.emailTo.value.trim();
+  if (!opportunityId && !to) {
+    elements.emailComposeStatus.textContent = "Escribe un destinatario o selecciona una lead.";
     return;
   }
   elements.sendEmailButton.disabled = true;
@@ -2283,7 +2284,7 @@ async function sendEmail() {
       body: JSON.stringify({
         opportunity_id: opportunityId,
         sender_key: elements.emailSender.value,
-        to: elements.emailTo.value,
+        to,
         subject: elements.emailSubject.value,
         text: elements.emailBody.value,
       }),
