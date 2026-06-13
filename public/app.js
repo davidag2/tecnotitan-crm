@@ -5,6 +5,10 @@ const state = {
   users: [],
   searches: [],
   leadRows: [],
+  emailMessages: [],
+  emailStatus: null,
+  emailMailbox: "all",
+  emailSearch: "",
   leadPage: 1,
   assignmentWorkload: null,
   currentUser: null,
@@ -34,6 +38,17 @@ const elements = {
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
   messageTemplates: document.querySelector("#message-templates"),
+  emailStatus: document.querySelector("#email-status"),
+  emailList: document.querySelector("#email-list"),
+  emailSearch: document.querySelector("#email-search"),
+  emailOpportunity: document.querySelector("#email-opportunity"),
+  emailSender: document.querySelector("#email-sender"),
+  emailTo: document.querySelector("#email-to"),
+  emailSubject: document.querySelector("#email-subject"),
+  emailBody: document.querySelector("#email-body"),
+  sendEmailButton: document.querySelector("#send-email-button"),
+  emailComposeStatus: document.querySelector("#email-compose-status"),
+  emailMailboxButtons: document.querySelectorAll("[data-email-mailbox]"),
   followupsOverdue: document.querySelector("#followups-overdue"),
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
@@ -794,6 +809,103 @@ function copyMessageTemplate(templateId) {
   if (!template) return;
   const text = [template.subject ? `Asunto: ${template.subject}` : "", template.body].filter(Boolean).join("\n\n");
   copyValue(text, "Plantilla");
+}
+
+function renderEmailStatus(status) {
+  if (!elements.emailStatus) return;
+  if (!status?.resendConfigured) {
+    elements.emailStatus.innerHTML = `<span data-tone="warning">Falta RESEND_API_KEY en Vercel.</span>`;
+    return;
+  }
+  const senders = status.senders || [];
+  const readySenders = senders.filter((sender) => sender.configured).map((sender) => sender.label).join(" / ");
+  elements.emailStatus.innerHTML = `
+    <span data-tone="ok">Resend conectado</span>
+    <span>Remitentes: ${readySenders || "pendientes"}</span>
+    <span>Webhook: ${status.webhookTokenConfigured ? "protegido" : "pendiente"}</span>
+  `;
+}
+
+function emailLeadOptions() {
+  return (state.leadRows || [])
+    .filter((lead) => lead.contacts?.email)
+    .sort((a, b) => (a.contacts?.full_name || "").localeCompare(b.contacts?.full_name || "", "es"));
+}
+
+function renderEmailOpportunityOptions() {
+  if (!elements.emailOpportunity) return;
+  const current = elements.emailOpportunity.value;
+  const options = emailLeadOptions();
+  elements.emailOpportunity.innerHTML = [
+    `<option value="">Selecciona una lead con email</option>`,
+    ...options.map((lead) => {
+      const contact = lead.contacts || {};
+      const company = lead.companies || {};
+      const label = `${contact.full_name || "Contacto"} | ${company.name || "Empresa"} | ${contact.email}`;
+      return `<option value="${attr(lead.id)}">${label}</option>`;
+    }),
+  ].join("");
+  if (options.some((lead) => lead.id === current)) elements.emailOpportunity.value = current;
+}
+
+function selectedEmailLead() {
+  const id = elements.emailOpportunity?.value || "";
+  return (state.leadRows || []).find((lead) => lead.id === id) || null;
+}
+
+function fillEmailFromLead() {
+  const lead = selectedEmailLead();
+  if (!lead) return;
+  const contact = lead.contacts || {};
+  const company = lead.companies || {};
+  elements.emailTo.value = contact.email || "";
+  elements.emailSender.value = lead.lead_type === "investor" ? "investors" : "consulting";
+  if (!elements.emailSubject.value.trim()) {
+    elements.emailSubject.value =
+      lead.lead_type === "investor" ? `Tecnotitan - ${company.name || "oportunidad"}` : `Idea rapida para ${company.name || "tu equipo"}`;
+  }
+}
+
+function renderEmails(messages = state.emailMessages) {
+  if (!elements.emailList) return;
+  renderEmailStatus(state.emailStatus);
+  renderEmailOpportunityOptions();
+  elements.emailMailboxButtons.forEach((button) => button.classList.toggle("active", button.dataset.emailMailbox === state.emailMailbox));
+  const query = (state.emailSearch || "").trim().toLowerCase();
+  const visible = (messages || []).filter((message) => {
+    const mailboxOk =
+      state.emailMailbox === "all" ||
+      (state.emailMailbox === "inbox" && message.direction === "inbound") ||
+      (state.emailMailbox === "sent" && message.direction === "outbound");
+    if (!mailboxOk) return false;
+    if (!query) return true;
+    return [message.from_email, ...(message.to_emails || []), message.subject, message.snippet, message.contact?.full_name, message.company?.name]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+  if (!visible.length) {
+    elements.emailList.innerHTML = `<p class="empty">No hay correos para esta bandeja.</p>`;
+    return;
+  }
+  elements.emailList.innerHTML = visible
+    .map((message) => {
+      const contact = message.contact || {};
+      const company = message.company || {};
+      const date = new Date(message.sent_at || message.received_at || message.created_at).toLocaleString("es-CO");
+      return `
+        <article class="email-row">
+          <div>
+            <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${message.subject || "(sin asunto)"}</strong>
+            <span>${message.direction === "inbound" ? message.from_email : (message.to_emails || []).join(", ")}</span>
+            <small>${contact.full_name || "Contacto no vinculado"} | ${company.name || "Empresa no vinculada"} | ${date}</small>
+          </div>
+          <p>${message.snippet || "Sin vista previa."}</p>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function isProcessedClient(lead) {
@@ -1850,7 +1962,8 @@ async function requestPhone(opportunityId, button) {
 }
 
 async function loadPublicData() {
-  const [status, templates] = await Promise.all([api("/api/status"), api("/api/templates")]);
+  const templates = await api("/api/templates");
+  const status = templates;
   state.templates = templates.templates;
   renderTemplates();
   renderMessageTemplates();
@@ -1876,16 +1989,19 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
       api("/api/followups"),
       api("/api/leads?mode=search_history").catch(() => ({ searches: [] })),
+      api("/api/emails").catch(() => ({ status: null, messages: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
     state.searches = searchHistory.searches || [];
+    state.emailStatus = emails.status || null;
+    state.emailMessages = emails.messages || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -1898,6 +2014,7 @@ async function loadPrivateData() {
     renderUsers();
     renderSearchHistory(state.searches);
     renderLeadCollections(leadRows);
+    renderEmails(state.emailMessages);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -1995,6 +2112,17 @@ async function reloadLeadsOnly() {
     renderLeadCollections(await currentLeads());
   } catch (error) {
     setStatus(error.message, "warning");
+  }
+}
+
+async function reloadEmailsOnly() {
+  try {
+    const emails = await api("/api/emails");
+    state.emailStatus = emails.status || null;
+    state.emailMessages = emails.messages || [];
+    renderEmails(state.emailMessages);
+  } catch (error) {
+    if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">${error.message}</p>`;
   }
 }
 
@@ -2141,6 +2269,36 @@ async function importCsv() {
   }
 }
 
+async function sendEmail() {
+  const opportunityId = elements.emailOpportunity.value;
+  if (!opportunityId) {
+    elements.emailComposeStatus.textContent = "Selecciona una lead con email.";
+    return;
+  }
+  elements.sendEmailButton.disabled = true;
+  elements.emailComposeStatus.textContent = "Enviando...";
+  try {
+    await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        opportunity_id: opportunityId,
+        sender_key: elements.emailSender.value,
+        to: elements.emailTo.value,
+        subject: elements.emailSubject.value,
+        text: elements.emailBody.value,
+      }),
+    });
+    elements.emailBody.value = "";
+    elements.emailComposeStatus.textContent = "Correo enviado.";
+    await reloadEmailsOnly();
+    renderFollowups(await api("/api/followups"));
+  } catch (error) {
+    elements.emailComposeStatus.textContent = error.message;
+  } finally {
+    elements.sendEmailButton.disabled = false;
+  }
+}
+
 async function assignLead(opportunityId, userId) {
   if (!userId) return;
   const ownerUserId = userId === "__unassigned__" ? null : userId;
@@ -2215,6 +2373,10 @@ function logout() {
   state.currentUser = null;
   state.users = [];
   state.searches = [];
+  state.emailMessages = [];
+  state.emailStatus = null;
+  state.emailMailbox = "all";
+  state.emailSearch = "";
   state.leadRows = [];
   state.leadPage = 1;
   state.assignmentWorkload = null;
@@ -2237,6 +2399,8 @@ function logout() {
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";
   elements.searchHistory.innerHTML = `<p class="empty">Inicia sesion para cargar historial.</p>`;
+  if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">Inicia sesion para cargar correos.</p>`;
+  if (elements.emailComposeStatus) elements.emailComposeStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
   renderSessionUser();
   showLogin();
@@ -2263,6 +2427,18 @@ elements.messageTemplateFilter.addEventListener("change", () => {
   state.messageTemplateFilter = elements.messageTemplateFilter.value;
   renderMessageTemplates();
 });
+elements.emailMailboxButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.emailMailbox = button.dataset.emailMailbox || "all";
+    renderEmails(state.emailMessages);
+  });
+});
+elements.emailSearch.addEventListener("input", () => {
+  state.emailSearch = elements.emailSearch.value;
+  renderEmails(state.emailMessages);
+});
+elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
+elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;
   state.clientPage = 1;

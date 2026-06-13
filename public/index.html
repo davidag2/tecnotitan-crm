@@ -48,6 +48,7 @@
           <a href="#archivo" data-tab="archivo">Archivo</a>
           <a href="#seguimientos" data-tab="seguimientos">Seguimientos</a>
           <a href="#mensajes" data-tab="mensajes">Mensajes</a>
+          <a href="#correos" data-tab="correos">Correos</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
           <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
@@ -129,6 +130,44 @@
             <span id="message-template-count"></span>
           </div>
           <div class="message-template-grid" id="message-templates"></div>
+        </section>
+
+        <section class="panel tab-panel" id="correos" data-tab-panel="correos">
+          <div class="panel-title">
+            <h2>Correos</h2>
+            <p>Mini Outlook conectado a Resend para enviar y recibir conversaciones con leads.</p>
+          </div>
+          <div class="email-status" id="email-status">
+            <span>Resend pendiente de configurar.</span>
+          </div>
+          <div class="email-shell">
+            <aside class="email-sidebar">
+              <button class="active" type="button" data-email-mailbox="all">Todos</button>
+              <button type="button" data-email-mailbox="inbox">Entrada</button>
+              <button type="button" data-email-mailbox="sent">Enviados</button>
+              <input id="email-search" type="search" placeholder="Buscar correos">
+            </aside>
+            <section class="email-list-panel">
+              <div class="email-list" id="email-list">
+                <p class="empty">Inicia sesion para cargar correos.</p>
+              </div>
+            </section>
+            <aside class="email-compose">
+              <h3>Nuevo correo</h3>
+              <select id="email-opportunity">
+                <option value="">Selecciona una lead con email</option>
+              </select>
+              <select id="email-sender">
+                <option value="consulting">Consultoria</option>
+                <option value="investors">Inversionistas</option>
+              </select>
+              <input id="email-to" type="email" placeholder="Destinatario">
+              <input id="email-subject" type="text" placeholder="Asunto">
+              <textarea id="email-body" rows="10" placeholder="Escribe el correo"></textarea>
+              <button id="send-email-button" type="button">Enviar correo</button>
+              <span id="email-compose-status"></span>
+            </aside>
+          </div>
         </section>
 
         <section class="panel admin-only role-hidden tab-panel" id="usuarios" data-tab-panel="usuarios">
