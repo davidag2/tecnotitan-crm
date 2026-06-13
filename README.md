@@ -43,6 +43,19 @@ CRM_SESSION_SECRET=secreto_para_firmar_sesiones
 
 La base `copiloto_pyme` no debe tocarse.
 
+## Vercel Pro cron jobs
+
+El proyecto usa tres tareas programadas en Vercel Pro:
+
+- `/api/emails?cron=campaigns`: procesa campanas de correo cada 5 minutos.
+- `/api/status-monitor?target=tecnotitan`: revisa el status de Tecnotitan en los minutos 2, 17, 32 y 47.
+- `/api/status-monitor?target=copiloto`: revisa el status de Copiloto Pyme en los minutos 7, 22, 37 y 52.
+
+URLs configurables por variables de entorno:
+
+- `STATUS_TECNOTITAN_URL`
+- `STATUS_COPILOTO_PYME_URL`
+
 Para Vercel, `SUPABASE_SERVICE_ROLE_KEY`, `APOLLO_API_KEY`, `CRM_PASSWORD_HASH` y `CRM_SESSION_SECRET` deben configurarse como variables privadas. No deben aparecer en `public/`, ni en codigo frontend, ni en commits.
 
 ## Ejecutar Backend Web Local

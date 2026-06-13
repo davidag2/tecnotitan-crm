@@ -3,6 +3,14 @@
     {
       "path": "/api/emails?cron=campaigns",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/status-monitor?target=tecnotitan",
+      "schedule": "2,17,32,47 * * * *"
+    },
+    {
+      "path": "/api/status-monitor?target=copiloto",
+      "schedule": "7,22,37,52 * * * *"
     }
   ],
   "rewrites": [
