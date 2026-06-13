@@ -6,6 +6,7 @@ const state = {
   searches: [],
   leadRows: [],
   emailMessages: [],
+  emailCampaigns: [],
   emailStatus: null,
   emailMailbox: "all",
   emailSearch: "",
@@ -49,6 +50,16 @@ const elements = {
   sendEmailButton: document.querySelector("#send-email-button"),
   emailComposeStatus: document.querySelector("#email-compose-status"),
   emailMailboxButtons: document.querySelectorAll("[data-email-mailbox]"),
+  campaignName: document.querySelector("#campaign-name"),
+  campaignType: document.querySelector("#campaign-type"),
+  campaignSender: document.querySelector("#campaign-sender"),
+  campaignDailyLimit: document.querySelector("#campaign-daily-limit"),
+  campaignBatchSize: document.querySelector("#campaign-batch-size"),
+  campaignSubject: document.querySelector("#campaign-subject"),
+  campaignBody: document.querySelector("#campaign-body"),
+  createCampaignButton: document.querySelector("#create-campaign-button"),
+  campaignStatus: document.querySelector("#campaign-status"),
+  campaignList: document.querySelector("#campaign-list"),
   followupsOverdue: document.querySelector("#followups-overdue"),
   followupsToday: document.querySelector("#followups-today"),
   followupsUpcoming: document.querySelector("#followups-upcoming"),
@@ -908,6 +919,70 @@ function renderEmails(messages = state.emailMessages) {
       `;
     })
     .join("");
+}
+
+function campaignTypeLabel(type) {
+  return type === "investor" ? "Inversionistas" : "Consultoria LATAM";
+}
+
+function defaultCampaignTemplate(type) {
+  if (type === "investor") {
+    return {
+      subject: "Tecnotitan | oportunidad estrategica para {{empresa}}",
+      body:
+        "Hola {{nombre}},\n\nSoy David Arias de Tecnotitan. Estoy contactando inversionistas y aliados estrategicos que puedan tener interes en software, automatizacion e inteligencia artificial aplicada a negocios en America Latina.\n\nMe gustaria compartirte una version breve de lo que estamos construyendo y evaluar si tiene sentido conversar.\n\nSaludos,\nDavid Arias\nTecnotitan",
+    };
+  }
+  return {
+    subject: "Idea rapida para {{empresa}}",
+    body:
+      "Hola {{nombre}},\n\nSoy David Arias de Tecnotitan. Vi a {{empresa}} y creo que podria haber una oportunidad para mejorar procesos comerciales u operativos usando software, automatizacion e IA.\n\nSi te parece, puedo enviarte una idea concreta y breve para evaluar si tiene sentido conversar.\n\nSaludos,\nDavid Arias\nTecnotitan",
+  };
+}
+
+function applyCampaignDefaults(force = false) {
+  if (!elements.campaignType) return;
+  const template = defaultCampaignTemplate(elements.campaignType.value);
+  if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
+  if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
+  if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
+  if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
+}
+
+function renderCampaigns(campaigns = state.emailCampaigns) {
+  if (!elements.campaignList) return;
+  if (!campaigns?.length) {
+    elements.campaignList.innerHTML = `<p class="empty">No hay campanas automaticas todavia.</p>`;
+    return;
+  }
+  elements.campaignList.innerHTML = campaigns
+    .map((campaign) => {
+      const counts = campaign.counts || {};
+      const remaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
+      return `
+        <article class="campaign-card">
+          <header>
+            <div>
+              <strong>${campaign.name}</strong>
+              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
+            </div>
+            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !counts.queued ? "disabled" : ""}>Procesar ahora</button>
+          </header>
+          <div class="campaign-stats">
+            <span><b>${counts.total || 0}</b>Total</span>
+            <span><b>${counts.queued || 0}</b>En cola</span>
+            <span><b>${counts.sent || 0}</b>Enviados</span>
+            <span><b>${counts.sent_today || 0}</b>Hoy</span>
+            <span><b>${remaining}</b>Restantes hoy</span>
+          </div>
+          <small>Limite diario: ${campaign.daily_limit || 100} | Lote por ejecucion: ${campaign.batch_size || 10}</small>
+        </article>
+      `;
+    })
+    .join("");
+  elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
+    button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
+  });
 }
 
 function isProcessedClient(lead) {
@@ -1991,19 +2066,21 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
       api("/api/followups"),
       api("/api/leads?mode=search_history").catch(() => ({ searches: [] })),
       api("/api/emails").catch(() => ({ status: null, messages: [] })),
+      api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
     state.searches = searchHistory.searches || [];
     state.emailStatus = emails.status || null;
     state.emailMessages = emails.messages || [];
+    state.emailCampaigns = campaigns.campaigns || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -2017,6 +2094,7 @@ async function loadPrivateData() {
     renderSearchHistory(state.searches);
     renderLeadCollections(leadRows);
     renderEmails(state.emailMessages);
+    renderCampaigns(state.emailCampaigns);
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -2125,6 +2203,16 @@ async function reloadEmailsOnly() {
     renderEmails(state.emailMessages);
   } catch (error) {
     if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">${error.message}</p>`;
+  }
+}
+
+async function reloadCampaignsOnly() {
+  try {
+    const data = await api("/api/emails?mode=campaigns");
+    state.emailCampaigns = data.campaigns || [];
+    renderCampaigns(state.emailCampaigns);
+  } catch (error) {
+    if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">${error.message}</p>`;
   }
 }
 
@@ -2303,6 +2391,58 @@ async function sendEmail() {
   }
 }
 
+async function createCampaign() {
+  elements.createCampaignButton.disabled = true;
+  elements.campaignStatus.textContent = "Creando campana...";
+  try {
+    const result = await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "create_campaign",
+        name: elements.campaignName.value.trim(),
+        campaign_type: elements.campaignType.value,
+        sender_key: elements.campaignSender.value,
+        daily_limit: elements.campaignDailyLimit.value,
+        batch_size: elements.campaignBatchSize.value,
+        subject_template: elements.campaignSubject.value,
+        body_template: elements.campaignBody.value,
+      }),
+    });
+    elements.campaignName.value = "";
+    elements.campaignStatus.textContent = `Campana creada con ${result.campaign?.counts?.queued || 0} correos en cola.`;
+    await reloadCampaignsOnly();
+  } catch (error) {
+    elements.campaignStatus.textContent = error.message;
+  } finally {
+    elements.createCampaignButton.disabled = false;
+  }
+}
+
+async function processCampaign(campaignId, button) {
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Procesando...";
+  elements.campaignStatus.textContent = "Enviando lote controlado...";
+  try {
+    const result = await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "process_campaign",
+        campaign_id: campaignId,
+      }),
+    });
+    elements.campaignStatus.textContent = `Lote terminado: ${result.sent || 0} enviados, ${result.failed || 0} fallidos.`;
+    await Promise.all([reloadCampaignsOnly(), reloadEmailsOnly()]);
+  } catch (error) {
+    elements.campaignStatus.textContent = error.message;
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 async function assignLead(opportunityId, userId) {
   if (!userId) return;
   const ownerUserId = userId === "__unassigned__" ? null : userId;
@@ -2378,6 +2518,7 @@ function logout() {
   state.users = [];
   state.searches = [];
   state.emailMessages = [];
+  state.emailCampaigns = [];
   state.emailStatus = null;
   state.emailMailbox = "all";
   state.emailSearch = "";
@@ -2405,6 +2546,8 @@ function logout() {
   elements.searchHistory.innerHTML = `<p class="empty">Inicia sesion para cargar historial.</p>`;
   if (elements.emailList) elements.emailList.innerHTML = `<p class="empty">Inicia sesion para cargar correos.</p>`;
   if (elements.emailComposeStatus) elements.emailComposeStatus.textContent = "";
+  if (elements.campaignList) elements.campaignList.innerHTML = `<p class="empty">No hay campanas cargadas.</p>`;
+  if (elements.campaignStatus) elements.campaignStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
   renderSessionUser();
   showLogin();
@@ -2443,6 +2586,8 @@ elements.emailSearch.addEventListener("input", () => {
 });
 elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
 elements.sendEmailButton.addEventListener("click", sendEmail);
+elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
+elements.createCampaignButton.addEventListener("click", createCampaign);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;
   state.clientPage = 1;
@@ -2485,6 +2630,7 @@ elements.tabs.forEach((tab) => {
 });
 window.addEventListener("hashchange", () => activateTab(tabFromHash()));
 
+applyCampaignDefaults(true);
 showLogin();
 activeTab = tabFromHash();
 loadPublicData()

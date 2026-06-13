@@ -58,10 +58,37 @@ function snippet(text) {
     .slice(0, 220);
 }
 
+function todayStartIso() {
+  const now = new Date();
+  now.setUTCHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+function renderTemplate(template, data) {
+  const values = {
+    nombre: data.contact?.full_name || "equipo",
+    cargo: data.contact?.title || "",
+    empresa: data.company?.name || "tu empresa",
+    pais: data.contact?.country || data.company?.country || "",
+    industria: data.company?.industry || "",
+  };
+  return String(template || "").replace(/\{\{\s*(nombre|cargo|empresa|pais|industria)\s*\}\}/gi, (_, key) => values[key.toLowerCase()] || "");
+}
+
+function requireCampaignAdmin(user) {
+  if (user.role !== "admin") throw new Error("Solo el usuario maestro puede gestionar campanas automaticas.");
+}
+
 async function loadOpportunity(id, user) {
   if (!id) return null;
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email),companies(id,name)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country),companies(id,name,country,industry)",
     `id=eq.${encodeURIComponent(id)}`,
     "deleted_at=is.null",
     "limit=1",
@@ -246,6 +273,172 @@ async function listMessages(user, req) {
   return rows.map(normalizeMessage);
 }
 
+async function campaignCounts(campaignId) {
+  const { payload } = await supabaseFetch(
+    `/email_campaign_recipients?select=status,sent_at&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+  );
+  const today = todayStartIso();
+  const counts = { queued: 0, sent: 0, failed: 0, skipped: 0, sent_today: 0, total: 0 };
+  for (const row of payload || []) {
+    counts.total += 1;
+    counts[row.status] = (counts[row.status] || 0) + 1;
+    if (row.status === "sent" && row.sent_at && row.sent_at >= today) counts.sent_today += 1;
+  }
+  return counts;
+}
+
+async function listCampaigns(user) {
+  requireCampaignAdmin(user);
+  const { payload } = await supabaseFetch(
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,subject_template,body_template,target_region,last_processed_at,created_at&order=created_at.desc&limit=50"
+  );
+  const campaigns = [];
+  for (const campaign of payload || []) {
+    campaigns.push({ ...campaign, counts: await campaignCounts(campaign.id) });
+  }
+  return campaigns;
+}
+
+async function campaignLeadPool(campaignType, targetRegion) {
+  const filters = [
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country),companies(id,name,country,industry)",
+    `lead_type=eq.${encodeURIComponent(campaignType)}`,
+    targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
+    "deleted_at=is.null",
+    "order=score.desc",
+    "limit=500",
+  ].filter(Boolean);
+  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
+  const seen = new Set();
+  return (payload || [])
+    .filter((opportunity) => opportunity.contacts?.email)
+    .filter((opportunity) => {
+      const email = emailAddress(opportunity.contacts.email);
+      if (!email || seen.has(email)) return false;
+      seen.add(email);
+      return true;
+    });
+}
+
+async function createCampaign(user, body) {
+  requireCampaignAdmin(user);
+  const campaignType = body.campaign_type === "investor" ? "investor" : "consulting_client";
+  const senderKey = body.sender_key === "investors" ? "investors" : "consulting";
+  const name = String(body.name || "").trim();
+  const subject = String(body.subject_template || "").trim();
+  const text = String(body.body_template || "").trim();
+  const targetRegion = String(body.target_region || "").trim() || null;
+  if (!name) throw new Error("El nombre de la campana es requerido.");
+  if (!subject) throw new Error("El asunto de la campana es requerido.");
+  if (!text) throw new Error("El cuerpo de la campana es requerido.");
+
+  const campaign = await insertRow("email_campaigns", {
+    name,
+    campaign_type: campaignType,
+    sender_key: senderKey,
+    daily_limit: clampNumber(body.daily_limit, 1, 100, 100),
+    batch_size: clampNumber(body.batch_size, 1, 25, 10),
+    subject_template: subject,
+    body_template: text,
+    target_region: targetRegion,
+    created_by: user.db_user_id || null,
+    status: "active",
+  });
+
+  const leads = await campaignLeadPool(campaignType, targetRegion);
+  const recipients = leads.map((lead) => ({
+    campaign_id: campaign.id,
+    opportunity_id: lead.id,
+    contact_id: lead.contact_id,
+    company_id: lead.company_id,
+    email: emailAddress(lead.contacts.email),
+    status: "queued",
+  }));
+  if (recipients.length) {
+    await supabaseFetch("/email_campaign_recipients", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(recipients),
+    });
+  }
+
+  return { ...campaign, counts: await campaignCounts(campaign.id) };
+}
+
+async function processCampaign(user, body) {
+  requireCampaignAdmin(user);
+  const campaignId = String(body.campaign_id || "").trim();
+  if (!campaignId) throw new Error("Selecciona una campana.");
+  const { payload } = await supabaseFetch(
+    `/email_campaigns?select=*&id=eq.${encodeURIComponent(campaignId)}&limit=1`
+  );
+  const campaign = payload?.[0];
+  if (!campaign) throw new Error("Campana no encontrada.");
+  if (campaign.status !== "active") throw new Error("La campana debe estar activa para enviar.");
+
+  const counts = await campaignCounts(campaign.id);
+  const remainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
+  const sendLimit = Math.min(remainingToday, campaign.batch_size, clampNumber(body.max_send, 1, 25, campaign.batch_size));
+  if (!sendLimit) return { sent: 0, failed: 0, remaining_today: 0, message: "Limite diario alcanzado." };
+
+  const now = new Date().toISOString();
+  const { payload: recipients } = await supabaseFetch(
+    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,contacts(id,full_name,email,title,country),companies(id,name,country,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
+  );
+
+  let sent = 0;
+  let failed = 0;
+  for (const recipient of recipients || []) {
+    const opportunity = recipient.opportunities || {};
+    const subject = renderTemplate(campaign.subject_template, { contact: opportunity.contacts, company: opportunity.companies });
+    const text = renderTemplate(campaign.body_template, { contact: opportunity.contacts, company: opportunity.companies });
+    try {
+      const message = await sendEmail(user, {
+        opportunity_id: recipient.opportunity_id,
+        sender_key: campaign.sender_key,
+        to: recipient.email,
+        subject,
+        text,
+      });
+      await updateRows(
+        "email_campaign_recipients",
+        {
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          provider_message_id: message.provider_message_id || null,
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(recipient.id)}`
+      );
+      sent += 1;
+    } catch (error) {
+      await updateRows(
+        "email_campaign_recipients",
+        {
+          status: "failed",
+          last_error: error.message,
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(recipient.id)}`
+      );
+      failed += 1;
+    }
+  }
+
+  await updateRows(
+    "email_campaigns",
+    { last_processed_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    `id=eq.${encodeURIComponent(campaign.id)}`
+  );
+
+  const nextCounts = await campaignCounts(campaign.id);
+  if (nextCounts.queued === 0) {
+    await updateRows("email_campaigns", { status: "completed", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
+  }
+  return { sent, failed, remaining_today: Math.max(0, campaign.daily_limit - nextCounts.sent_today), counts: nextCounts };
+}
+
 async function sendEmail(user, body) {
   let opportunity = await loadOpportunity(body.opportunity_id, user);
   const to = cleanEmailList(body.to || opportunity?.contacts?.email);
@@ -341,10 +534,22 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
+      if (req.query.mode === "campaigns") {
+        res.status(200).json({ campaigns: await listCampaigns(user) });
+        return;
+      }
       res.status(200).json({ status: emailStatus(), messages: await listMessages(user, req) });
       return;
     }
     if (req.method === "POST") {
+      if (req.body?.action === "create_campaign") {
+        res.status(201).json({ campaign: await createCampaign(user, req.body) });
+        return;
+      }
+      if (req.body?.action === "process_campaign") {
+        res.status(200).json(await processCampaign(user, req.body));
+        return;
+      }
       const message = await sendEmail(user, req.body || {});
       res.status(201).json({ message });
       return;

@@ -498,6 +498,76 @@ button.danger {
   font-weight: 800;
 }
 
+.campaign-builder {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.campaign-form,
+.campaign-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.campaign-form textarea {
+  min-height: 220px;
+  resize: vertical;
+  padding-top: 12px;
+}
+
+.campaign-list {
+  display: grid;
+  gap: 12px;
+}
+
+.campaign-card header,
+.campaign-card footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.campaign-card strong,
+.campaign-card span,
+.campaign-card small {
+  display: block;
+}
+
+.campaign-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaign-stats span {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaign-stats b {
+  display: block;
+  color: var(--text);
+  font-size: 18px;
+}
+
+#campaign-status {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .email-status {
   display: flex;
   gap: 10px;
@@ -1782,6 +1852,11 @@ li {
 
   .email-compose textarea {
     min-height: 300px;
+  }
+
+  .campaign-builder,
+  .campaign-stats {
+    grid-template-columns: 1fr;
   }
 }
 

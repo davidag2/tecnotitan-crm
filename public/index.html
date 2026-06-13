@@ -49,6 +49,7 @@
           <a href="#seguimientos" data-tab="seguimientos">Seguimientos</a>
           <a href="#mensajes" data-tab="mensajes">Mensajes</a>
           <a href="#correos" data-tab="correos">Correos</a>
+          <a class="admin-only role-hidden" href="#campanas" data-tab="campanas">Campanas</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
           <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
@@ -167,6 +168,35 @@
               <button id="send-email-button" type="button">Enviar correo</button>
               <span id="email-compose-status"></span>
             </aside>
+          </div>
+        </section>
+
+        <section class="panel admin-only role-hidden tab-panel" id="campanas" data-tab-panel="campanas">
+          <div class="panel-title">
+            <h2>Campanas automaticas</h2>
+            <p>Envios controlados por lote y limite diario para prospeccion con Resend.</p>
+          </div>
+          <div class="campaign-builder">
+            <div class="campaign-form">
+              <input id="campaign-name" type="text" placeholder="Nombre de la campana">
+              <select id="campaign-type">
+                <option value="consulting_client">Consultoria LATAM</option>
+                <option value="investor">Inversionistas</option>
+              </select>
+              <select id="campaign-sender">
+                <option value="consulting">tecnotitanconsultoria.com</option>
+                <option value="investors">tecnotitaninvestors.com</option>
+              </select>
+              <input id="campaign-daily-limit" type="number" min="1" max="100" value="100" placeholder="Limite diario">
+              <input id="campaign-batch-size" type="number" min="1" max="25" value="10" placeholder="Lote por ejecucion">
+              <input id="campaign-subject" type="text" placeholder="Asunto con variables">
+              <textarea id="campaign-body" rows="8" placeholder="Mensaje con variables: {{nombre}}, {{empresa}}, {{pais}}, {{industria}}, {{cargo}}"></textarea>
+              <button id="create-campaign-button" type="button">Crear campana automatica</button>
+              <span id="campaign-status"></span>
+            </div>
+            <div class="campaign-list" id="campaign-list">
+              <p class="empty">No hay campanas cargadas.</p>
+            </div>
           </div>
         </section>
 
