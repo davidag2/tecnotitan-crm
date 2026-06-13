@@ -3,6 +3,10 @@
     {
       "path": "/api/emails?cron=campaigns",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/emails?cron=campaign_report",
+      "schedule": "0 3 * * *"
     }
   ],
   "rewrites": [

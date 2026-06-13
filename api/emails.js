@@ -1072,7 +1072,7 @@ async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCo
     await runApolloSearch(user, {
       template_key: campaignTemplateKey(campaignType, targetRegion),
       per_page: 25,
-      name: `Auto campaña ${campaignType} ${targetRegion || ""}`.trim(),
+      name: `Auto campana ${campaignType} ${targetRegion || ""}`.trim(),
     });
     pool = await campaignLeadPool(campaignType, targetRegion);
   }
@@ -1416,6 +1416,148 @@ async function processDueCampaigns() {
   };
 }
 
+function campaignReportDate() {
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(new Date());
+}
+
+function emptyRecentStats() {
+  return {
+    sent: 0,
+    followups_sent: 0,
+    delivered: 0,
+    opened: 0,
+    clicked: 0,
+    bounced: 0,
+    failed: 0,
+    complained: 0,
+    replied: 0,
+  };
+}
+
+function countRecentCampaignActivity(rows = [], sinceIso) {
+  const byCampaign = new Map();
+  for (const row of rows) {
+    const stats = byCampaign.get(row.campaign_id) || emptyRecentStats();
+    if (row.sent_at && row.sent_at >= sinceIso) stats.sent += 1;
+    if (row.last_followup_sent_at && row.last_followup_sent_at >= sinceIso) stats.followups_sent += 1;
+    if (row.delivered_at && row.delivered_at >= sinceIso) stats.delivered += 1;
+    if (row.opened_at && row.opened_at >= sinceIso) stats.opened += 1;
+    if (row.clicked_at && row.clicked_at >= sinceIso) stats.clicked += 1;
+    if (row.bounced_at && row.bounced_at >= sinceIso) stats.bounced += 1;
+    if (row.failed_at && row.failed_at >= sinceIso) stats.failed += 1;
+    if (row.complained_at && row.complained_at >= sinceIso) stats.complained += 1;
+    if (row.reply_received_at && row.reply_received_at >= sinceIso) stats.replied += 1;
+    byCampaign.set(row.campaign_id, stats);
+  }
+  return byCampaign;
+}
+
+function sumStats(items, field) {
+  return (items || []).reduce((sum, item) => sum + Number(item[field] || 0), 0);
+}
+
+function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso }) {
+  const recentTotals = campaigns.reduce((totals, campaign) => {
+    const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
+    for (const key of Object.keys(totals)) totals[key] += Number(recent[key] || 0);
+    return totals;
+  }, emptyRecentStats());
+  const apolloCredits = sumStats(apolloLogs, "credits_used");
+  const totalCounts = campaigns.reduce(
+    (totals, campaign) => {
+      const counts = campaign.counts || {};
+      totals.queued += Number(counts.queued || 0);
+      totals.sent += Number(counts.sent || 0);
+      totals.delivered += Number(counts.delivered || 0);
+      totals.opened += Number(counts.opened || 0);
+      totals.clicked += Number(counts.clicked || 0);
+      totals.replied += Number(counts.replied || 0);
+      totals.bounced += Number(counts.bounced || 0);
+      totals.failed += Number(counts.failed_events || counts.failed || 0);
+      totals.blocked += Number(counts.reputation_blocked || 0);
+      return totals;
+    },
+    { queued: 0, sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, failed: 0, blocked: 0 }
+  );
+  const lines = [
+    `Reporte diario de campanas Tecnotitan`,
+    `Fecha de envio: ${campaignReportDate()}`,
+    `Ventana analizada: ultimas 24 horas desde ${new Date(sinceIso).toLocaleString("es-CO", { timeZone: "America/Bogota" })}`,
+    "",
+    "Resumen ultimas 24 horas",
+    `- Enviados iniciales: ${recentTotals.sent}`,
+    `- Follow-ups enviados: ${recentTotals.followups_sent}`,
+    `- Entregados: ${recentTotals.delivered}`,
+    `- Aperturas: ${recentTotals.opened}`,
+    `- Clics: ${recentTotals.clicked}`,
+    `- Respuestas: ${recentTotals.replied}`,
+    `- Rebotes: ${recentTotals.bounced}`,
+    `- Errores: ${recentTotals.failed}`,
+    `- Quejas spam: ${recentTotals.complained}`,
+    `- Creditos Apollo usados: ${apolloCredits}`,
+    "",
+    "Acumulado total de campanas",
+    `- Campanas totales: ${campaigns.length}`,
+    `- En cola: ${totalCounts.queued}`,
+    `- Enviados: ${totalCounts.sent}`,
+    `- Entregados: ${totalCounts.delivered}`,
+    `- Aperturas: ${totalCounts.opened}`,
+    `- Clics: ${totalCounts.clicked}`,
+    `- Respuestas: ${totalCounts.replied}`,
+    `- Rebotes: ${totalCounts.bounced}`,
+    `- Fallidos/errores: ${totalCounts.failed}`,
+    `- Bloqueados por reputacion/no contactar: ${totalCounts.blocked}`,
+    "",
+    "Calentamiento por remitente",
+    ...warmups.map((warmup) => `- ${warmup.domain}: etapa ${warmup.stage}, limite ${warmup.daily_limit}/dia, usados hoy ${warmup.sent_today}, restantes ${warmup.remaining_today}`),
+    "",
+    "Detalle por campana",
+  ];
+
+  for (const campaign of campaigns) {
+    const counts = campaign.counts || {};
+    const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
+    lines.push(
+      "",
+      `${campaign.name}`,
+      `- Tipo: ${campaign.campaign_type} | Region: ${campaign.target_region || "todas"} | Remitente: ${campaign.sender_key} | Estado: ${campaign.status}`,
+      `- Cola: ${counts.queued || 0} | Listos ahora: ${(counts.due || 0) + (counts.followups_due || 0)} | Proximo envio: ${counts.next_scheduled_at || "sin pendientes"}`,
+      `- Total enviados: ${counts.sent || 0} | Follow-ups: ${counts.followups_sent || 0} | Respuestas: ${counts.replied || 0}`,
+      `- Tracking total: entregados ${counts.delivered || 0}, abiertos ${counts.opened || 0}, clics ${counts.clicked || 0}, rebotes ${counts.bounced || 0}, errores ${counts.failed_events || 0}`,
+      `- Ultimas 24h: enviados ${recent.sent}, follow-ups ${recent.followups_sent}, entregados ${recent.delivered}, abiertos ${recent.opened}, clics ${recent.clicked}, respuestas ${recent.replied}, rebotes ${recent.bounced}, errores ${recent.failed}`
+    );
+  }
+
+  lines.push("", "Este correo fue generado automaticamente por Tecnotitan CRM.");
+  return lines.join("\n");
+}
+
+async function sendDailyCampaignReport() {
+  const user = systemCampaignUser();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const campaigns = await listCampaigns(user);
+  const warmups = await listWarmups(user);
+  const [{ payload: recentRecipients }, { payload: apolloLogs }] = await Promise.all([
+    supabaseFetch(
+      `/email_campaign_recipients?select=campaign_id,status,sent_at,last_followup_sent_at,delivered_at,opened_at,clicked_at,bounced_at,failed_at,complained_at,reply_received_at,updated_at&updated_at=gte.${encodeURIComponent(since)}&limit=10000`
+    ),
+    supabaseFetch(`/apollo_sync_logs?select=operation,credits_used,created_at&created_at=gte.${encodeURIComponent(since)}&limit=10000`),
+  ]);
+  const recentByCampaign = countRecentCampaignActivity(recentRecipients || [], since);
+  const text = buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs: apolloLogs || [], sinceIso: since });
+  const message = await sendEmail(user, {
+    sender_key: "consulting",
+    to: "info@tecnotitan.com",
+    subject: `Reporte diario de campanas Tecnotitan - ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`,
+    text,
+  });
+  return { ok: true, to: "info@tecnotitan.com", campaigns: campaigns.length, message_id: message.provider_message_id || message.id || null };
+}
+
 async function sendEmail(user, body) {
   let opportunity = await loadOpportunity(body.opportunity_id, user);
   const to = cleanEmailList(body.to || opportunity?.contacts?.email);
@@ -1523,6 +1665,19 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json(await processDueCampaigns());
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && req.query.cron === "campaign_report") {
+    try {
+      if (!isAuthorizedCron(req)) {
+        res.status(401).json({ error: "Cron no autorizado." });
+        return;
+      }
+      res.status(200).json(await sendDailyCampaignReport());
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
