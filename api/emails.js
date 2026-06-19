@@ -892,10 +892,68 @@ const INVESTOR_LANGUAGE_TEMPLATES = {
   },
 };
 
+const INVESTOR_SEGMENT_TEMPLATES = {
+  usa_vcs: {
+    en: {
+      subject: "Tecnotitan | AI implementation platform for LATAM",
+      body:
+        "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an AI implementation platform from Colombia for Latin American companies that need working systems, not more strategy decks.\n\nFor venture funds looking at AI infrastructure, vertical SaaS or emerging markets, the wedge is practical: companies across LATAM have fragmented workflows, manual sales operations and pressure to adopt AI without internal product capacity.\n\nTecnotitan starts with paid implementation work, turns repeated use cases into reusable software/IP and compounds toward a regional product platform. That gives us service revenue today and SaaS/licensing upside as patterns repeat.\n\nWe are raising a US$500K pre-seed to fund 18 months of paid pilots, product engineering and a repeatable AI delivery platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought this could fit your view on AI adoption and software infrastructure in under-digitized markets.\n\nIf relevant, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+    },
+    es: {
+      subject: "Tecnotitan | IA aplicada y software para LATAM",
+      body:
+        "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una plataforma de implementacion de IA desde Colombia para empresas latinoamericanas que necesitan sistemas funcionando, no mas consultoria teorica.\n\nPara fondos venture que miran IA, vertical SaaS o mercados emergentes, la entrada es concreta: companias con procesos comerciales manuales, datos dispersos y presion por adoptar IA sin capacidad interna de producto.\n\nTecnotitan empieza con implementaciones pagas, convierte casos repetidos en software/IP reutilizable y compone hacia una plataforma regional. Eso nos da ingresos por servicio hoy y upside SaaS/licenciamiento manana.\n\nEstamos levantando US$500K pre-seed para financiar 18 meses de pilotos pagos, ingenieria de producto y una plataforma repetible de delivery de IA.\n\nVi tu relacion con {{industria}} en {{pais}} y pense que podria encajar con una tesis sobre adopcion de IA e infraestructura de software en mercados subdigitalizados.\n\nSi es relevante, con gusto puedo enviarte el deck o coordinar una conversacion de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+    pt: {
+      subject: "Tecnotitan | IA aplicada e software para LATAM",
+      body:
+        "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo uma plataforma de implementacao de IA a partir da Colombia para empresas latino-americanas que precisam de sistemas funcionando, nao apenas consultoria teorica.\n\nPara fundos venture olhando IA, vertical SaaS ou mercados emergentes, a entrada e concreta: empresas com operacoes comerciais manuais, dados fragmentados e pressao para adotar IA sem capacidade interna de produto.\n\nA Tecnotitan comeca com implementacoes pagas, transforma casos repetidos em software/IP reutilizavel e evolui para uma plataforma regional. Isso gera receita de servicos hoje e potencial SaaS/licenciamento amanha.\n\nEstamos captando US$500K pre-seed para financiar 18 meses de pilotos pagos, engenharia de produto e uma plataforma repetivel de delivery de IA.\n\nVi sua conexao com {{industria}} em {{pais}} e pensei que isso poderia se encaixar em uma tese sobre adocao de IA e infraestrutura de software em mercados pouco digitalizados.\n\nSe fizer sentido, ficarei feliz em enviar o deck ou agendar uma conversa de 20 minutos.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+  },
+  usa_angels: {
+    en: {
+      subject: "Tecnotitan | early AI implementation opportunity",
+      body:
+        "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building from Colombia at the intersection of practical AI, internal software and commercial automation for companies in Latin America.\n\nI am reaching out because angel investors often care about the founder-market fit and the early wedge. Ours is hands-on: we sell and implement real systems for companies now, learn from repeated operational pain and turn those patterns into reusable products.\n\nThe opportunity is to become the trusted AI implementation layer for businesses that cannot hire full product/AI teams but urgently need automation, integrations and better operating data.\n\nWe are raising a US$500K pre-seed to move from paid implementation work into a repeatable product platform.\n\nIf this is close to your interests, I would be glad to share the deck or have a short conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+    },
+    es: {
+      subject: "Tecnotitan | oportunidad temprana en IA aplicada",
+      body:
+        "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo desde Colombia en la interseccion de IA practica, software interno y automatizacion comercial para empresas en America Latina.\n\nTe escribo porque los angel investors suelen mirar muy bien el founder-market fit y la entrada inicial. La nuestra es directa: vendemos e implementamos sistemas reales para empresas hoy, aprendemos de dolores operativos repetidos y convertimos esos patrones en productos reutilizables.\n\nLa oportunidad es convertirnos en la capa confiable de implementacion de IA para negocios que no pueden contratar equipos completos de producto/IA, pero necesitan automatizacion, integraciones y mejores datos operativos.\n\nEstamos levantando US$500K pre-seed para pasar de implementaciones pagas a una plataforma de producto repetible.\n\nSi esta cerca de tus intereses, con gusto puedo compartir el deck o tener una conversacion corta.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+    pt: {
+      subject: "Tecnotitan | oportunidade inicial em IA aplicada",
+      body:
+        "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo a partir da Colombia na intersecao entre IA pratica, software interno e automacao comercial para empresas na America Latina.\n\nEscrevo porque angel investors geralmente valorizam founder-market fit e a entrada inicial. A nossa e direta: vendemos e implementamos sistemas reais hoje, aprendemos com dores operacionais recorrentes e transformamos esses padroes em produtos reutilizaveis.\n\nA oportunidade e nos tornarmos a camada confiavel de implementacao de IA para empresas que nao conseguem contratar times completos de produto/IA, mas precisam de automacao, integracoes e melhores dados operacionais.\n\nEstamos captando US$500K pre-seed para evoluir de implementacoes pagas para uma plataforma de produto repetivel.\n\nSe estiver perto dos seus interesses, ficarei feliz em compartilhar o deck ou ter uma conversa curta.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+  },
+  strategic_investors: {
+    en: {
+      subject: "Tecnotitan | strategic AI implementation layer for LATAM",
+      body:
+        "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an AI implementation and software platform for Latin American companies that need to modernize operations without building large internal product teams.\n\nFor a strategic investor, the angle is not only financial. Tecnotitan can become a regional implementation layer: CRM, sales automation, integrations, data workflows and AI tools that convert operational friction into measurable systems.\n\nWe start through paid projects, capture repeatable use cases and build reusable IP around sectors, workflows and AI delivery. That creates potential strategic value for partners with exposure to SMEs, B2B services, enterprise software or digital transformation.\n\nWe are raising a US$500K pre-seed to finance pilots, product engineering and a repeatable delivery platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought a strategic conversation could be useful.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+    },
+    es: {
+      subject: "Tecnotitan | capa estrategica de IA para LATAM",
+      body:
+        "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una plataforma de implementacion de IA y software para empresas latinoamericanas que necesitan modernizar operaciones sin crear grandes equipos internos de producto.\n\nPara un inversionista estrategico, el angulo no es solo financiero. Tecnotitan puede convertirse en una capa regional de implementacion: CRM, automatizacion comercial, integraciones, flujos de datos y herramientas de IA que convierten friccion operativa en sistemas medibles.\n\nEmpezamos con proyectos pagos, capturamos casos de uso repetibles y construimos IP alrededor de sectores, workflows y delivery de IA. Eso puede tener valor estrategico para aliados con exposicion a pymes, servicios B2B, software empresarial o transformacion digital.\n\nEstamos levantando US$500K pre-seed para financiar pilotos, ingenieria de producto y una plataforma de delivery repetible.\n\nVi tu relacion con {{industria}} en {{pais}} y pense que una conversacion estrategica podria tener sentido.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+    pt: {
+      subject: "Tecnotitan | camada estrategica de IA para LATAM",
+      body:
+        "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo uma plataforma de implementacao de IA e software para empresas latino-americanas que precisam modernizar operacoes sem criar grandes equipes internas de produto.\n\nPara um investidor estrategico, o angulo nao e apenas financeiro. A Tecnotitan pode se tornar uma camada regional de implementacao: CRM, automacao comercial, integracoes, fluxos de dados e ferramentas de IA que transformam friccao operacional em sistemas mensuraveis.\n\nComecamos com projetos pagos, capturamos casos de uso repetiveis e construimos IP em torno de setores, workflows e delivery de IA. Isso pode ter valor estrategico para parceiros com exposicao a PMEs, servicos B2B, software empresarial ou transformacao digital.\n\nEstamos captando US$500K pre-seed para financiar pilotos, engenharia de produto e uma plataforma de delivery repetivel.\n\nVi sua conexao com {{industria}} em {{pais}} e pensei que uma conversa estrategica poderia fazer sentido.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+    },
+  },
+};
+
+INVESTOR_SEGMENT_TEMPLATES.europe_funds = INVESTOR_SEGMENT_TEMPLATES.usa_vcs;
+INVESTOR_SEGMENT_TEMPLATES.latam_investors = INVESTOR_SEGMENT_TEMPLATES.usa_vcs;
+
 function localizedCampaignTemplate(campaign, data, field) {
   if (campaign.campaign_type !== "investor") return campaign[field];
   const language = leadLanguage(data);
-  const variant = INVESTOR_LANGUAGE_TEMPLATES[language] || INVESTOR_LANGUAGE_TEMPLATES.en;
+  const segmentTemplates = INVESTOR_SEGMENT_TEMPLATES[campaign.segment_key] || null;
+  const variant = segmentTemplates?.[language] || INVESTOR_LANGUAGE_TEMPLATES[language] || INVESTOR_LANGUAGE_TEMPLATES.en;
   if (field === "subject_template") return variant.subject;
   if (field === "body_template") return variant.body;
   return campaign[field];

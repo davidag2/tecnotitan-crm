@@ -238,6 +238,33 @@ const MESSAGE_TEMPLATES = [
       "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo uma empresa de tecnologia aplicada a partir da Colombia para companhias que precisam implementar IA de forma pratica, nao apenas discutir ideias.\n\nO problema que vemos na America Latina e claro: processos manuais, dados dispersos, pressao para adotar IA e equipes sem capacidade interna para transformar ideias em produtos funcionando.\n\nA Tecnotitan entra por dores operacionais reais. Diagnosticamos, construimos, implementamos e depois transformamos casos recorrentes em propriedade intelectual, conhecimento setorial e playbooks operacionais. O modelo combina receita de servicos hoje e software/licenciamento escalavel amanha.\n\nEstamos captando uma rodada pre-seed de US$500K para financiar 18 meses de pilotos pagos, engenharia de produto, delivery de IA e uma plataforma repetivel.\n\nVi sua conexao com {{industria}} em {{pais}} e pensei que a Tecnotitan poderia ser relevante para sua tese em IA, infraestrutura de software e mercados emergentes.\n\nSe isso estiver proximo do seu foco de investimento, ficarei feliz em enviar o deck ou agendar uma conversa de 20 minutos.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
   },
   {
+    id: "investors-vc-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Investors - VC thesis EN",
+    subject: "Tecnotitan | AI implementation platform for LATAM",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an AI implementation platform from Colombia for Latin American companies that need working systems, not more strategy decks.\n\nFor venture funds looking at AI infrastructure, vertical SaaS or emerging markets, the wedge is practical: companies across LATAM have fragmented workflows, manual sales operations and pressure to adopt AI without internal product capacity.\n\nTecnotitan starts with paid implementation work, turns repeated use cases into reusable software/IP and compounds toward a regional product platform. That gives us service revenue today and SaaS/licensing upside as patterns repeat.\n\nWe are raising a US$500K pre-seed to fund 18 months of paid pilots, product engineering and a repeatable AI delivery platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought this could fit your view on AI adoption and software infrastructure in under-digitized markets.\n\nIf relevant, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
+    id: "investors-angel-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Investors - angel angle EN",
+    subject: "Tecnotitan | early AI implementation opportunity",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building from Colombia at the intersection of practical AI, internal software and commercial automation for companies in Latin America.\n\nI am reaching out because angel investors often care about the founder-market fit and the early wedge. Ours is hands-on: we sell and implement real systems for companies now, learn from repeated operational pain and turn those patterns into reusable products.\n\nThe opportunity is to become the trusted AI implementation layer for businesses that cannot hire full product/AI teams but urgently need automation, integrations and better operating data.\n\nWe are raising a US$500K pre-seed to move from paid implementation work into a repeatable product platform.\n\nIf this is close to your interests, I would be glad to share the deck or have a short conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
+    id: "investors-strategic-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Investors - strategic angle EN",
+    subject: "Tecnotitan | strategic AI implementation layer for LATAM",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an AI implementation and software platform for Latin American companies that need to modernize operations without building large internal product teams.\n\nFor a strategic investor, the angle is not only financial. Tecnotitan can become a regional implementation layer: CRM, sales automation, integrations, data workflows and AI tools that convert operational friction into measurable systems.\n\nWe start through paid projects, capture repeatable use cases and build reusable IP around sectors, workflows and AI delivery. That creates potential strategic value for partners with exposure to SMEs, B2B services, enterprise software or digital transformation.\n\nWe are raising a US$500K pre-seed to finance pilots, product engineering and a repeatable delivery platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought a strategic conversation could be useful.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  {
     id: "investors-english-followup-1",
     category: "seguimiento",
     channel: "Email",
@@ -1367,7 +1394,14 @@ function applyCampaignSegmentDefaults() {
 }
 
 function defaultCampaignTemplate(type) {
-  const templateId = type === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
+  const segmentTemplateMap = {
+    usa_vcs: "investors-vc-email-1",
+    europe_funds: "investors-vc-email-1",
+    latam_investors: "investors-vc-email-1",
+    usa_angels: "investors-angel-email-1",
+    strategic_investors: "investors-strategic-email-1",
+  };
+  const templateId = type === "investor" ? segmentTemplateMap[elements.campaignSegment?.value] || "investors-english-email-1" : "consultoria-latam-email-1";
   const template = MESSAGE_TEMPLATES.find((item) => item.id === templateId);
   return { subject: template?.subject || "", body: template?.body || "" };
 }
@@ -1375,7 +1409,6 @@ function defaultCampaignTemplate(type) {
 function applyCampaignDefaults(force = false) {
   if (!elements.campaignType) return;
   renderCampaignTemplateOptions();
-  const template = defaultCampaignTemplate(elements.campaignType.value);
   if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
   if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
   if (force && elements.campaignSegment) {
@@ -1390,6 +1423,7 @@ function applyCampaignDefaults(force = false) {
   if (elements.campaignAttachDeck && force) {
     elements.campaignAttachDeck.checked = false;
   }
+  const template = defaultCampaignTemplate(elements.campaignType.value);
   if (force || !elements.campaignSubject.value.trim()) elements.campaignSubject.value = template.subject;
   if (force || !elements.campaignBody.value.trim()) elements.campaignBody.value = template.body;
 }
@@ -3573,7 +3607,12 @@ elements.emailSender.addEventListener("change", () => {
 elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.refreshEmailButton.addEventListener("click", refreshEmails);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
-elements.campaignSegment?.addEventListener("change", applyCampaignSegmentDefaults);
+elements.campaignSegment?.addEventListener("change", () => {
+  applyCampaignSegmentDefaults();
+  const template = defaultCampaignTemplate(elements.campaignType.value);
+  elements.campaignSubject.value = template.subject;
+  elements.campaignBody.value = template.body;
+});
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
 elements.addExclusionButton.addEventListener("click", addExclusion);
