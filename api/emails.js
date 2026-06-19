@@ -1113,11 +1113,26 @@ async function leadInventory(user) {
   };
 }
 
+function campaignLeadRegions(campaignType, targetRegion) {
+  if (campaignType !== "investor") return ["latam"];
+  const regions = ["usa", "latam", "europe"];
+  if (!targetRegion) return regions;
+  return [targetRegion, ...regions.filter((region) => region !== targetRegion)];
+}
+
+function regionFilter(regions) {
+  const cleanRegions = [...new Set((regions || []).filter(Boolean))];
+  if (!cleanRegions.length) return "";
+  if (cleanRegions.length === 1) return `target_region=eq.${encodeURIComponent(cleanRegions[0])}`;
+  return `target_region=in.(${cleanRegions.map((region) => encodeURIComponent(region)).join(",")})`;
+}
+
 async function campaignLeadPool(campaignType, targetRegion) {
+  const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
     "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
-    targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
+    regionFilter(regions),
     "deleted_at=is.null",
     "order=score.desc",
     "limit=500",
@@ -1141,10 +1156,11 @@ function hasContactTag(contact, name) {
 }
 
 async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, limit = 100) {
+  const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
     "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
-    targetRegion ? `target_region=eq.${encodeURIComponent(targetRegion)}` : "",
+    regionFilter(regions),
     "deleted_at=is.null",
     "order=score.desc",
     `limit=${limit}`,
@@ -1216,25 +1232,36 @@ async function revealCampaignLeadEmail(opportunity) {
   return updatedContact.email ? { ...opportunity, contacts: updatedContact } : null;
 }
 
-function campaignTemplateKey(campaignType, targetRegion) {
-  if (campaignType === "investor") {
-    if (targetRegion === "europe") return "investor:europe";
-    if (targetRegion === "latam") return "investor:latam";
-    return "investor:usa";
+function campaignTemplateKeys(campaignType, targetRegion) {
+  if (campaignType !== "investor") return ["consulting_client:latam"];
+  const byRegion = {
+    usa: ["investor:usa", "investor:usa_vc", "investor:usa_angels", "investor:usa_family_offices", "investor:usa_accelerators"],
+    latam: ["investor:latam", "investor:latam_angels", "investor:latam_accelerators"],
+    europe: ["investor:europe", "investor:europe_angels", "investor:europe_family_offices", "investor:europe_accelerators"],
+  };
+  const groups = campaignLeadRegions(campaignType, targetRegion).map((region) => byRegion[region] || []).filter((group) => group.length);
+  const interleaved = [];
+  const maxLength = Math.max(...groups.map((group) => group.length));
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const group of groups) {
+      if (group[index]) interleaved.push(group[index]);
+    }
   }
-  return "consulting_client:latam";
+  return interleaved;
 }
 
 async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCount) {
   let pool = await campaignLeadPool(campaignType, targetRegion);
   let searches = 0;
+  const templateKeys = campaignTemplateKeys(campaignType, targetRegion);
   const maxSearches = Math.min(40, Math.ceil(Math.max(0, desiredCount - pool.length) / 25));
   while (pool.length < desiredCount && searches < maxSearches) {
+    const templateKey = templateKeys[searches % templateKeys.length] || "consulting_client:latam";
     searches += 1;
     await runApolloSearch(user, {
-      template_key: campaignTemplateKey(campaignType, targetRegion),
+      template_key: templateKey,
       per_page: 25,
-      name: `Auto campana ${campaignType} ${targetRegion || ""}`.trim(),
+      name: `Auto campana ${campaignType} ${targetRegion || "multi-region"} ${templateKey}`.trim(),
     });
     pool = await campaignLeadPool(campaignType, targetRegion);
   }
