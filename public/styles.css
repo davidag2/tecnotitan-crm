@@ -350,7 +350,8 @@ small {
   text-transform: uppercase;
 }
 
-.apollo-performance {
+.apollo-performance,
+.origami-performance {
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid var(--line);
@@ -424,6 +425,10 @@ small {
 
 .performance-row.template-row {
   grid-template-columns: minmax(190px, 1.5fr) repeat(2, minmax(92px, 0.75fr));
+}
+
+.performance-row.origami-performance-row {
+  grid-template-columns: minmax(190px, 1.45fr) repeat(3, minmax(86px, 0.75fr));
 }
 
 .performance-row span {

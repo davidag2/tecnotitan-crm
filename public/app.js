@@ -12,6 +12,7 @@ const state = {
   leadInventory: null,
   emailStatus: null,
   origamiConfigured: false,
+  origamiPerformance: null,
   origamiPollTimer: null,
   origamiPollAttempts: 0,
   origamiPeopleSearches: [],
@@ -53,6 +54,7 @@ const elements = {
   apolloPerformance: document.querySelector("#apollo-performance"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
   origamiConfigStatus: document.querySelector("#origami-config-status"),
+  origamiPerformance: document.querySelector("#origami-performance"),
   origamiPersonName: document.querySelector("#origami-person-name"),
   origamiPersonCompany: document.querySelector("#origami-person-company"),
   origamiPersonLinkedin: document.querySelector("#origami-person-linkedin"),
@@ -673,6 +675,107 @@ function renderApolloPerformance(data) {
         </div>
         <p class="performance-note">Mejor plantilla actual: ${escapeHtml(bestTemplate)}.</p>
       </article>
+    </div>
+  `;
+}
+
+function performanceTable(title, rows, firstColumn = "Dimension") {
+  const body = rows?.length
+    ? rows
+        .map(
+          (row) => `
+            <div class="performance-row origami-performance-row">
+              <span>${escapeHtml(row.label)}</span>
+              <span>${formatMetricNumber(row.sent)}</span>
+              <span>${formatMetricNumber(row.replies)} / ${formatMetricNumber(row.reply_rate, "%")}</span>
+              <span>${formatMetricNumber(row.bounced)} / ${formatMetricNumber(row.bounce_rate, "%")}</span>
+            </div>
+          `
+        )
+        .join("")
+    : `<p class="empty">Todavia no hay datos suficientes.</p>`;
+  return `
+    <article>
+      <h4>${escapeHtml(title)}</h4>
+      <div class="performance-table">
+        <div class="performance-row performance-head origami-performance-row">
+          <span>${escapeHtml(firstColumn)}</span>
+          <span>Enviados</span>
+          <span>Respuestas</span>
+          <span>Rebotes</span>
+        </div>
+        ${body}
+      </div>
+    </article>
+  `;
+}
+
+function renderOrigamiPerformance(data = state.origamiPerformance) {
+  if (!elements.origamiPerformance) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.origamiPerformance.innerHTML = "";
+    return;
+  }
+  if (!data) {
+    elements.origamiPerformance.innerHTML = `<p class="empty">No hay datos de performance Origami disponibles.</p>`;
+    return;
+  }
+
+  const sinceLabel = data.since ? new Date(data.since).toLocaleDateString("es-CO", { month: "short", day: "numeric" }) : "ultimos 90 dias";
+  const bestFit = data.by_cold_email_fit?.[0]?.label || "Sin ganador";
+  const bestChannel = data.by_recommended_channel?.[0]?.label || "Sin ganador";
+  const bestCountry = data.by_country?.[0]?.label || "Sin ganador";
+  const coverage = data.coverage || {};
+  const totals = data.totals || {};
+
+  elements.origamiPerformance.innerHTML = `
+    <div class="performance-title">
+      <div>
+        <h3>Panel de performance Origami</h3>
+        <p>Desde ${sinceLabel}: respuestas por cold email fit, canal recomendado, pais, segmento y plantilla.</p>
+      </div>
+      <span>90 dias</span>
+    </div>
+    <div class="executive-summary performance-kpis">
+      <article>
+        <span>Leads analizadas</span>
+        <strong>${formatMetricNumber(coverage.analyzed)} / ${formatMetricNumber(coverage.opportunities)}</strong>
+      </article>
+      <article>
+        <span>Cobertura Origami</span>
+        <strong>${formatMetricNumber(coverage.analyzed_rate, "%")}</strong>
+      </article>
+      <article>
+        <span>Enviados con Origami</span>
+        <strong>${formatMetricNumber(coverage.sent_with_origami)}</strong>
+      </article>
+      <article>
+        <span>Respuesta total</span>
+        <strong>${formatMetricNumber(totals.reply_rate, "%")}</strong>
+      </article>
+      <article>
+        <span>Mejor fit</span>
+        <strong>${escapeHtml(bestFit)}</strong>
+      </article>
+      <article>
+        <span>Mejor canal</span>
+        <strong>${escapeHtml(bestChannel)}</strong>
+      </article>
+      <article>
+        <span>Mejor pais</span>
+        <strong>${escapeHtml(bestCountry)}</strong>
+      </article>
+      <article>
+        <span>Revision manual</span>
+        <strong>${formatMetricNumber(coverage.manual_review)}</strong>
+      </article>
+    </div>
+    <div class="performance-grid origami-performance-grid">
+      ${performanceTable("Por cold email fit", data.by_cold_email_fit, "Fit")}
+      ${performanceTable("Por canal recomendado", data.by_recommended_channel, "Canal")}
+      ${performanceTable("Por pais", data.by_country, "Pais")}
+      ${performanceTable("Por segmento", data.by_segment, "Segmento")}
+      ${performanceTable("Por plantilla", data.by_template, "Plantilla")}
     </div>
   `;
 }
@@ -4204,7 +4307,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs, origamiPerformance] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -4216,6 +4319,7 @@ async function loadPrivateData() {
       api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
       api("/api/origami-search").catch(() => ({ searches: [] })),
       api("/api/origami-jobs").catch(() => ({ searches: [] })),
+      api("/api/origami-performance").catch(() => null),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -4228,6 +4332,7 @@ async function loadPrivateData() {
     state.leadInventory = inventory.inventory || null;
     state.origamiPeopleSearches = origamiSearches.searches || [];
     state.origamiJobSearches = origamiJobs.searches || [];
+    state.origamiPerformance = origamiPerformance;
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -4245,6 +4350,7 @@ async function loadPrivateData() {
     renderLeadInventory(state.leadInventory);
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
+    renderOrigamiPerformance(state.origamiPerformance);
     renderOrigamiPeopleSearches();
     renderOrigamiJobSearches();
     applyRoleVisibility();
