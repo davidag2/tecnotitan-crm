@@ -2681,6 +2681,33 @@ button.danger {
   color: var(--muted);
 }
 
+.origami-pitch-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #b7eadf;
+  border-radius: 8px;
+  background: #f0fbf8;
+}
+
+.origami-pitch-box p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.origami-pitch-box a,
+.origami-search-card a {
+  color: var(--green);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.origami-pitch-box a:hover,
+.origami-search-card a:hover {
+  text-decoration: underline;
+}
+
 .origami-detail-header {
   display: flex;
   justify-content: space-between;

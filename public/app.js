@@ -766,8 +766,12 @@ function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
                 </div>
                 <div class="origami-search-meta">
                   <span>Pitch email: ${escapeHtml(profile.official_pitch_email || "No encontrado")}</span>
+                  <span>Alias: ${escapeHtml(profile.pitch_email_alias_type || "unknown")}</span>
+                  <span>Canal pitch: ${escapeHtml(profile.official_pitch_channel || "unknown")}</span>
                   <span>Politica: ${escapeHtml(profile.pitch_policy || "unknown")}</span>
                 </div>
+                ${profile.official_pitch_url ? `<small>Fuente pitch: <a href="${attr(profile.official_pitch_url)}" target="_blank" rel="noopener">Abrir fuente oficial</a></small>` : ""}
+                ${profile.pitch_detection_evidence ? `<small>Evidencia pitch: ${escapeHtml(profile.pitch_detection_evidence)}</small>` : ""}
                 ${profile.personalization_angle ? `<small>Angulo: ${escapeHtml(profile.personalization_angle)}</small>` : ""}
                 ${signals.length ? `<ul>${signals.slice(0, 4).map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>` : ""}
                 ${risks.length ? `<small>Riesgos: ${risks.map(escapeHtml).join(" | ")}</small>` : ""}
@@ -815,6 +819,11 @@ function copyOrigamiPeopleSearch(id) {
     `Fit: ${profile.fit_for_tecnotitan || "unknown"}`,
     `Cold email fit: ${profile.cold_email_fit || "unknown"}`,
     `Pitch email: ${profile.official_pitch_email || ""}`,
+    `Canal pitch: ${profile.official_pitch_channel || "unknown"}`,
+    `Politica pitch: ${profile.pitch_policy || "unknown"}`,
+    `Alias pitch: ${profile.pitch_email_alias_type || "unknown"}`,
+    `Fuente pitch: ${profile.official_pitch_url || ""}`,
+    `Evidencia pitch: ${profile.pitch_detection_evidence || ""}`,
     `Canal recomendado: ${profile.recommended_channel || ""}`,
     `Angulo: ${profile.personalization_angle || ""}`,
     draft.recommended_subject ? `Asunto: ${draft.recommended_subject}` : "",
@@ -2908,6 +2917,9 @@ function origamiStatusLabel(status) {
 function renderOrigamiSignals(profile) {
   const signals = Array.isArray(profile?.signals) ? profile.signals : [];
   const risks = Array.isArray(profile?.risks) ? profile.risks : [];
+  const pitchSource = profile?.official_pitch_url
+    ? `<a href="${attr(profile.official_pitch_url)}" target="_blank" rel="noopener">Abrir fuente</a>`
+    : "Sin fuente";
   return `
     <div class="origami-signal-grid">
       <article>
@@ -2918,6 +2930,27 @@ function renderOrigamiSignals(profile) {
         <strong>Canal recomendado</strong>
         <span>${escapeHtml(profile?.recommended_channel || "manual_review")}</span>
       </article>
+      <article>
+        <strong>Email oficial pitch</strong>
+        <span>${escapeHtml(profile?.official_pitch_email || "No encontrado")}</span>
+      </article>
+      <article>
+        <strong>Politica pitch</strong>
+        <span>${escapeHtml(profile?.pitch_policy || "unknown")}</span>
+      </article>
+    </div>
+    <div class="origami-pitch-box">
+      <strong>Canal oficial para pitch</strong>
+      <div class="origami-search-meta">
+        <span>Canal: ${escapeHtml(profile?.official_pitch_channel || "unknown")}</span>
+        <span>Alias: ${escapeHtml(profile?.pitch_email_alias_type || "unknown")}</span>
+        <span>Fuente: ${pitchSource}</span>
+      </div>
+      ${
+        profile?.pitch_detection_evidence
+          ? `<p>${escapeHtml(profile.pitch_detection_evidence)}</p>`
+          : `<p class="empty">Origami no encontro evidencia publica suficiente para un canal oficial.</p>`
+      }
     </div>
     <div class="origami-list-block">
       <strong>Senales</strong>
