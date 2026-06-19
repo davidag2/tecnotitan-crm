@@ -2442,7 +2442,7 @@ async function refreshOrigamiSourceSearches(user, limit = 5) {
 
 async function sourceLeadsWithOrigami(user, campaign, body = {}) {
   if (!origamiConfigured()) return { started: false, reason: "ORIGAMI_API_KEY no configurada.", saved: 0 };
-  const targetCount = clampNumber(body.origami_source_count || body.count, 1, 200, 50);
+  const targetCount = clampNumber(body.origami_source_count || body.count, 1, 500, 50);
   const query = String(body.origami_source_query || body.query || "").trim();
   const leadSearch = await insertRow("lead_searches", {
     name: `Origami Warehouse ${campaign.name}`.slice(0, 120),
@@ -2506,11 +2506,14 @@ async function prepareCampaignWarehouse(user, body = {}) {
   requireCampaignAdmin(user);
   const campaignId = String(body.campaign_id || "").trim();
   const targetQueue = clampNumber(body.target_queue || body.target_per_campaign, 1, 1000, 250);
-  const searchBatches = clampNumber(body.search_batches, 0, 10, 2);
+  const sourceMix = String(body.source_mix || "balanced").toLowerCase();
+  const balancedApolloTarget = sourceMix === "balanced" ? Math.floor(targetQueue / 2) : 50;
+  const balancedOrigamiTarget = sourceMix === "balanced" ? targetQueue - balancedApolloTarget : 50;
+  const searchBatches = clampNumber(body.search_batches, 0, 20, Math.ceil(balancedApolloTarget / 25));
   const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
   const analyzeLimit = clampNumber(body.analyze_limit, 0, 25, 10);
   const useOrigamiSourcing = body.origami_sourcing !== false;
-  const origamiSourceCount = clampNumber(body.origami_source_count, 0, 200, 50);
+  const origamiSourceCount = clampNumber(body.origami_source_count, 0, 500, balancedOrigamiTarget);
   const refreshedOrigami = await refreshOrigamiSourceSearches(user, 5).catch(() => []);
   const campaignFilters = [
     "select=*",
@@ -2574,6 +2577,9 @@ async function prepareCampaignWarehouse(user, body = {}) {
       campaign_id: campaign.id,
       name: campaign.name,
       target_queue: targetQueue,
+      source_mix: sourceMix,
+      apollo_target: searchBatches * 25,
+      origami_target: origamiSourceCount,
       searches,
       origami_sourced: origamiSourced,
       origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
@@ -3372,7 +3378,7 @@ module.exports = async function handler(req, res) {
         res.status(401).json({ error: "Cron no autorizado." });
         return;
       }
-      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 250, search_batches: 2, reveal_limit: 25, analyze_limit: 10 }));
+      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 500, source_mix: "balanced", reveal_limit: 25, analyze_limit: 15 }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

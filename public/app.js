@@ -2515,17 +2515,18 @@ async function prepareWarehouse(options = {}) {
       method: "POST",
       body: JSON.stringify({
         action: "prepare_warehouse",
-        target_queue: 250,
-        search_batches: options.origamiOnly ? 0 : 2,
+        target_queue: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
+        source_mix: options.origamiOnly ? "origami" : "balanced",
+        search_batches: options.origamiOnly ? 0 : 10,
         reveal_limit: options.origamiOnly ? 0 : 25,
         analyze_limit: 10,
         origami_sourcing: true,
-        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 50) : 50,
+        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 250,
         origami_source_query: options.origamiOnly ? elements.origamiSourceQuery?.value.trim() : "",
       }),
     });
     const summary = (result.campaigns || [])
-      .map((item) => `${item.name}: ${item.origami_sourced || 0} Origami, +${item.queued_added || 0} en cola, ${item.analyzed || 0} analizadas, ${item.revealed || 0} emails`)
+      .map((item) => `${item.name}: plan ${item.apollo_target || 0} Apollo / ${item.origami_target || 0} Origami, ${item.origami_sourced || 0} guardadas, +${item.queued_added || 0} en cola`)
       .join(" | ");
     if (elements.warehouseStatus) elements.warehouseStatus.textContent = summary || "Warehouse actualizado.";
     const [inventory, campaigns] = await Promise.all([
