@@ -11,6 +11,7 @@ const state = {
   emailWarmups: [],
   leadInventory: null,
   emailStatus: null,
+  origamiConfigured: false,
   emailMailbox: "compose",
   emailSearch: "",
   selectedEmailId: "",
@@ -42,6 +43,7 @@ const elements = {
   executiveWeekly: document.querySelector("#executive-weekly"),
   apolloPerformance: document.querySelector("#apollo-performance"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
+  origamiConfigStatus: document.querySelector("#origami-config-status"),
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
   messageTemplates: document.querySelector("#message-templates"),
@@ -151,6 +153,9 @@ const elements = {
   detailNotesList: document.querySelector("#detail-notes-list"),
   detailPipelineEvents: document.querySelector("#detail-pipeline-events"),
   detailActivities: document.querySelector("#detail-activities"),
+  detailOrigami: document.querySelector("#detail-origami"),
+  analyzeOrigami: document.querySelector("#analyze-origami"),
+  refreshOrigami: document.querySelector("#refresh-origami"),
   detailNoteInput: document.querySelector("#detail-note-input"),
   addDetailNote: document.querySelector("#add-detail-note"),
   companyDetailModal: document.querySelector("#company-detail-modal"),
@@ -1297,6 +1302,13 @@ function renderEmails(messages = state.emailMessages) {
       renderEmails(state.emailMessages);
     });
   });
+}
+
+function switchEmailMailbox(mailbox) {
+  state.emailMailbox = mailbox || "all";
+  state.selectedEmailId = "";
+  state.emailPage = 1;
+  renderEmails(state.emailMessages);
 }
 
 function emailEventLabel(eventType) {
@@ -2496,6 +2508,106 @@ function line(label, value) {
   return `<p><strong>${label}</strong><span>${value || "No disponible"}</span></p>`;
 }
 
+function origamiStatusLabel(status) {
+  const labels = {
+    not_requested: "No analizado",
+    running: "Analizando",
+    completed: "Completado",
+    failed: "Error",
+    needs_input: "Requiere revision",
+  };
+  return labels[status] || status || "No analizado";
+}
+
+function renderOrigamiSignals(profile) {
+  const signals = Array.isArray(profile?.signals) ? profile.signals : [];
+  const risks = Array.isArray(profile?.risks) ? profile.risks : [];
+  return `
+    <div class="origami-signal-grid">
+      <article>
+        <strong>Cold email fit</strong>
+        <span>${escapeHtml(profile?.cold_email_fit || "unknown")}</span>
+      </article>
+      <article>
+        <strong>Canal recomendado</strong>
+        <span>${escapeHtml(profile?.recommended_channel || "manual_review")}</span>
+      </article>
+    </div>
+    <div class="origami-list-block">
+      <strong>Senales</strong>
+      ${
+        signals.length
+          ? `<ul>${signals.map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>`
+          : `<p class="empty">Sin senales registradas todavia.</p>`
+      }
+    </div>
+    <div class="origami-list-block">
+      <strong>Riesgos</strong>
+      ${risks.length ? `<ul>${risks.map((risk) => `<li>${escapeHtml(risk)}</li>`).join("")}</ul>` : `<p class="empty">Sin riesgos detectados.</p>`}
+    </div>
+  `;
+}
+
+function renderOrigamiPanel(opportunity) {
+  if (!elements.detailOrigami) return;
+  const status = opportunity.origami_status || "not_requested";
+  const profile = opportunity.origami_profile || {};
+  const draft = opportunity.origami_email_draft || {};
+  const analyzedAt = opportunity.origami_analyzed_at ? new Date(opportunity.origami_analyzed_at).toLocaleString("es-CO") : "";
+
+  if (elements.analyzeOrigami) {
+    elements.analyzeOrigami.disabled = !state.origamiConfigured || status === "running";
+    elements.analyzeOrigami.textContent = status === "completed" ? "Reanalizar con Origami" : "Analizar con Origami";
+  }
+  if (elements.refreshOrigami) {
+    elements.refreshOrigami.disabled = !state.origamiConfigured || !opportunity.origami_run_id || status !== "running";
+  }
+
+  const draftReady = draft.recommended_subject || draft.email_body || draft.opening_line;
+  elements.detailOrigami.innerHTML = `
+    <div class="origami-status-row">
+      <span class="status-badge">${origamiStatusLabel(status)}</span>
+      ${analyzedAt ? `<small>Ultimo analisis: ${escapeHtml(analyzedAt)}</small>` : ""}
+      ${!state.origamiConfigured ? `<small>Falta ORIGAMI_API_KEY en Vercel.</small>` : ""}
+      ${opportunity.origami_error ? `<small>${escapeHtml(opportunity.origami_error)}</small>` : ""}
+    </div>
+    ${
+      profile.summary || profile.personalization_angle
+        ? `
+          <div class="origami-summary">
+            ${profile.summary ? `<p><strong>Resumen</strong><span>${escapeHtml(profile.summary)}</span></p>` : ""}
+            ${profile.personalization_angle ? `<p><strong>Angulo</strong><span>${escapeHtml(profile.personalization_angle)}</span></p>` : ""}
+            ${profile.cold_email_fit_reason ? `<p><strong>Apertura cold email</strong><span>${escapeHtml(profile.cold_email_fit_reason)}</span></p>` : ""}
+          </div>
+          ${renderOrigamiSignals(profile)}
+        `
+        : `<p class="empty">Todavia no hay inteligencia Origami para esta lead.</p>`
+    }
+    ${
+      draftReady
+        ? `
+          <div class="origami-draft">
+            <strong>Borrador personalizado</strong>
+            ${draft.opening_line ? `<p>${escapeHtml(draft.opening_line)}</p>` : ""}
+            ${draft.recommended_subject ? `<small>Asunto: ${escapeHtml(draft.recommended_subject)}</small>` : ""}
+            ${draft.email_body ? `<pre>${escapeHtml(draft.email_body)}</pre>` : ""}
+            <div class="origami-actions">
+              <button type="button" data-use-origami-draft>Usar en nuevo correo</button>
+              <button class="secondary" type="button" data-copy-origami-draft>Copiar borrador</button>
+            </div>
+          </div>
+        `
+        : ""
+    }
+  `;
+
+  elements.detailOrigami.querySelector("[data-use-origami-draft]")?.addEventListener("click", () => useOrigamiDraft(opportunity));
+  elements.detailOrigami.querySelector("[data-copy-origami-draft]")?.addEventListener("click", () => {
+    const text = [draft.recommended_subject ? `Subject: ${draft.recommended_subject}` : "", draft.email_body || ""].filter(Boolean).join("\n\n");
+    copyValue(text, "Borrador Origami");
+  });
+}
+
 function renderLeadDetail(detail) {
   const opportunity = detail.opportunity;
   const contact = opportunity.contacts || {};
@@ -2592,6 +2704,7 @@ function renderLeadDetail(detail) {
         )
         .join("")
     : `<p class="empty">No hay actividades registradas todavia.</p>`;
+  renderOrigamiPanel(opportunity);
 }
 
 async function openLeadDetail(opportunityId) {
@@ -2853,6 +2966,52 @@ async function addLeadNote() {
   }
 }
 
+function useOrigamiDraft(opportunity) {
+  const contact = opportunity.contacts || {};
+  const draft = opportunity.origami_email_draft || {};
+  const email = contact.email || "";
+  if (elements.emailOpportunity) elements.emailOpportunity.value = opportunity.id;
+  if (elements.emailTo && email) elements.emailTo.value = email;
+  if (elements.emailSubject && draft.recommended_subject) elements.emailSubject.value = draft.recommended_subject;
+  if (elements.emailBody && draft.email_body) elements.emailBody.value = draft.email_body;
+  if (elements.emailSender) elements.emailSender.value = opportunity.lead_type === "investor" ? "investors" : "consulting";
+  closeLeadDetail();
+  activateTab("correos", true);
+  switchEmailMailbox("compose");
+  setStatus("Borrador Origami cargado en Nuevo correo.", "ok");
+}
+
+async function runOrigamiAnalysis(action = "analyze") {
+  if (!activeOpportunityId) return;
+  if (!state.origamiConfigured) {
+    setStatus("Falta ORIGAMI_API_KEY en Vercel para activar Origami.", "warning");
+    return;
+  }
+  const button = action === "refresh" ? elements.refreshOrigami : elements.analyzeOrigami;
+  const originalText = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = action === "refresh" ? "Actualizando..." : "Analizando...";
+  }
+  try {
+    const result = await api(`/api/origami?id=${encodeURIComponent(activeOpportunityId)}`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+    renderLeadDetail({ opportunity: result.opportunity, notes: [], events: [], activities: [], tags: [] });
+    await openLeadDetail(activeOpportunityId);
+    const status = result.opportunity?.origami_status;
+    setStatus(status === "running" ? "Origami esta analizando la lead. Usa Actualizar en unos segundos." : "Inteligencia Origami actualizada.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 async function registerActivity(opportunityId, activityType, button) {
   button.disabled = true;
   const originalText = button.textContent;
@@ -2918,6 +3077,10 @@ async function loadPublicData() {
   const templates = await api("/api/templates");
   const status = templates;
   state.templates = templates.templates;
+  state.origamiConfigured = Boolean(status.origamiConfigured);
+  if (elements.origamiConfigStatus) {
+    elements.origamiConfigStatus.textContent = state.origamiConfigured ? "Origami conectado" : "Origami pendiente";
+  }
   renderTemplates();
   renderMessageTemplates();
 
@@ -3604,6 +3767,8 @@ elements.closeCompanyDetail.addEventListener("click", closeCompanyDetail);
 elements.saveDetail.addEventListener("click", saveLeadDetail);
 elements.saveScoreTags.addEventListener("click", saveScoreTags);
 elements.addDetailNote.addEventListener("click", addLeadNote);
+elements.analyzeOrigami?.addEventListener("click", () => runOrigamiAnalysis("analyze"));
+elements.refreshOrigami?.addEventListener("click", () => runOrigamiAnalysis("refresh"));
 elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", applyLeadFiltersFromFirstPage);
@@ -3614,10 +3779,7 @@ elements.messageTemplateFilter.addEventListener("change", () => {
 });
 elements.emailMailboxButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    state.emailMailbox = button.dataset.emailMailbox || "all";
-    state.selectedEmailId = "";
-    state.emailPage = 1;
-    renderEmails(state.emailMessages);
+    switchEmailMailbox(button.dataset.emailMailbox || "all");
   });
 });
 elements.emailSearch.addEventListener("input", () => {

@@ -2539,6 +2539,129 @@ button.danger {
   font-size: 12px;
 }
 
+.origami-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.origami-overview article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.origami-overview span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.origami-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.origami-detail-header p {
+  margin-top: 4px;
+}
+
+.origami-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.origami-actions button {
+  min-height: 34px;
+}
+
+.origami-status-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.origami-status-row small {
+  color: var(--muted);
+}
+
+.origami-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.origami-summary p {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.origami-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.origami-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.origami-signal-grid article,
+.origami-list-block,
+.origami-draft {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.origami-signal-grid span,
+.origami-list-block li,
+.origami-draft p,
+.origami-draft small {
+  color: var(--muted);
+}
+
+.origami-list-block ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.origami-draft {
+  margin-top: 12px;
+}
+
+.origami-draft pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--text);
+  font: inherit;
+  white-space: pre-wrap;
+}
+
 .detail-score strong {
   display: block;
   font-size: 36px;
@@ -2729,7 +2852,8 @@ li {
   }
 
   .multi-sender-grid,
-  .multi-campaign-summary {
+  .multi-campaign-summary,
+  .origami-overview {
     grid-template-columns: 1fr;
   }
 }
@@ -2923,6 +3047,23 @@ li {
 
   .detail-header {
     display: grid;
+  }
+
+  .origami-detail-header {
+    display: grid;
+  }
+
+  .origami-actions {
+    justify-content: stretch;
+  }
+
+  .origami-actions button {
+    flex: 1 1 auto;
+  }
+
+  .origami-summary p,
+  .origami-signal-grid {
+    grid-template-columns: 1fr;
   }
 }
 

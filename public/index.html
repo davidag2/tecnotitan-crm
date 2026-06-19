@@ -51,6 +51,7 @@
           <a href="#correos" data-tab="correos">Correos</a>
           <a class="admin-only role-hidden" href="#campanas" data-tab="campanas">Campanas</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
+          <a class="admin-only role-hidden" href="#origami" data-tab="origami">Origami</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
           <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
           <a href="#pipeline" data-tab="pipeline">Pipeline</a>
@@ -310,6 +311,27 @@
           <div class="user-list" id="user-list"></div>
         </section>
 
+        <section class="panel admin-only role-hidden tab-panel" id="origami-panel" data-tab-panel="origami">
+          <div class="panel-title">
+            <h2>Inteligencia Origami</h2>
+            <p>Motor de investigacion para detectar senales, cold email fit y redactar correos personalizados.</p>
+          </div>
+          <div class="origami-overview">
+            <article>
+              <strong id="origami-config-status">Origami pendiente</strong>
+              <span>Configura ORIGAMI_API_KEY en Vercel para activar el analisis de leads.</span>
+            </article>
+            <article>
+              <strong>Uso recomendado</strong>
+              <span>Analiza primero leads Hot o inversionistas prioritarios antes de enviarlos a campana.</span>
+            </article>
+            <article>
+              <strong>Senales clave</strong>
+              <span>Apertura a cold email, tesis/foco, empresa, etapa, angulo de personalizacion y riesgo.</span>
+            </article>
+          </div>
+        </section>
+
         <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">
           <div class="panel-title">
             <h2>Plantillas Apollo</h2>
@@ -561,6 +583,20 @@
               <button id="add-detail-note" type="button">Agregar nota</button>
             </div>
           </article>
+
+        <article class="detail-notes">
+          <div class="origami-detail-header">
+            <div>
+              <h3>Inteligencia Origami</h3>
+              <p>Investiga la lead y genera un correo personalizado con senales publicas.</p>
+            </div>
+            <div class="origami-actions">
+              <button id="analyze-origami" type="button">Analizar con Origami</button>
+              <button id="refresh-origami" class="secondary" type="button">Actualizar</button>
+            </div>
+          </div>
+          <div id="detail-origami"></div>
+        </article>
 
         <article class="detail-notes">
           <h3>Historial de pipeline</h3>

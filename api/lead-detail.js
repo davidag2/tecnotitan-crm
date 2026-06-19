@@ -26,7 +26,7 @@ async function firstRow(path) {
 
 async function loadOpportunity(id, user) {
   const filters = [
-    "select=id,lead_type,target_region,pipeline_status,owner_user_id,score,score_label,score_reasons,service_interest,consulting_need,investor_type,investment_stage,investment_thesis,last_activity_at,next_follow_up_at,next_follow_up_type,created_at,contacts(id,full_name,first_name,last_name,title,seniority,email,email_status,phone,mobile_phone,linkedin_url,photo_url,country,city,state,apollo_enrichment_status,apollo_enriched_at,apollo_raw_payload),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,raw_payload)",
+    "select=id,lead_type,target_region,pipeline_status,owner_user_id,score,score_label,score_reasons,service_interest,consulting_need,investor_type,investment_stage,investment_thesis,last_activity_at,next_follow_up_at,next_follow_up_type,created_at,origami_status,origami_agent_id,origami_run_id,origami_table_id,origami_profile,origami_email_draft,origami_analyzed_at,origami_error,contacts(id,full_name,first_name,last_name,title,seniority,email,email_status,phone,mobile_phone,linkedin_url,photo_url,country,city,state,apollo_enrichment_status,apollo_enriched_at,apollo_raw_payload),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,raw_payload)",
     `id=eq.${encodeURIComponent(id)}`,
     "deleted_at=is.null",
     "limit=1",
