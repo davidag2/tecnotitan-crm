@@ -897,9 +897,15 @@ button.danger {
 }
 
 .campaign-status-pill.stopped,
+.campaign-status-pill.archived,
 .campaign-status-pill.completed {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.campaign-status-pill.archived {
+  background: #e5e7eb;
+  color: #374151;
 }
 
 .campaign-control-top {
@@ -1011,6 +1017,10 @@ button.danger {
 
 .campaign-action.stop {
   background: #c24141;
+}
+
+.campaign-action.archive {
+  background: #475569;
 }
 
 .campaign-action.process {

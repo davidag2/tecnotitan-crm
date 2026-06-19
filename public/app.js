@@ -1287,6 +1287,7 @@ function campaignStatusLabel(status) {
     active: "Activa",
     paused: "Pausada",
     stopped: "Detenida",
+    archived: "Archivada",
     completed: "Completada",
   };
   return labels[status] || status || "Sin estado";
@@ -1412,7 +1413,8 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
       const quality = campaignQuality(counts, warmup);
       const canStart = campaign.status === "paused";
       const canPause = campaign.status === "active";
-      const canStop = !["stopped", "completed"].includes(campaign.status);
+      const canStop = !["stopped", "archived", "completed"].includes(campaign.status);
+      const canArchive = !["archived"].includes(campaign.status);
       return `
         <article class="campaign-card campaign-control-card ${quality.tone}">
           <header>
@@ -1442,6 +1444,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <button class="campaign-action start" type="button" data-campaign-status="${campaign.id}" data-next-status="active" ${canStart ? "" : "disabled"}>Iniciar</button>
             <button class="campaign-action pause" type="button" data-campaign-status="${campaign.id}" data-next-status="paused" ${canPause ? "" : "disabled"}>Pausar</button>
             <button class="campaign-action stop" type="button" data-campaign-status="${campaign.id}" data-next-status="stopped" ${canStop ? "" : "disabled"}>Detener</button>
+            <button class="campaign-action archive" type="button" data-campaign-status="${campaign.id}" data-next-status="archived" ${canArchive ? "" : "disabled"}>Archivar</button>
             <button class="campaign-action process" type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
           </div>
           <div class="campaign-health">
@@ -3268,6 +3271,7 @@ async function updateCampaignStatus(campaignId, nextStatus, button) {
     active: "Iniciando...",
     paused: "Pausando...",
     stopped: "Deteniendo...",
+    archived: "Archivando...",
   };
   button.disabled = true;
   button.textContent = labels[nextStatus] || "Actualizando...";

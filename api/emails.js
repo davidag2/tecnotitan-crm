@@ -2008,7 +2008,7 @@ async function updateCampaignStatus(user, body) {
   requireCampaignAdmin(user);
   const campaignId = String(body.campaign_id || "").trim();
   const nextStatus = String(body.status || "").trim().toLowerCase();
-  const allowedStatuses = new Set(["active", "paused", "stopped", "completed"]);
+  const allowedStatuses = new Set(["active", "paused", "stopped", "archived", "completed"]);
   if (!campaignId) throw new Error("Selecciona una campana.");
   if (!allowedStatuses.has(nextStatus)) throw new Error("Estado de campana no permitido.");
 
@@ -2020,6 +2020,9 @@ async function updateCampaignStatus(user, body) {
   }
   if (campaign.status === "stopped" && nextStatus === "active") {
     throw new Error("Una campana detenida no se debe reactivar. Usa pausa si necesitas retomarla despues.");
+  }
+  if (campaign.status === "archived" && nextStatus === "active") {
+    throw new Error("Una campana archivada no se debe reactivar. Crea una nueva campana para continuar.");
   }
 
   await updateRows(
