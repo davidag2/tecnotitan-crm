@@ -1235,9 +1235,9 @@ async function revealCampaignLeadEmail(opportunity) {
 function campaignTemplateKeys(campaignType, targetRegion) {
   if (campaignType !== "investor") return ["consulting_client:latam"];
   const byRegion = {
-    usa: ["investor:usa", "investor:usa_vc", "investor:usa_angels", "investor:usa_family_offices", "investor:usa_accelerators"],
-    latam: ["investor:latam", "investor:latam_angels", "investor:latam_accelerators"],
-    europe: ["investor:europe", "investor:europe_angels", "investor:europe_family_offices", "investor:europe_accelerators"],
+    usa: ["investor:usa:vcs", "investor:usa:angels", "investor:usa_family_offices", "investor:usa_accelerators", "investor:usa"],
+    latam: ["investor:latam:funds", "investor:latam_angels", "investor:latam_accelerators", "investor:latam"],
+    europe: ["investor:europe:vcs", "investor:europe_angels", "investor:europe_family_offices", "investor:europe_accelerators", "investor:europe"],
   };
   const groups = campaignLeadRegions(campaignType, targetRegion).map((region) => byRegion[region] || []).filter((group) => group.length);
   const interleaved = [];

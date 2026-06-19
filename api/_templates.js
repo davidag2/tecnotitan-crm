@@ -55,6 +55,20 @@ const templates = {
       q_keywords: "venture capital SaaS AI B2B",
     },
   },
+  "investor:usa:vcs": {
+    key: "investor:usa:vcs",
+    name: "USA VCs",
+    description: "Estrategia Apollo separada para fondos VC de Estados Unidos.",
+    lead_type: "investor",
+    target_region: "usa",
+    default_per_page: 10,
+    editable_filters: ["person_locations", "person_titles", "q_keywords"],
+    apollo_payload: {
+      person_locations: ["United States"],
+      person_titles: ["Managing Partner", "General Partner", "Founding Partner", "Venture Partner", "Partner", "Principal", "Investment Partner"],
+      q_keywords: "venture capital SaaS AI B2B startup",
+    },
+  },
   "investor:usa_angels": {
     key: "investor:usa_angels",
     name: "USA Angel Investors",
@@ -67,6 +81,20 @@ const templates = {
       person_locations: ["United States"],
       person_titles: ["Angel Investor", "Investor", "Advisor", "Founder", "Operator", "Syndicate Lead"],
       q_keywords: "angel investor startup SaaS AI",
+    },
+  },
+  "investor:usa:angels": {
+    key: "investor:usa:angels",
+    name: "USA Angels",
+    description: "Estrategia Apollo separada para angels, syndicates y operadores en USA.",
+    lead_type: "investor",
+    target_region: "usa",
+    default_per_page: 10,
+    editable_filters: ["person_locations", "person_titles", "q_keywords"],
+    apollo_payload: {
+      person_locations: ["United States"],
+      person_titles: ["Angel Investor", "Investor", "Advisor", "Founder", "Operator", "Syndicate Lead"],
+      q_keywords: "angel investor startup SaaS AI operator",
     },
   },
   "investor:usa_family_offices": {
@@ -111,6 +139,20 @@ const templates = {
       q_keywords: "venture capital",
     },
   },
+  "investor:latam:funds": {
+    key: "investor:latam:funds",
+    name: "LATAM Funds",
+    description: "Estrategia Apollo separada para fondos, partners y investment managers en LATAM.",
+    lead_type: "investor",
+    target_region: "latam",
+    default_per_page: 10,
+    editable_filters: ["person_locations", "person_titles", "q_keywords"],
+    apollo_payload: {
+      person_locations: ["Colombia", "Mexico", "Brazil", "Chile", "Argentina", "Peru", "Uruguay", "Panama"],
+      person_titles: ["Managing Partner", "General Partner", "Partner", "Principal", "Investment Manager", "Investment Director"],
+      q_keywords: "venture capital fund startup technology SaaS",
+    },
+  },
   "investor:latam_angels": {
     key: "investor:latam_angels",
     name: "LATAM Angels",
@@ -151,6 +193,20 @@ const templates = {
       person_locations: ["Spain", "United Kingdom", "Germany", "France", "Netherlands", "Switzerland", "Portugal"],
       person_titles: ["Angel Investor", "Managing Partner", "General Partner", "Venture Partner", "Principal", "Investment Manager"],
       q_keywords: "venture capital",
+    },
+  },
+  "investor:europe:vcs": {
+    key: "investor:europe:vcs",
+    name: "Europe VCs",
+    description: "Estrategia Apollo separada para fondos VC europeos.",
+    lead_type: "investor",
+    target_region: "europe",
+    default_per_page: 10,
+    editable_filters: ["person_locations", "person_titles", "q_keywords"],
+    apollo_payload: {
+      person_locations: ["Spain", "United Kingdom", "Germany", "France", "Netherlands", "Switzerland", "Portugal"],
+      person_titles: ["Managing Partner", "General Partner", "Founding Partner", "Venture Partner", "Partner", "Principal", "Investment Partner"],
+      q_keywords: "venture capital SaaS AI B2B LatAm",
     },
   },
   "investor:europe_angels": {
