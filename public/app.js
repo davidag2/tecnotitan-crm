@@ -123,6 +123,7 @@ const elements = {
   getInvestorLeads: document.querySelector("#get-investor-leads"),
   searchStatus: document.querySelector("#search-status"),
   csvImportFile: document.querySelector("#csv-import-file"),
+  csvImportMode: document.querySelector("#csv-import-mode"),
   csvImportType: document.querySelector("#csv-import-type"),
   csvImportRegion: document.querySelector("#csv-import-region"),
   importCsvButton: document.querySelector("#import-csv-button"),
@@ -2857,13 +2858,14 @@ async function importCsv() {
       method: "POST",
       body: JSON.stringify({
         mode: "csv_import",
+        import_mode: elements.csvImportMode?.value || "general_csv",
         name: file.name,
         lead_type: elements.csvImportType.value,
         target_region: elements.csvImportRegion.value,
         rows,
       }),
     });
-    elements.csvImportStatus.textContent = `Listo: ${result.saved} importados, ${result.skipped} omitidos.`;
+    elements.csvImportStatus.textContent = `Listo: ${result.saved} importados (${result.created || 0} nuevos, ${result.merged || 0} mezclados), ${result.skipped} omitidos.`;
     elements.csvImportFile.value = "";
     await loadPrivateData();
     activateTab("leads", true);
@@ -3254,6 +3256,9 @@ elements.leadCountry.addEventListener("keydown", (event) => {
 });
 elements.getConsultingLeads.addEventListener("click", () => getLeads("consulting_client:latam"));
 elements.getInvestorLeads.addEventListener("click", () => getLeads("investor:usa"));
+elements.csvImportMode?.addEventListener("change", () => {
+  if (elements.csvImportMode.value === "investor_csv") elements.csvImportType.value = "investor";
+});
 elements.importCsvButton.addEventListener("click", importCsv);
 elements.tabs.forEach((tab) => {
   tab.addEventListener("click", (event) => {

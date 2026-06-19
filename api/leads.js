@@ -87,7 +87,7 @@ function rowValue(row, names) {
 }
 
 function companyFromCsv(row) {
-  const name = clean(rowValue(row, ["company", "company_name", "empresa", "organization", "organization_name"]));
+  const name = clean(rowValue(row, ["company", "company_name", "empresa", "organization", "organization_name", "fund", "fund_name", "firm", "firm_name", "fondo"]));
   const domain = cleanLower(rowValue(row, ["domain", "dominio", "company_domain"]));
   if (!name && !domain) return null;
   return {
@@ -141,13 +141,13 @@ async function saveCompany(companyRow) {
 function contactFromCsv(row, companyId) {
   const firstName = clean(rowValue(row, ["first_name", "nombre"]));
   const lastName = clean(rowValue(row, ["last_name", "apellido"]));
-  const fullName = clean(rowValue(row, ["full_name", "name", "nombre_completo"])) || [firstName, lastName].filter(Boolean).join(" ") || null;
+  const fullName = clean(rowValue(row, ["full_name", "name", "nombre_completo", "investor", "investor_name", "contact_name", "partner"])) || [firstName, lastName].filter(Boolean).join(" ") || null;
   return {
     company_id: companyId,
     first_name: firstName,
     last_name: lastName,
     full_name: fullName,
-    title: clean(rowValue(row, ["title", "cargo", "job_title", "position"])),
+    title: clean(rowValue(row, ["title", "cargo", "job_title", "position", "role"])),
     seniority: clean(rowValue(row, ["seniority", "senioridad"])),
     email: cleanLower(rowValue(row, ["email", "correo", "mail"])),
     phone: clean(rowValue(row, ["phone", "telefono"])),
@@ -197,6 +197,13 @@ async function saveContact(contactRow) {
   return insertRow("contacts", contactRow);
 }
 
+async function ensureContactTag(contactId, name, color = "#2563eb") {
+  if (!contactId) return null;
+  const tag = await upsertRow("tags", { name, color }, ["name"]);
+  if (!tag?.id) return null;
+  return upsertRow("contact_tags", { contact_id: contactId, tag_id: tag.id }, ["contact_id", "tag_id"]);
+}
+
 function normalizeLeadType(value, fallback) {
   const text = String(value || fallback || "consulting_client").toLowerCase();
   return text.includes("invest") ? "investor" : "consulting_client";
@@ -209,14 +216,36 @@ function normalizeRegion(value, fallback) {
   return "latam";
 }
 
+function investorTypeFromCsv(row) {
+  const text = rowValue(row, ["investor_type", "type", "tipo_inversionista", "segment", "segmento", "category", "categoria"]);
+  return clean(text);
+}
+
+function investmentStageFromCsv(row) {
+  const text = rowValue(row, ["investment_stage", "stage", "etapa", "focus_stage", "investment_focus_stage"]);
+  return clean(text);
+}
+
+function investmentThesisFromCsv(row) {
+  const pieces = [
+    rowValue(row, ["investment_thesis", "thesis", "tesis", "investment_focus", "focus", "mandate"]),
+    rowValue(row, ["ticket_size", "ticket", "check_size", "cheque"]),
+    rowValue(row, ["geography", "geo", "markets", "market_focus", "region_focus"]),
+    rowValue(row, ["notes", "nota", "notas", "description", "descripcion"]),
+  ].filter(Boolean);
+  return clean(pieces.join(" | "));
+}
+
 async function importCsvRows(rows, body, user) {
   const inputRows = Array.isArray(rows) ? rows.slice(0, 500) : [];
+  const specializedMode = String(body.import_mode || "").trim() === "investor_csv";
+  const defaultLeadType = specializedMode ? "investor" : body.lead_type;
   const leadSearch = await insertRow("lead_searches", {
-    name: body.name || `CSV import ${new Date().toISOString().slice(0, 10)}`,
-    lead_type: normalizeLeadType(body.lead_type),
+    name: body.name || `${specializedMode ? "Investor CSV import" : "CSV import"} ${new Date().toISOString().slice(0, 10)}`,
+    lead_type: normalizeLeadType(defaultLeadType),
     target_region: normalizeRegion(body.target_region),
-    search_template: "csv_import",
-    filters: { source: "csv", rows_received: inputRows.length },
+    search_template: specializedMode ? "investor_csv_import" : "csv_import",
+    filters: { source: "csv", import_mode: specializedMode ? "investor_csv" : "general_csv", rows_received: inputRows.length },
     status: "completed",
     total_entries: inputRows.length,
     pages_requested: 1,
@@ -226,6 +255,8 @@ async function importCsvRows(rows, body, user) {
 
   const saved = [];
   let skipped = 0;
+  let created = 0;
+  let merged = 0;
   for (const [index, row] of inputRows.entries()) {
     const companyRow = companyFromCsv(row);
     const company = await saveCompany(companyRow);
@@ -234,8 +265,12 @@ async function importCsvRows(rows, body, user) {
       skipped += 1;
       continue;
     }
+    const existingContact = await findContact(contactRow);
     const contact = await saveContact(contactRow);
-    const leadType = normalizeLeadType(rowValue(row, ["lead_type", "tipo"]), body.lead_type);
+    if (existingContact) merged += 1;
+    else created += 1;
+    if (specializedMode) await ensureContactTag(contact.id, "Importado CSV inversionistas", "#1f5eff").catch(() => null);
+    const leadType = normalizeLeadType(rowValue(row, ["lead_type", "tipo"]), defaultLeadType);
     const targetRegion = normalizeRegion(rowValue(row, ["target_region", "region"]), body.target_region);
     const score = scoreLead({
       leadType,
@@ -252,6 +287,13 @@ async function importCsvRows(rows, body, user) {
         lead_type: leadType,
         target_region: targetRegion,
         pipeline_status: "nuevo",
+        ...(specializedMode
+          ? {
+              investor_type: investorTypeFromCsv(row),
+              investment_stage: investmentStageFromCsv(row),
+              investment_thesis: investmentThesisFromCsv(row),
+            }
+          : {}),
         ...score,
       },
       ["contact_id", "lead_type", "target_region"]
@@ -270,7 +312,7 @@ async function importCsvRows(rows, body, user) {
   }
 
   await updateRows("lead_searches", { results_saved: saved.length, updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(leadSearch.id)}`);
-  return { lead_search_id: leadSearch.id, received: inputRows.length, saved: saved.length, skipped };
+  return { lead_search_id: leadSearch.id, received: inputRows.length, saved: saved.length, created, merged, skipped };
 }
 
 module.exports = async function handler(req, res) {

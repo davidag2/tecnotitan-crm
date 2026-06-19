@@ -293,6 +293,10 @@
             </div>
             <div class="csv-import-controls">
               <input id="csv-import-file" type="file" accept=".csv,text/csv">
+              <select id="csv-import-mode">
+                <option value="general_csv">CSV general</option>
+                <option value="investor_csv">CSV inversionistas especializado</option>
+              </select>
               <select id="csv-import-type">
                 <option value="consulting_client">Consultoria</option>
                 <option value="investor">Inversionista</option>
@@ -304,7 +308,7 @@
               </select>
               <button id="import-csv-button" type="button">Importar CSV</button>
             </div>
-            <p class="csv-import-help">Columnas sugeridas: full_name, email, title, company, domain, website, linkedin, country, city, industry, phone.</p>
+            <p class="csv-import-help">Columnas generales: full_name, email, title, company, domain, website, linkedin, country, city, industry, phone. Inversionistas: investor, fund, firm, investor_type, thesis, stage, ticket_size, geography, source.</p>
             <span id="csv-import-status"></span>
           </div>
         </section>
