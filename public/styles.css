@@ -21,8 +21,13 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: Segoe UI, Arial, sans-serif;
+  font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.45;
   letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .app-shell {
@@ -506,7 +511,7 @@ button {
   background: var(--accent);
   color: #ffffff;
   font: inherit;
-  font-weight: 800;
+  font-weight: 650;
   cursor: pointer;
 }
 
@@ -518,6 +523,7 @@ button:disabled {
 button.secondary {
   background: #eef2f7;
   color: var(--text);
+  font-weight: 600;
 }
 
 button.danger {
@@ -1426,6 +1432,7 @@ button.danger {
   border-radius: 8px;
   background: #ffffff;
   color: var(--text);
+  font-weight: 400;
   box-shadow: none;
   cursor: pointer;
 }
@@ -1442,6 +1449,13 @@ button.danger {
   display: block;
 }
 
+.email-row strong {
+  color: #101828;
+  font-size: 16px;
+  font-weight: 680;
+  line-height: 1.28;
+}
+
 .email-row-number {
   display: inline-flex !important;
   align-items: center;
@@ -1454,18 +1468,32 @@ button.danger {
   background: var(--blue-soft);
   color: #315f99 !important;
   font-size: 12px !important;
-  font-weight: 900;
+  font-weight: 650;
   vertical-align: middle;
 }
 
 .email-row span {
-  margin-top: 3px;
-  color: var(--text);
+  margin-top: 5px;
+  color: #344054;
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.email-row small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 .email-row p {
-  line-height: 1.45;
+  margin: 4px 0 0;
+  color: #475467;
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 1.55;
 }
 
 .email-detail {
@@ -1900,7 +1928,7 @@ button.danger {
 .client-pagination span {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .client-pagination div {
@@ -1913,6 +1941,7 @@ button.danger {
   min-height: 34px;
   padding: 0 12px;
   font-size: 12px;
+  font-weight: 650;
 }
 
 .status-badge {
