@@ -184,8 +184,17 @@
             <h2>Campanas automaticas</h2>
             <p>Envios controlados por lote, limite diario, ritmo aleatorio y horario laboral por zona horaria.</p>
           </div>
-          <div class="campaign-builder">
-            <div class="campaign-form">
+          <div class="campaign-section-tabs">
+            <button class="active" type="button" data-campaign-section="create">Crear Campana</button>
+            <button type="button" data-campaign-section="inventory">Inventario de Leads</button>
+            <button type="button" data-campaign-section="warmup">Calentamiento por dominio</button>
+            <button type="button" data-campaign-section="manager">Multi campaign manager</button>
+            <button type="button" data-campaign-section="exclusions">Lista global no contactar</button>
+            <button type="button" data-campaign-section="archive">Archivo</button>
+          </div>
+          <div class="campaign-sections">
+            <section class="campaign-section-panel active" data-campaign-section-panel="create">
+              <div class="campaign-form">
               <p class="campaign-note">Cada lead queda programada con separacion aleatoria y horario estrategico local. Vercel Pro revisa la cola cada 5 minutos, respeta inicio, fin, limite diario y maximo total, envia follow-ups a los 3, 7 y 14 dias, y detiene la secuencia cuando la lead responde.</p>
               <p class="campaign-note">Para inversionistas, el CRM adapta el primer correo por pais: ES para LATAM/Espana, EN para USA/Europa no hispana y PT para Brasil/Portugal.</p>
               <input id="campaign-name" type="text" placeholder="Nombre de la campana">
@@ -232,22 +241,32 @@
               <p class="campaign-variables">Variables: {{nombre}}, {{primer_nombre}}, {{empresa}}, {{pais}}, {{ciudad}}, {{industria}}, {{cargo}}, {{tipo_lead}}, {{region}}</p>
               <button id="create-campaign-button" type="button">Crear campana automatica</button>
               <span id="campaign-status"></span>
-            </div>
-            <div class="campaign-side">
+              </div>
+            </section>
+            <section class="campaign-section-panel" data-campaign-section-panel="inventory">
               <div class="lead-inventory-panel">
                 <h3>Inventario de leads</h3>
                 <div id="lead-inventory">
                   <p class="empty">Cargando inventario...</p>
                 </div>
               </div>
+            </section>
+            <section class="campaign-section-panel" data-campaign-section-panel="warmup">
               <div class="warmup-panel">
                 <h3>Calentamiento por dominio</h3>
                 <div id="sender-warmup-list"></div>
               </div>
+            </section>
+            <section class="campaign-section-panel" data-campaign-section-panel="manager">
               <div class="multi-campaign-panel">
                 <h3>Multi-campaign Manager</h3>
                 <div id="multi-campaign-manager"></div>
               </div>
+              <div class="campaign-list" id="campaign-list">
+                <p class="empty">No hay campanas abiertas.</p>
+              </div>
+            </section>
+            <section class="campaign-section-panel" data-campaign-section-panel="exclusions">
               <div class="exclusion-panel">
                 <h3>Lista global no contactar</h3>
                 <input id="exclusion-email" type="email" placeholder="email@empresa.com">
@@ -260,10 +279,15 @@
                 <button id="add-exclusion-button" class="secondary" type="button">Agregar a no contactar</button>
                 <div id="exclusion-list"></div>
               </div>
-              <div class="campaign-list" id="campaign-list">
-                <p class="empty">No hay campanas cargadas.</p>
+            </section>
+            <section class="campaign-section-panel" data-campaign-section-panel="archive">
+              <div class="campaign-archive-panel">
+                <h3>Archivo</h3>
+                <div class="campaign-list" id="campaign-archive-list">
+                  <p class="empty">No hay campanas archivadas.</p>
+                </div>
               </div>
-            </div>
+            </section>
           </div>
         </section>
 

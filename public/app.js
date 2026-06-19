@@ -77,7 +77,10 @@ const elements = {
   campaignBody: document.querySelector("#campaign-body"),
   createCampaignButton: document.querySelector("#create-campaign-button"),
   campaignStatus: document.querySelector("#campaign-status"),
+  campaignSectionButtons: document.querySelectorAll("[data-campaign-section]"),
+  campaignSectionPanels: document.querySelectorAll("[data-campaign-section-panel]"),
   campaignList: document.querySelector("#campaign-list"),
+  campaignArchiveList: document.querySelector("#campaign-archive-list"),
   multiCampaignManager: document.querySelector("#multi-campaign-manager"),
   leadInventory: document.querySelector("#lead-inventory"),
   senderWarmupList: document.querySelector("#sender-warmup-list"),
@@ -1448,106 +1451,129 @@ function applySelectedCampaignTemplate() {
   }
 }
 
+function activateCampaignSection(section = "create") {
+  elements.campaignSectionButtons?.forEach((button) => {
+    button.classList.toggle("active", button.dataset.campaignSection === section);
+  });
+  elements.campaignSectionPanels?.forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.campaignSectionPanel === section);
+  });
+}
+
+function campaignCardHtml(campaign) {
+  const counts = campaign.counts || {};
+  const warmup = state.emailWarmups.find((item) => item.sender_key === campaign.sender_key);
+  const campaignRemaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
+  const remaining = Math.min(campaignRemaining, warmup?.remaining_today ?? campaignRemaining);
+  const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
+  const startAt = campaign.start_at ? new Date(campaign.start_at).toLocaleString("es-CO") : "Inmediato";
+  const endAt = campaign.end_at ? new Date(campaign.end_at).toLocaleString("es-CO") : "Sin fin";
+  const healthItems = campaignHealthItems(campaign, counts, warmup);
+  const progress = campaignProgress(counts, campaign);
+  const quality = campaignQuality(counts, warmup);
+  const canStart = campaign.status === "paused";
+  const canPause = campaign.status === "active";
+  const canStop = !["stopped", "archived", "completed"].includes(campaign.status);
+  const canArchive = !["archived"].includes(campaign.status);
+  return `
+    <article class="campaign-card campaign-control-card ${quality.tone}">
+      <header>
+        <div>
+          <strong>${attr(campaign.name)}</strong>
+          <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaignSegmentLabel(campaign)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"}</small>
+        </div>
+        <span class="campaign-status-pill ${campaign.status}">${campaignStatusLabel(campaign.status)}</span>
+      </header>
+      <div class="campaign-control-top">
+        <div class="campaign-progress-block">
+          <div class="campaign-progress-label">
+            <strong>${progress.sent} de ${progress.objective} correos</strong>
+            <span>${progress.percent}% completado</span>
+          </div>
+          <div class="campaign-progress-meter" aria-label="Progreso de campana">
+            <span style="width: ${progress.percent}%"></span>
+          </div>
+        </div>
+        <div class="campaign-quality ${quality.tone}">
+          <span>Calidad</span>
+          <strong>${quality.score}/100</strong>
+          <small>${quality.label}</small>
+        </div>
+      </div>
+      <div class="campaign-action-bar">
+        <button class="campaign-action start" type="button" data-campaign-status="${campaign.id}" data-next-status="active" ${canStart ? "" : "disabled"}>Iniciar</button>
+        <button class="campaign-action pause" type="button" data-campaign-status="${campaign.id}" data-next-status="paused" ${canPause ? "" : "disabled"}>Pausar</button>
+        <button class="campaign-action stop" type="button" data-campaign-status="${campaign.id}" data-next-status="stopped" ${canStop ? "" : "disabled"}>Detener</button>
+        <button class="campaign-action archive" type="button" data-campaign-status="${campaign.id}" data-next-status="archived" ${canArchive ? "" : "disabled"}>Archivar</button>
+        <button class="campaign-action process" type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
+      </div>
+      <div class="campaign-health">
+        ${healthItems
+          .map(
+            (item) => `
+              <span class="health-pill ${item.tone}">
+                <i aria-hidden="true"></i>
+                <strong>${item.label}</strong>
+                <small>${item.value}</small>
+              </span>
+            `
+          )
+          .join("")}
+      </div>
+      <div class="campaign-stats">
+        <span><b>${counts.total || 0}</b>Total</span>
+        <span><b>${counts.queued || 0}</b>En cola</span>
+        <span><b>${counts.due || 0}</b>Listos ahora</span>
+        <span><b>${counts.sent || 0}</b>Enviados</span>
+        <span><b>${counts.followups_sent || 0}</b>Follow-ups</span>
+        <span><b>${counts.replied || 0}</b>Respuestas</span>
+        <span><b>${counts.delivered || 0}</b>Entregados</span>
+        <span><b>${counts.opened || 0}</b>Abiertos</span>
+        <span><b>${counts.clicked || 0}</b>Clics</span>
+        <span><b>${counts.bounced || 0}</b>Rebotes</span>
+        <span><b>${counts.failed_events || 0}</b>Errores</span>
+        <span><b>${counts.followups_due || 0}</b>Seguimientos listos</span>
+        <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
+        <span><b>${counts.sent_today || 0}</b>Hoy</span>
+        <span><b>${remaining}</b>Restantes hoy</span>
+        <span><b>${campaign.max_recipients || 100}</b>Max total</span>
+        <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
+        <span><b>${quality.bounceRate}%</b>Rebote</span>
+        <span><b>${quality.replyRate}%</b>Respuesta</span>
+      </div>
+      <small>Inicio: ${startAt} | Fin: ${endAt} | Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Ventana: ${Math.floor((campaign.send_window_start_minutes || 555) / 60)}:${String((campaign.send_window_start_minutes || 555) % 60).padStart(2, "0")}-${Math.floor((campaign.send_window_end_minutes || 705) / 60)}:${String((campaign.send_window_end_minutes || 705) % 60).padStart(2, "0")} | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
+    </article>
+  `;
+}
+
+function bindCampaignListActions(container) {
+  if (!container) return;
+  container.querySelectorAll("[data-process-campaign]").forEach((button) => {
+    button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
+  });
+  container.querySelectorAll("[data-campaign-status]").forEach((button) => {
+    button.addEventListener("click", () => updateCampaignStatus(button.dataset.campaignStatus, button.dataset.nextStatus, button));
+  });
+}
+
 function renderCampaigns(campaigns = state.emailCampaigns) {
   if (!elements.campaignList) return;
   renderMultiCampaignManager(campaigns);
-  if (!campaigns?.length) {
-    elements.campaignList.innerHTML = `<p class="empty">No hay campanas automaticas todavia.</p>`;
-    return;
+  const archiveStatuses = new Set(["archived", "completed", "stopped"]);
+  const openCampaigns = (campaigns || []).filter((campaign) => !archiveStatuses.has(campaign.status));
+  const archivedCampaigns = (campaigns || []).filter((campaign) => archiveStatuses.has(campaign.status));
+  if (!openCampaigns.length) {
+    elements.campaignList.innerHTML = `<p class="empty">No hay campanas abiertas.</p>`;
+  } else {
+    elements.campaignList.innerHTML = openCampaigns.map(campaignCardHtml).join("");
   }
-  elements.campaignList.innerHTML = campaigns
-    .map((campaign) => {
-      const counts = campaign.counts || {};
-      const warmup = state.emailWarmups.find((item) => item.sender_key === campaign.sender_key);
-      const campaignRemaining = Math.max(0, (campaign.daily_limit || 100) - (counts.sent_today || 0));
-      const remaining = Math.min(campaignRemaining, warmup?.remaining_today ?? campaignRemaining);
-      const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
-      const startAt = campaign.start_at ? new Date(campaign.start_at).toLocaleString("es-CO") : "Inmediato";
-      const endAt = campaign.end_at ? new Date(campaign.end_at).toLocaleString("es-CO") : "Sin fin";
-      const healthItems = campaignHealthItems(campaign, counts, warmup);
-      const progress = campaignProgress(counts, campaign);
-      const quality = campaignQuality(counts, warmup);
-      const canStart = campaign.status === "paused";
-      const canPause = campaign.status === "active";
-      const canStop = !["stopped", "archived", "completed"].includes(campaign.status);
-      const canArchive = !["archived"].includes(campaign.status);
-      return `
-        <article class="campaign-card campaign-control-card ${quality.tone}">
-          <header>
-            <div>
-              <strong>${attr(campaign.name)}</strong>
-              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaignSegmentLabel(campaign)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"}</small>
-            </div>
-            <span class="campaign-status-pill ${campaign.status}">${campaignStatusLabel(campaign.status)}</span>
-          </header>
-          <div class="campaign-control-top">
-            <div class="campaign-progress-block">
-              <div class="campaign-progress-label">
-                <strong>${progress.sent} de ${progress.objective} correos</strong>
-                <span>${progress.percent}% completado</span>
-              </div>
-              <div class="campaign-progress-meter" aria-label="Progreso de campana">
-                <span style="width: ${progress.percent}%"></span>
-              </div>
-            </div>
-            <div class="campaign-quality ${quality.tone}">
-              <span>Calidad</span>
-              <strong>${quality.score}/100</strong>
-              <small>${quality.label}</small>
-            </div>
-          </div>
-          <div class="campaign-action-bar">
-            <button class="campaign-action start" type="button" data-campaign-status="${campaign.id}" data-next-status="active" ${canStart ? "" : "disabled"}>Iniciar</button>
-            <button class="campaign-action pause" type="button" data-campaign-status="${campaign.id}" data-next-status="paused" ${canPause ? "" : "disabled"}>Pausar</button>
-            <button class="campaign-action stop" type="button" data-campaign-status="${campaign.id}" data-next-status="stopped" ${canStop ? "" : "disabled"}>Detener</button>
-            <button class="campaign-action archive" type="button" data-campaign-status="${campaign.id}" data-next-status="archived" ${canArchive ? "" : "disabled"}>Archivar</button>
-            <button class="campaign-action process" type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
-          </div>
-          <div class="campaign-health">
-            ${healthItems
-              .map(
-                (item) => `
-                  <span class="health-pill ${item.tone}">
-                    <i aria-hidden="true"></i>
-                    <strong>${item.label}</strong>
-                    <small>${item.value}</small>
-                  </span>
-                `
-              )
-              .join("")}
-          </div>
-          <div class="campaign-stats">
-            <span><b>${counts.total || 0}</b>Total</span>
-            <span><b>${counts.queued || 0}</b>En cola</span>
-            <span><b>${counts.due || 0}</b>Listos ahora</span>
-            <span><b>${counts.sent || 0}</b>Enviados</span>
-            <span><b>${counts.followups_sent || 0}</b>Follow-ups</span>
-            <span><b>${counts.replied || 0}</b>Respuestas</span>
-            <span><b>${counts.delivered || 0}</b>Entregados</span>
-            <span><b>${counts.opened || 0}</b>Abiertos</span>
-            <span><b>${counts.clicked || 0}</b>Clics</span>
-            <span><b>${counts.bounced || 0}</b>Rebotes</span>
-            <span><b>${counts.failed_events || 0}</b>Errores</span>
-            <span><b>${counts.followups_due || 0}</b>Seguimientos listos</span>
-            <span><b>${counts.reputation_blocked || 0}</b>Bloqueados</span>
-            <span><b>${counts.sent_today || 0}</b>Hoy</span>
-            <span><b>${remaining}</b>Restantes hoy</span>
-            <span><b>${campaign.max_recipients || 100}</b>Max total</span>
-            <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
-            <span><b>${quality.bounceRate}%</b>Rebote</span>
-            <span><b>${quality.replyRate}%</b>Respuesta</span>
-          </div>
-          <small>Inicio: ${startAt} | Fin: ${endAt} | Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Ventana: ${Math.floor((campaign.send_window_start_minutes || 555) / 60)}:${String((campaign.send_window_start_minutes || 555) % 60).padStart(2, "0")}-${Math.floor((campaign.send_window_end_minutes || 705) / 60)}:${String((campaign.send_window_end_minutes || 705) % 60).padStart(2, "0")} | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
-        </article>
-      `;
-    })
-    .join("");
-  elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
-    button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
-  });
-  elements.campaignList.querySelectorAll("[data-campaign-status]").forEach((button) => {
-    button.addEventListener("click", () => updateCampaignStatus(button.dataset.campaignStatus, button.dataset.nextStatus, button));
-  });
+  if (elements.campaignArchiveList) {
+    elements.campaignArchiveList.innerHTML = archivedCampaigns.length
+      ? archivedCampaigns.map(campaignCardHtml).join("")
+      : `<p class="empty">No hay campanas archivadas.</p>`;
+  }
+  bindCampaignListActions(elements.campaignList);
+  bindCampaignListActions(elements.campaignArchiveList);
 }
 
 function renderMultiCampaignManager(campaigns = state.emailCampaigns) {
@@ -3612,6 +3638,9 @@ elements.campaignSegment?.addEventListener("change", () => {
   const template = defaultCampaignTemplate(elements.campaignType.value);
   elements.campaignSubject.value = template.subject;
   elements.campaignBody.value = template.body;
+});
+elements.campaignSectionButtons?.forEach((button) => {
+  button.addEventListener("click", () => activateCampaignSection(button.dataset.campaignSection));
 });
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);

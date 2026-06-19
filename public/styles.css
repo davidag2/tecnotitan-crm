@@ -586,15 +586,45 @@ button.danger {
   font-weight: 800;
 }
 
-.campaign-builder {
+.campaign-section-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 12px;
+}
+
+.campaign-section-tabs button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding-inline: 14px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.campaign-section-tabs button.active {
+  border-color: #bfe6d8;
+  background: #16856e;
+  color: #ffffff;
+}
+
+.campaign-sections {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
-  gap: 16px;
-  align-items: start;
+}
+
+.campaign-section-panel {
+  display: none;
+}
+
+.campaign-section-panel.active {
+  display: grid;
+  gap: 14px;
 }
 
 .campaign-form,
-.campaign-card {
+.campaign-card,
+.campaign-archive-panel {
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -673,11 +703,6 @@ button.danger {
   gap: 12px;
 }
 
-.campaign-side {
-  display: grid;
-  gap: 14px;
-}
-
 .exclusion-panel,
 .lead-inventory-panel,
 .warmup-panel,
@@ -693,7 +718,8 @@ button.danger {
 .exclusion-panel h3,
 .lead-inventory-panel h3,
 .warmup-panel h3,
-.multi-campaign-panel h3 {
+.multi-campaign-panel h3,
+.campaign-archive-panel h3 {
   margin: 0;
 }
 
@@ -2649,7 +2675,6 @@ li {
     min-height: 300px;
   }
 
-  .campaign-builder,
   .campaign-stats,
   .performance-grid {
     grid-template-columns: 1fr;
