@@ -91,6 +91,7 @@ function leadPrompt(opportunity) {
     "",
     "For investor outreach only, detect whether the lead/fund publicly matches these thesis signals: AI, SaaS, LATAM, B2B, emerging markets, seed, pre-seed. Use only public evidence or mark as unknown.",
     "For B2B consulting outreach only, detect whether the company likely has these operational pain signals: manual processes, growth pressure, automation need, CRM need, scattered data. Use only public evidence or mark as unknown.",
+    "Contact risk: explicitly mark when outreach is not recommended because the person/firm does not accept pitches, the contact is irrelevant for Tecnotitan, or the overall fit is low.",
     "",
     "Return a concise CRM intelligence report and include exactly one JSON object between these markers:",
     "BEGIN_TECNOTITAN_JSON",
@@ -134,6 +135,14 @@ function leadPrompt(opportunity) {
     '    "crm": "yes|no|unknown",',
     '    "scattered_data": "yes|no|unknown",',
     '    "evidence": "short evidence for the matched operational pain signals"',
+    '  },',
+    '  "contact_risk": {',
+    '    "level": "low|medium|high|unknown",',
+    '    "do_not_contact": true,',
+    '    "no_pitches": "yes|no|unknown",',
+    '    "irrelevant_contact": "yes|no|unknown",',
+    '    "low_fit": "yes|no|unknown",',
+    '    "reason": "short reason explaining the contact risk"',
     '  },',
     '  "opening_line": "one highly personalized opening line",',
     '  "recommended_subject": "natural subject line",',
@@ -237,6 +246,19 @@ function normalizeOperationalPainSignals(signals) {
   };
 }
 
+function normalizeContactRisk(risk) {
+  const source = risk && typeof risk === "object" ? risk : {};
+  const level = String(source.level || "").trim().toLowerCase();
+  return {
+    level: ["low", "medium", "high"].includes(level) ? level : "unknown",
+    do_not_contact: source.do_not_contact === true,
+    no_pitches: normalizeYesNoUnknown(source.no_pitches),
+    irrelevant_contact: normalizeYesNoUnknown(source.irrelevant_contact),
+    low_fit: normalizeYesNoUnknown(source.low_fit),
+    reason: String(source.reason || "").trim(),
+  };
+}
+
 async function saveRunResult(opportunity, run) {
   const status = normalizedStatus(run?.status);
   const patch = {
@@ -278,6 +300,7 @@ async function saveRunResult(opportunity, run) {
       recommended_channel: intelligence.recommended_channel || "manual_review",
       investment_thesis_signals: normalizeInvestmentThesisSignals(intelligence.investment_thesis_signals),
       operational_pain_signals: normalizeOperationalPainSignals(intelligence.operational_pain_signals),
+      contact_risk: normalizeContactRisk(intelligence.contact_risk),
       signals: Array.isArray(intelligence.signals) ? intelligence.signals : [],
       risks: Array.isArray(intelligence.risks) ? intelligence.risks : [],
     };

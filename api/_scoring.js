@@ -139,6 +139,9 @@ function scoreWithOrigami(opportunity, profile = {}) {
   const matchedOperationalPainSignals = ["manual_processes", "growth", "automation", "crm", "scattered_data"].filter(
     (key) => normalize(operationalPainSignals[key]) === "yes"
   );
+  const contactRisk = profile.contact_risk || {};
+  const contactRiskLevel = normalize(contactRisk.level);
+  const doNotContact = contactRisk.do_not_contact === true;
 
   if (coldEmailFit === "high") score += addOrigami(reasons, 18, "Origami: alta apertura a cold email");
   else if (coldEmailFit === "medium") score += addOrigami(reasons, 8, "Origami: apertura media a cold email");
@@ -168,6 +171,11 @@ function scoreWithOrigami(opportunity, profile = {}) {
   }
   if (matchedOperationalPainSignals.length) {
     score += addOrigami(reasons, Math.min(matchedOperationalPainSignals.length * 3, 15), `Origami: dolor operativo detectado (${matchedOperationalPainSignals.join(", ")})`);
+  }
+  if (doNotContact || contactRiskLevel === "high") {
+    score += addOrigami(reasons, -30, "Origami: riesgo alto de contacto");
+  } else if (contactRiskLevel === "medium") {
+    score += addOrigami(reasons, -12, "Origami: riesgo medio de contacto");
   }
   if (risks.length) score += addOrigami(reasons, -Math.min(risks.length * 4, 12), "Origami: riesgos o dudas detectadas");
 

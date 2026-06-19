@@ -2460,6 +2460,8 @@ function manualReviewReasons(lead) {
   const fit = coldEmailFit(lead);
   const pitchPolicy = normalizeFilterValue(profile.pitch_policy);
   const recommendedChannel = normalizeFilterValue(profile.recommended_channel);
+  const contactRisk = profile.contact_risk || {};
+  const contactRiskLevel = normalizeFilterValue(contactRisk.level);
   const signals = Array.isArray(profile.signals) ? profile.signals : [];
   const reasons = [];
 
@@ -2474,6 +2476,8 @@ function manualReviewReasons(lead) {
     reasons.push("No acepta pitches/submissions");
   }
   if (recommendedChannel === "manual_review") reasons.push("Canal requiere revision");
+  if (contactRisk.do_not_contact === true || contactRiskLevel === "high") reasons.push("Riesgo alto de contacto");
+  if (contactRiskLevel === "medium") reasons.push("Riesgo medio de contacto");
   if (status === "completed" && signals.length < 2) reasons.push("Senales debiles");
 
   return reasons;
@@ -3174,6 +3178,13 @@ function origamiStatusLabel(status) {
 function renderOrigamiSignals(profile) {
   const signals = Array.isArray(profile?.signals) ? profile.signals : [];
   const risks = Array.isArray(profile?.risks) ? profile.risks : [];
+  const contactRisk = profile?.contact_risk || {};
+  const contactRiskLevel = normalizeFilterValue(contactRisk.level) || "unknown";
+  const contactRiskFlags = [
+    normalizeFilterValue(contactRisk.no_pitches) === "yes" ? "No acepta pitches" : "",
+    normalizeFilterValue(contactRisk.irrelevant_contact) === "yes" ? "Contacto irrelevante" : "",
+    normalizeFilterValue(contactRisk.low_fit) === "yes" ? "Fit bajo" : "",
+  ].filter(Boolean);
   const thesis = profile?.investment_thesis_signals || {};
   const thesisRows = [
     ["ai", "AI"],
@@ -3220,6 +3231,17 @@ function renderOrigamiSignals(profile) {
         <span>${escapeHtml(profile?.pitch_policy || "unknown")}</span>
       </article>
     </div>
+    ${
+      contactRiskLevel === "high" || contactRiskLevel === "medium" || contactRisk.do_not_contact === true
+        ? `
+          <div class="origami-risk-box ${contactRiskLevel}">
+            <strong>Riesgo de contacto: ${contactRiskLevel === "high" ? "Alto" : contactRiskLevel === "medium" ? "Medio" : "Revisar"}</strong>
+            ${contactRiskFlags.length ? `<div class="origami-risk-chips">${contactRiskFlags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
+            <p>${escapeHtml(contactRisk.reason || "Origami recomienda revisar antes de escribir.")}</p>
+          </div>
+        `
+        : ""
+    }
     <div class="origami-pitch-box">
       <strong>Canal oficial para pitch</strong>
       ${renderOpennessChips(profile)}

@@ -1611,10 +1611,15 @@ function origamiCampaignApproval(opportunity = {}) {
   const acceptsPitches = String(profile.accepts_pitches || "unknown").toLowerCase();
   const acceptsFounderSubmissions = String(profile.accepts_founder_submissions || "unknown").toLowerCase();
   const acceptsInboundDeals = String(profile.accepts_inbound_deals || "unknown").toLowerCase();
+  const contactRisk = profile.contact_risk || {};
+  const contactRiskLevel = String(contactRisk.level || "unknown").toLowerCase();
   const issues = [];
 
   if (status !== "completed") issues.push("Origami no ha aprobado esta lead todavia.");
   if (!["high", "medium"].includes(coldEmailFit)) issues.push(`Cold email fit no apto: ${coldEmailFit || "unknown"}.`);
+  if (contactRisk.do_not_contact === true || contactRiskLevel === "high") {
+    issues.push(`Origami marco riesgo alto de contacto: ${contactRisk.reason || "no conviene escribir"}.`);
+  }
   if (acceptsColdEmail === "no") issues.push("Origami detecto que no acepta cold emails.");
   if ([acceptsPitches, acceptsFounderSubmissions, acceptsInboundDeals].every((value) => value === "no")) {
     issues.push("Origami no detecto apertura a pitches, submissions ni inbound deals.");

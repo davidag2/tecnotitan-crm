@@ -2995,6 +2995,53 @@ button.danger {
   padding-left: 18px;
 }
 
+.origami-risk-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+}
+
+.origami-risk-box.medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.origami-risk-box strong {
+  color: #a33030;
+}
+
+.origami-risk-box.medium strong {
+  color: #9a6300;
+}
+
+.origami-risk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.origami-risk-chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #a33030;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.origami-risk-box p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .origami-thesis-box {
   display: grid;
   gap: 8px;
