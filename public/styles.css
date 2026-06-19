@@ -2925,3 +2925,110 @@ li {
     display: grid;
   }
 }
+
+/* Typography polish: keep the CRM crisp and consistent across modules. */
+h1 {
+  font-weight: 650;
+  line-height: 1.15;
+}
+
+h2,
+h3,
+.panel-title strong,
+.campaign-card strong,
+.lead-row strong,
+.crm-client-row strong,
+.client-card strong,
+.archive-row strong,
+.search-card strong,
+.search-result-row strong,
+.user-row strong,
+.message-template-header strong,
+.email-detail strong {
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+button,
+nav a,
+.campaign-section-tabs button,
+.email-sidebar button,
+.lead-fetch-button strong,
+.client-pagination button,
+.crm-client-actions button,
+.kanban-card-actions button,
+.contact-actions button,
+.task-actions button,
+.user-actions button {
+  font-weight: 550;
+  letter-spacing: 0;
+}
+
+.brand strong,
+.executive-summary span,
+.executive-row span,
+.performance-title > span,
+.performance-row span,
+.workload-stats span,
+.template small,
+.message-toolbar span,
+.attachment-toggle,
+.attachment-toggle small,
+.campaign-note,
+.campaign-variables,
+.inventory-status span,
+.inventory-grid span,
+.inventory-breakdown span,
+.inventory-regions span,
+.lead-inventory-panel small,
+.warmup-row small,
+.warmup-row footer span,
+.warmup-row header span,
+.exclusion-row span,
+.campaign-status-pill,
+.campaign-progress-label span,
+.campaign-quality span,
+.campaign-quality small,
+.health-pill small,
+.campaign-stats span,
+.email-status span,
+.email-reply-box span,
+#email-compose-status,
+#csv-import-status,
+.client-toolbar span,
+.client-tags span,
+.lead-table-header,
+.crm-client-header,
+.status-badge,
+.kanban-column-title span,
+.kanban-card-meta span:not(.score-pill),
+.kanban-quick-move span,
+.score-pill,
+.search-card-stats span,
+.search-results-title span,
+#campaign-status {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.email-row strong {
+  font-weight: 600;
+}
+
+.email-row-number,
+.email-row span,
+.email-row small,
+.email-row p {
+  font-weight: 450;
+}
+
+.metrics strong,
+.executive-summary strong,
+.performance-kpis strong,
+.inventory-grid b,
+.campaign-stats b,
+.campaign-quality strong,
+.kanban-summary strong {
+  font-weight: 650;
+  letter-spacing: 0;
+}
