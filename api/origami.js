@@ -510,7 +510,7 @@ async function refreshOpportunity(id, user) {
   return loadOpportunity(id, user);
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
 
@@ -543,4 +543,7 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};
+}
+
+module.exports = handler;
+module.exports.analyzeOpportunity = analyzeOpportunity;

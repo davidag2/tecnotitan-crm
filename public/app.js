@@ -114,6 +114,8 @@ const elements = {
   campaignList: document.querySelector("#campaign-list"),
   campaignArchiveList: document.querySelector("#campaign-archive-list"),
   multiCampaignManager: document.querySelector("#multi-campaign-manager"),
+  prepareWarehouseButton: document.querySelector("#prepare-warehouse-button"),
+  warehouseStatus: document.querySelector("#warehouse-status"),
   leadInventory: document.querySelector("#lead-inventory"),
   senderWarmupList: document.querySelector("#sender-warmup-list"),
   exclusionEmail: document.querySelector("#exclusion-email"),
@@ -2490,6 +2492,48 @@ function renderLeadInventory(inventory = state.leadInventory) {
     </div>
     <small>Actualizado: ${new Date(inventory.generated_at).toLocaleString("es-CO")}</small>
   `;
+}
+
+async function prepareWarehouse() {
+  if (!elements.prepareWarehouseButton) return;
+  const originalText = elements.prepareWarehouseButton.textContent;
+  elements.prepareWarehouseButton.disabled = true;
+  elements.prepareWarehouseButton.textContent = "Preparando...";
+  if (elements.warehouseStatus) {
+    elements.warehouseStatus.textContent = "Warehouse trabajando: Apollo, emails, Origami y cola de campana...";
+  }
+  try {
+    const result = await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "prepare_warehouse",
+        target_queue: 250,
+        search_batches: 2,
+        reveal_limit: 25,
+        analyze_limit: 10,
+      }),
+    });
+    const summary = (result.campaigns || [])
+      .map((item) => `${item.name}: +${item.queued_added || 0} en cola, ${item.analyzed || 0} analizadas, ${item.revealed || 0} emails`)
+      .join(" | ");
+    if (elements.warehouseStatus) elements.warehouseStatus.textContent = summary || "Warehouse actualizado.";
+    const [inventory, campaigns] = await Promise.all([
+      api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
+      api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [], warmups: [] })),
+    ]);
+    state.leadInventory = inventory.inventory || state.leadInventory;
+    state.emailCampaigns = campaigns.campaigns || state.emailCampaigns;
+    state.emailWarmups = campaigns.warmups || state.emailWarmups;
+    renderLeadInventory(state.leadInventory);
+    renderCampaigns(state.emailCampaigns);
+    renderWarmups(state.emailWarmups);
+  } catch (error) {
+    if (elements.warehouseStatus) elements.warehouseStatus.textContent = error.message;
+    setStatus(error.message, "warning");
+  } finally {
+    elements.prepareWarehouseButton.disabled = false;
+    elements.prepareWarehouseButton.textContent = originalText;
+  }
 }
 
 function warmupSenderLabel(senderKey) {
@@ -5179,6 +5223,7 @@ elements.campaignSectionButtons?.forEach((button) => {
 });
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
+elements.prepareWarehouseButton?.addEventListener("click", prepareWarehouse);
 elements.addExclusionButton.addEventListener("click", addExclusion);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;

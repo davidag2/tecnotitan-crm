@@ -2,6 +2,7 @@ const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
+const { analyzeOpportunity } = require("./origami");
 const crypto = require("crypto");
 const dns = require("dns").promises;
 const fs = require("fs");
@@ -1999,6 +2000,127 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
   return rows.filter((row) => row.status === "queued").length;
 }
 
+async function campaignRecipientSummary(campaignId) {
+  const { payload } = await supabaseFetch(
+    `/email_campaign_recipients?select=status,reputation_status&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`
+  );
+  return (payload || []).reduce(
+    (summary, row) => {
+      summary.total += 1;
+      summary[row.status] = (summary[row.status] || 0) + 1;
+      if (row.reputation_status === "blocked") summary.blocked += 1;
+      return summary;
+    },
+    { total: 0, queued: 0, sent: 0, skipped: 0, failed: 0, blocked: 0 }
+  );
+}
+
+async function warehouseCandidates(campaign, { withEmail = true, limit = 50 } = {}) {
+  const regions = campaignLeadRegions(campaign.campaign_type, campaign.target_region);
+  const filters = [
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,origami_email_draft,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    `lead_type=eq.${encodeURIComponent(campaign.campaign_type)}`,
+    regionFilter(regions),
+    "deleted_at=is.null",
+    "order=score.desc",
+    `limit=${Math.max(1, Math.min(500, Number(limit || 50)))}`,
+  ].filter(Boolean);
+  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
+  return (payload || [])
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "No contactar"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Email dudoso"))
+    .filter((opportunity) => (withEmail === null ? true : withEmail ? Boolean(opportunity.contacts?.email) : !opportunity.contacts?.email))
+    .filter((opportunity) => opportunity.contacts?.apollo_enrichment_status !== "not_available");
+}
+
+async function warehouseAnalyzeCandidates(campaign, limit = 25) {
+  const regions = campaignLeadRegions(campaign.campaign_type, campaign.target_region);
+  const filters = [
+    "select=id,origami_status",
+    `lead_type=eq.${encodeURIComponent(campaign.campaign_type)}`,
+    regionFilter(regions),
+    "deleted_at=is.null",
+    "origami_status=neq.completed",
+    "order=score.desc",
+    `limit=${Math.max(1, Math.min(100, Number(limit || 25)))}`,
+  ].filter(Boolean);
+  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
+  return payload || [];
+}
+
+async function prepareCampaignWarehouse(user, body = {}) {
+  requireCampaignAdmin(user);
+  const campaignId = String(body.campaign_id || "").trim();
+  const targetQueue = clampNumber(body.target_queue || body.target_per_campaign, 1, 1000, 250);
+  const searchBatches = clampNumber(body.search_batches, 0, 10, 2);
+  const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
+  const analyzeLimit = clampNumber(body.analyze_limit, 0, 25, 10);
+  const campaignFilters = [
+    "select=*",
+    campaignId ? `id=eq.${encodeURIComponent(campaignId)}` : "status=eq.active",
+    "order=created_at.asc",
+    "limit=10",
+  ];
+  const { payload } = await supabaseFetch(`/email_campaigns?${campaignFilters.join("&")}`);
+  const campaigns = (payload || []).filter((campaign) => !campaign.start_at || new Date(campaign.start_at) > new Date() || campaign.status === "active");
+  const results = [];
+
+  for (const campaign of campaigns) {
+    const before = await campaignRecipientSummary(campaign.id);
+    const missing = Math.max(0, targetQueue - Number(before.queued || 0) - Number(before.sent || 0));
+    let searches = 0;
+    let revealed = 0;
+    let analyzed = 0;
+    let queued = 0;
+    const templateKeys = campaignTemplateKeys(campaign.campaign_type, campaign.target_region, campaign.segment_key, campaign.search_templates);
+
+    for (let index = 0; index < searchBatches && missing > 0; index += 1) {
+      const templateKey = templateKeys[index % templateKeys.length] || "investor:usa:vcs";
+      await runApolloSearch(user, {
+        template_key: templateKey,
+        per_page: 25,
+        name: `Warehouse ${campaign.name} ${templateKey}`.slice(0, 120),
+      }).catch(() => null);
+      searches += 1;
+    }
+
+    const revealCandidates = await warehouseCandidates(campaign, { withEmail: false, limit: revealLimit });
+    for (const candidate of revealCandidates.slice(0, revealLimit)) {
+      const enriched = await revealCampaignLeadEmail(candidate).catch(() => null);
+      if (enriched?.contacts?.email) revealed += 1;
+    }
+
+    const analyzeCandidates = await warehouseAnalyzeCandidates(campaign, analyzeLimit * 3 || 25);
+    for (const candidate of analyzeCandidates) {
+      if (analyzed >= analyzeLimit) break;
+      if (candidate.origami_status === "completed") continue;
+      await analyzeOpportunity(candidate.id, user).catch(() => null);
+      analyzed += 1;
+    }
+
+    const afterAnalysis = await campaignRecipientSummary(campaign.id);
+    const queueMissing = Math.max(0, targetQueue - Number(afterAnalysis.queued || 0) - Number(afterAnalysis.sent || 0));
+    if (queueMissing > 0) {
+      queued = await addCampaignRecipients(user, campaign, Math.min(25, queueMissing), campaign.start_at ? new Date(campaign.start_at) : new Date()).catch(() => 0);
+    }
+    const after = await campaignRecipientSummary(campaign.id);
+    results.push({
+      campaign_id: campaign.id,
+      name: campaign.name,
+      target_queue: targetQueue,
+      searches,
+      revealed,
+      analyzed,
+      queued_added: queued,
+      before,
+      after,
+    });
+  }
+
+  return { prepared_at: new Date().toISOString(), campaigns: results };
+}
+
 async function createCampaign(user, body) {
   requireCampaignAdmin(user);
   const campaignType = body.campaign_type === "investor" ? "investor" : "consulting_client";
@@ -2777,6 +2899,19 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  if (req.method === "GET" && req.query.cron === "warehouse") {
+    try {
+      if (!isAuthorizedCron(req)) {
+        res.status(401).json({ error: "Cron no autorizado." });
+        return;
+      }
+      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 250, search_batches: 2, reveal_limit: 25, analyze_limit: 10 }));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
   const user = requireUser(req, res);
   if (!user) return;
 
@@ -2808,6 +2943,10 @@ module.exports = async function handler(req, res) {
       }
       if (req.body?.action === "process_campaign") {
         res.status(200).json(await processCampaign(user, req.body));
+        return;
+      }
+      if (req.body?.action === "prepare_warehouse") {
+        res.status(200).json(await prepareCampaignWarehouse(user, req.body));
         return;
       }
       if (req.body?.action === "update_campaign_status") {

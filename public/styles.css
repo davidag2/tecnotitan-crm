@@ -790,6 +790,26 @@ button.danger {
   padding-top: 12px;
 }
 
+.warehouse-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.warehouse-header p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+#warehouse-status {
+  min-height: 22px;
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .attachment-toggle {
   display: flex;
   gap: 10px;
@@ -3585,6 +3605,10 @@ li {
 
   .campaign-control-top {
     grid-template-columns: 1fr;
+  }
+
+  .warehouse-header {
+    display: grid;
   }
 
   .multi-sender-grid,
