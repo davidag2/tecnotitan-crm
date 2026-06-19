@@ -42,6 +42,12 @@ function matchesColdEmailFit(lead, fit) {
   return value === fit;
 }
 
+function matchesRecommendedChannel(lead, channel) {
+  if (!channel) return true;
+  const value = String(lead.origami_profile?.recommended_channel || "manual_review").toLowerCase();
+  return value === channel;
+}
+
 async function listSearches() {
   const query = [
     "select=id,name,lead_type,target_region,search_template,filters,status,total_entries,pages_requested,results_saved,created_at",
@@ -363,6 +369,7 @@ module.exports = async function handler(req, res) {
     const targetRegion = param(req, "target_region");
     const scoreLabel = param(req, "score_label");
     const coldEmailFit = param(req, "cold_email_fit").toLowerCase();
+    const recommendedChannel = param(req, "recommended_channel").toLowerCase();
     const pipelineStatus = param(req, "pipeline_status");
     const createdAfter = param(req, "created_after");
     const q = param(req, "q").toLowerCase();
@@ -385,7 +392,8 @@ module.exports = async function handler(req, res) {
     const leads = (payload || [])
       .filter((lead) => matchesText(lead, q))
       .filter((lead) => matchesCountry(lead, country))
-      .filter((lead) => matchesColdEmailFit(lead, coldEmailFit));
+      .filter((lead) => matchesColdEmailFit(lead, coldEmailFit))
+      .filter((lead) => matchesRecommendedChannel(lead, recommendedChannel));
     res.status(200).json({ leads, count: leads.length, user });
   } catch (error) {
     res.status(500).json({ error: error.message });

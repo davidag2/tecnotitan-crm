@@ -32,6 +32,7 @@ const state = {
   clientCategoryFilter: "all",
   clientTagFilter: "all",
   clientColdEmailFilter: "all",
+  clientChannelFilter: "all",
   clientPage: 1,
   manualReviewPage: 1,
   kanbanSearch: "",
@@ -130,6 +131,7 @@ const elements = {
   clientCategoryFilter: document.querySelector("#client-category-filter"),
   clientTagFilter: document.querySelector("#client-tag-filter"),
   clientColdEmailFilter: document.querySelector("#client-cold-email-filter"),
+  clientChannelFilter: document.querySelector("#client-channel-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
   manualReview: document.querySelector("#manual-review"),
@@ -140,6 +142,7 @@ const elements = {
   leadRegionFilter: document.querySelector("#lead-region-filter"),
   leadScoreFilter: document.querySelector("#lead-score-filter"),
   leadColdEmailFilter: document.querySelector("#lead-cold-email-filter"),
+  leadChannelFilter: document.querySelector("#lead-channel-filter"),
   leadStatusFilter: document.querySelector("#lead-status-filter"),
   applyLeadFilters: document.querySelector("#apply-lead-filters"),
   clearLeadFilters: document.querySelector("#clear-lead-filters"),
@@ -2362,6 +2365,25 @@ function coldEmailFitLabel(value) {
   return labels[value] || labels.unknown;
 }
 
+function recommendedChannel(leadOrProfile) {
+  const profile = leadOrProfile?.origami_profile ? leadOrProfile.origami_profile : leadOrProfile || {};
+  const value = normalizeFilterValue(profile.recommended_channel);
+  return ["email", "official_pitch_email", "linkedin", "form", "manual_review"].includes(value)
+    ? value
+    : "manual_review";
+}
+
+function recommendedChannelLabel(value) {
+  const labels = {
+    email: "Email personal",
+    official_pitch_email: "Email oficial pitches",
+    linkedin: "LinkedIn",
+    form: "Formulario web",
+    manual_review: "Revision manual",
+  };
+  return labels[value] || labels.manual_review;
+}
+
 function opennessLabel(value) {
   const normalized = normalizeFilterValue(value);
   if (normalized === "yes") return "Si";
@@ -2493,8 +2515,18 @@ function filterClientsByColdEmail(clients) {
   return clients.filter((lead) => coldEmailFit(lead) === filter);
 }
 
+function filterClientsByChannel(clients) {
+  const filter = normalizeFilterValue(state.clientChannelFilter);
+  if (!filter || filter === "all") return clients;
+  return clients.filter((lead) => recommendedChannel(lead) === filter);
+}
+
 function filteredClients(clients) {
-  return filterClientsByColdEmail(filterClientsByTag(filterClientsBySearch(filterClientsByCategory(filterClientsByCountry(filterClientsByContact(clients))))));
+  return filterClientsByChannel(
+    filterClientsByColdEmail(
+      filterClientsByTag(filterClientsBySearch(filterClientsByCategory(filterClientsByCountry(filterClientsByContact(clients)))))
+    )
+  );
 }
 
 function renderClientCountryOptions(clients) {
@@ -2623,12 +2655,14 @@ function renderLeads(leads) {
       const isRequested = enrichmentStatus === "requested";
       const enrichLabel = isEnriched ? "Detalles obtenidos" : isRequested ? "Solicitado" : "Obtener detalles";
       const emailFit = coldEmailFit(lead);
+      const channel = recommendedChannel(lead);
       return `
         <article class="lead-row">
           <div>
             <strong>${contact.full_name || "Contacto sin nombre"}</strong>
             <span>${contact.title || "Cargo no disponible"}</span>
             <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
+            <span class="channel-badge ${channel}">${recommendedChannelLabel(channel)}</span>
             <small>${company.name || "Empresa no disponible"} · ${contact.country || company.country || "Sin pais"}</small>
             <div class="lead-actions admin-only">
               <select data-assign="${lead.id}">
@@ -2714,6 +2748,9 @@ function renderClients(clients) {
   if (elements.clientColdEmailFilter) {
     elements.clientColdEmailFilter.value = state.clientColdEmailFilter || "all";
   }
+  if (elements.clientChannelFilter) {
+    elements.clientChannelFilter.value = state.clientChannelFilter || "all";
+  }
   renderClientCountryOptions(clients);
   renderClientTagOptions(clients);
   const visibleClients = filteredClients(clients);
@@ -2749,6 +2786,7 @@ function renderClients(clients) {
         const tags = clientTags(lead);
         const contactState = clientContactState(lead);
         const emailFit = coldEmailFit(lead);
+        const channel = recommendedChannel(lead);
         const emailLabel = email || (contactState.apolloHasEmail ? "Email disponible en Apollo" : "Sin email");
         const phoneButtonLabel = phone
           ? "Telefono obtenido"
@@ -2767,6 +2805,7 @@ function renderClients(clients) {
               <span>${contact.title || "Cargo no disponible"}</span>
               <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)} | ${clientCountry(lead) || "Sin pais"}</small>
               <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
+              <span class="channel-badge ${channel}">${recommendedChannelLabel(channel)}</span>
               ${
                 tags.length
                   ? `<div class="client-tags">${tags.map((tag) => `<span>${tag.name}</span>`).join("")}</div>`
@@ -2850,6 +2889,7 @@ function renderManualReview(items) {
         const company = lead.companies || {};
         const profile = lead.origami_profile || {};
         const emailFit = coldEmailFit(lead);
+        const channel = recommendedChannel(lead);
         return `
           <article class="manual-review-row">
             <div>
@@ -2857,12 +2897,13 @@ function renderManualReview(items) {
               <span>${contact.title || "Cargo no disponible"}</span>
               <small>${company.name || "Empresa no disponible"} | ${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | Score ${lead.score}</small>
               <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
+              <span class="channel-badge ${channel}">${recommendedChannelLabel(channel)}</span>
             </div>
             <div class="manual-review-reasons">
               ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
             </div>
             <div>
-              <small>Canal: ${escapeHtml(profile.recommended_channel || "manual_review")}</small>
+              <small>Canal: ${recommendedChannelLabel(channel)}</small>
               <small>Politica: ${escapeHtml(profile.pitch_policy || "unknown")}</small>
               <small>Senales: ${Array.isArray(profile.signals) ? profile.signals.length : 0}</small>
             </div>
@@ -3901,6 +3942,7 @@ function leadFilterQuery() {
   if (elements.leadRegionFilter.value) params.set("target_region", elements.leadRegionFilter.value);
   if (elements.leadScoreFilter.value) params.set("score_label", elements.leadScoreFilter.value);
   if (elements.leadColdEmailFilter.value) params.set("cold_email_fit", elements.leadColdEmailFilter.value);
+  if (elements.leadChannelFilter.value) params.set("recommended_channel", elements.leadChannelFilter.value);
   if (elements.leadStatusFilter.value) params.set("pipeline_status", elements.leadStatusFilter.value);
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -3960,6 +4002,7 @@ function clearLeadFilters() {
   elements.leadRegionFilter.value = "";
   elements.leadScoreFilter.value = "";
   elements.leadColdEmailFilter.value = "";
+  elements.leadChannelFilter.value = "";
   elements.leadStatusFilter.value = "";
   state.leadPage = 1;
   reloadLeadsOnly();
@@ -4412,6 +4455,7 @@ function logout() {
   state.clientCategoryFilter = "all";
   state.clientTagFilter = "all";
   state.clientColdEmailFilter = "all";
+  state.clientChannelFilter = "all";
   state.clientPage = 1;
   state.manualReviewPage = 1;
   state.kanbanPage = 1;
@@ -4532,6 +4576,11 @@ elements.clientTagFilter.addEventListener("change", () => {
 });
 elements.clientColdEmailFilter.addEventListener("change", () => {
   state.clientColdEmailFilter = elements.clientColdEmailFilter.value;
+  state.clientPage = 1;
+  refreshClientContactFilter();
+});
+elements.clientChannelFilter.addEventListener("change", () => {
+  state.clientChannelFilter = elements.clientChannelFilter.value;
   state.clientPage = 1;
   refreshClientContactFilter();
 });
