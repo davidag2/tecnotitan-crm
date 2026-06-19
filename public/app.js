@@ -3230,6 +3230,60 @@ function renderOrigamiSignals(profile) {
   `;
 }
 
+function executiveLeadBrief(opportunity) {
+  const contact = opportunity.contacts || {};
+  const company = opportunity.companies || {};
+  const profile = opportunity.origami_profile || {};
+  const brief = profile.executive_brief || {};
+  const leadType = opportunity.lead_type === "investor" ? "inversionista" : "cliente potencial de consultoria";
+  const companyDescription = [company.name, company.industry, company.country || contact.country].filter(Boolean).join(" | ");
+  const firstSignal = Array.isArray(profile.signals) ? profile.signals[0] : "";
+  const channel = recommendedChannelLabel(recommendedChannel(opportunity));
+
+  return {
+    who:
+      brief.who ||
+      `${contact.full_name || "Contacto sin nombre"}${contact.title ? `, ${contact.title}` : ""}${company.name ? ` en ${company.name}` : ""}.`,
+    what:
+      brief.what_they_do ||
+      profile.summary ||
+      (companyDescription ? `Relacionado con ${companyDescription}.` : "Actividad comercial pendiente de enriquecer."),
+    why:
+      brief.why_it_matters ||
+      firstSignal ||
+      `Puede ser relevante como ${leadType} por su industria, cargo y contexto regional.`,
+    approach:
+      brief.how_to_approach ||
+      profile.personalization_angle ||
+      profile.cold_email_fit_reason ||
+      `Abordar por ${channel}, con un mensaje breve y personalizado.`,
+  };
+}
+
+function renderExecutiveLeadBrief(opportunity) {
+  const brief = executiveLeadBrief(opportunity);
+  return `
+    <div class="lead-executive-card">
+      <div>
+        <strong>Quien es</strong>
+        <p>${escapeHtml(brief.who)}</p>
+      </div>
+      <div>
+        <strong>Que hace</strong>
+        <p>${escapeHtml(brief.what)}</p>
+      </div>
+      <div>
+        <strong>Por que importa</strong>
+        <p>${escapeHtml(brief.why)}</p>
+      </div>
+      <div>
+        <strong>Como abordarla</strong>
+        <p>${escapeHtml(brief.approach)}</p>
+      </div>
+    </div>
+  `;
+}
+
 function renderOrigamiPanel(opportunity) {
   if (!elements.detailOrigami) return;
   const status = opportunity.origami_status || "not_requested";
@@ -3258,11 +3312,7 @@ function renderOrigamiPanel(opportunity) {
     ${
       profile.summary || profile.personalization_angle
         ? `
-          <div class="origami-summary">
-            ${profile.summary ? `<p><strong>Resumen</strong><span>${escapeHtml(profile.summary)}</span></p>` : ""}
-            ${profile.personalization_angle ? `<p><strong>Angulo</strong><span>${escapeHtml(profile.personalization_angle)}</span></p>` : ""}
-            ${profile.cold_email_fit_reason ? `<p><strong>Apertura cold email</strong><span>${escapeHtml(profile.cold_email_fit_reason)}</span></p>` : ""}
-          </div>
+          ${renderExecutiveLeadBrief(opportunity)}
           ${renderOrigamiSignals(profile)}
         `
         : `<p class="empty">Todavia no hay inteligencia Origami para esta lead.</p>`

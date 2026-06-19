@@ -94,6 +94,12 @@ function leadPrompt(opportunity) {
     "{",
     '  "summary": "2-3 sentence intelligence summary",',
     '  "personalization_angle": "specific angle to open the conversation",',
+    '  "executive_brief": {',
+    '    "who": "who this lead is in one sentence",',
+    '    "what_they_do": "what the person/company does in one sentence",',
+    '    "why_it_matters": "why this lead matters for Tecnotitan",',
+    '    "how_to_approach": "best practical approach for outreach"',
+    '  },',
     '  "cold_email_fit": "high|medium|low|unknown",',
     '  "cold_email_fit_reason": "why they seem open or not open to cold email",',
     '  "accepts_pitches": "yes|no|unknown",',
@@ -194,6 +200,15 @@ async function saveRunResult(opportunity, run) {
       raw_response: resultText,
       summary: intelligence.summary || "",
       personalization_angle: intelligence.personalization_angle || "",
+      executive_brief:
+        intelligence.executive_brief && typeof intelligence.executive_brief === "object"
+          ? {
+              who: intelligence.executive_brief.who || "",
+              what_they_do: intelligence.executive_brief.what_they_do || "",
+              why_it_matters: intelligence.executive_brief.why_it_matters || "",
+              how_to_approach: intelligence.executive_brief.how_to_approach || "",
+            }
+          : {},
       cold_email_fit: intelligence.cold_email_fit || "unknown",
       cold_email_fit_reason: intelligence.cold_email_fit_reason || "",
       accepts_pitches: intelligence.accepts_pitches || "unknown",
