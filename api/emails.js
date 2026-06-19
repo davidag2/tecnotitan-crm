@@ -720,7 +720,7 @@ async function loadOpportunity(id, user) {
 async function findLeadByEmail(email) {
   if (!email) return {};
   const { payload: contacts } = await supabaseFetch(
-    `/contacts?select=id,company_id,email,full_name,opportunities(id,company_id,contact_id,owner_user_id,lead_type,target_region)&email=ilike.${encodeURIComponent(email)}&deleted_at=is.null&limit=1`
+    `/contacts?select=id,company_id,email,full_name,opportunities(id,company_id,contact_id,owner_user_id,lead_type,target_region,pipeline_status,next_follow_up_at,next_follow_up_type)&email=ilike.${encodeURIComponent(email)}&deleted_at=is.null&limit=1`
   );
   const contact = contacts?.[0] || null;
   const opportunity = contact?.opportunities?.[0] || null;
@@ -729,6 +729,104 @@ async function findLeadByEmail(email) {
     opportunity,
     company_id: opportunity?.company_id || contact?.company_id || null,
   };
+}
+
+function todayDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function classifyInboundReply(text, leadType) {
+  const value = String(text || "").toLowerCase();
+  if (negativeReplyReason(value)) {
+    return {
+      task: "No contactar",
+      pipeline_status: "perdido",
+      tag: "No contactar",
+      note: "Respuesta negativa o solicitud de baja.",
+      followup: false,
+    };
+  }
+  if (/\b(meeting|call|calendar|calendly|schedule|zoom|teams|meet|reunion|reunión|llamada|agenda|agendar|conversar)\b/i.test(value)) {
+    return {
+      task: "Agendar reunion",
+      pipeline_status: "reunion_agendada",
+      tag: "Prioridad alta",
+      note: "La respuesta menciona reunion, llamada o agenda.",
+      followup: true,
+    };
+  }
+  if (/\b(deck|pitch deck|investor deck|send.*deck|send.*info|presentation|presentacion|presentación|brochure|more information|mas informacion|más información)\b/i.test(value)) {
+    return {
+      task: leadType === "investor" ? "Enviar deck" : "Responder con informacion",
+      pipeline_status: "calificado",
+      tag: leadType === "investor" ? "Inversionista estrategico" : "Prioridad alta",
+      note: "La respuesta solicita material o mas informacion.",
+      followup: true,
+    };
+  }
+  if (/\b(interested|interesting|tell me more|looks good|sounds good|open to|let's talk|lets talk|me interesa|interesado|interesante|cuentame|cuéntame|hablemos)\b/i.test(value)) {
+    return {
+      task: "Responder interesado",
+      pipeline_status: "calificado",
+      tag: leadType === "investor" ? "Inversionista estrategico" : "Cliente ideal",
+      note: "La respuesta muestra interes comercial.",
+      followup: true,
+    };
+  }
+  return {
+    task: "Responder interesado",
+    pipeline_status: "contactado",
+    tag: "Prioridad alta",
+    note: "Respuesta recibida; requiere revision humana.",
+    followup: true,
+  };
+}
+
+async function applyInboundReplyAction({ opportunity, contact, companyId, fromEmail, text, subject }) {
+  if (!opportunity?.id) return null;
+  const action = classifyInboundReply(`${subject || ""}\n${text || ""}`, opportunity.lead_type);
+  const now = new Date().toISOString();
+
+  if (action.tag && contact?.id) {
+    await ensureContactTag(contact.id, action.tag, action.tag === "No contactar" ? "#6b7280" : "#ef4444").catch(() => null);
+  }
+
+  const patch = {
+    last_activity_at: now,
+    updated_at: now,
+  };
+  if (action.followup) {
+    patch.next_follow_up_at = todayDateString();
+    patch.next_follow_up_type = action.task;
+  } else {
+    patch.next_follow_up_at = null;
+    patch.next_follow_up_type = action.task;
+  }
+  if (action.pipeline_status && opportunity.pipeline_status !== action.pipeline_status) {
+    patch.pipeline_status = action.pipeline_status;
+  }
+
+  await updateRows("opportunities", patch, `id=eq.${encodeURIComponent(opportunity.id)}`);
+
+  if (patch.pipeline_status) {
+    await insertRow("pipeline_events", {
+      opportunity_id: opportunity.id,
+      from_status: opportunity.pipeline_status || null,
+      to_status: action.pipeline_status,
+      note: `Respuesta inbound: ${action.task}`,
+    }).catch(() => null);
+  }
+
+  await insertRow("activities", {
+    opportunity_id: opportunity.id,
+    contact_id: contact?.id || null,
+    company_id: companyId || null,
+    activity_type: "reply_task_created",
+    subject: `Tarea automatica: ${action.task}`,
+    body: `${action.note} Email: ${fromEmail || "sin email"}. Fragmento: ${snippet(text || subject)}`,
+  }).catch(() => null);
+
+  return action;
 }
 
 async function findOrCreateThread({ opportunity, subject }) {
@@ -810,6 +908,14 @@ async function storeInbound(event) {
       note: snippet(textBody || subject),
     });
   }
+  const replyAction = await applyInboundReplyAction({
+    opportunity,
+    contact,
+    companyId,
+    fromEmail,
+    text: textBody,
+    subject,
+  });
   if (fromEmail) {
     await updateRows(
       "email_campaign_recipients",
@@ -831,7 +937,7 @@ async function storeInbound(event) {
       body: snippet(textBody || subject),
     });
   }
-  return row;
+  return { ...row, reply_action: replyAction };
 }
 
 async function storeSuppressionEvent(event) {
