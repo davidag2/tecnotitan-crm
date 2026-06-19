@@ -196,6 +196,8 @@ const elements = {
   companyDetailFacts: document.querySelector("#company-detail-facts"),
   companyDetailOpportunities: document.querySelector("#company-detail-opportunities"),
   companyDetailContacts: document.querySelector("#company-detail-contacts"),
+  companyDetailOrigami: document.querySelector("#company-detail-origami"),
+  analyzeCompanyOrigami: document.querySelector("#analyze-company-origami"),
   companyDetailNotes: document.querySelector("#company-detail-notes"),
   companyNoteInput: document.querySelector("#company-note-input"),
   addCompanyNote: document.querySelector("#add-company-note"),
@@ -3632,6 +3634,111 @@ function closeLeadDetail() {
   elements.detailModal.setAttribute("aria-hidden", "true");
 }
 
+function renderCompanyOrigami(company) {
+  if (!elements.companyDetailOrigami) return;
+  const intelligence = company?.raw_payload?.tecnotitan_company_origami || {};
+  const profile = intelligence.profile || {};
+  const status = intelligence.status || "not_requested";
+  const analyzedAt = intelligence.completed_at || intelligence.updated_at || "";
+  if (elements.analyzeCompanyOrigami) {
+    elements.analyzeCompanyOrigami.disabled = !state.origamiConfigured || status === "running";
+    elements.analyzeCompanyOrigami.textContent = status === "completed" ? "Reanalizar empresa" : status === "running" ? "Analizando..." : "Analizar empresa";
+  }
+
+  if (!state.origamiConfigured) {
+    elements.companyDetailOrigami.innerHTML = `<p class="empty">Falta ORIGAMI_API_KEY en Vercel para analizar empresas.</p>`;
+    return;
+  }
+  if (!profile.summary && status !== "running") {
+    elements.companyDetailOrigami.innerHTML = `<p class="empty">Todavia no hay inteligencia de empresa.</p>`;
+    return;
+  }
+  if (status === "running") {
+    elements.companyDetailOrigami.innerHTML = `<p class="empty">Origami esta analizando la empresa. Actualiza en unos minutos.</p>`;
+    return;
+  }
+  if (status === "failed") {
+    elements.companyDetailOrigami.innerHTML = `<p class="empty">Origami no pudo analizar la empresa: ${escapeHtml(
+      intelligence.error || "intenta de nuevo en unos minutos."
+    )}</p>`;
+    return;
+  }
+
+  const signals = Array.isArray(profile.signals) ? profile.signals : [];
+  const triggers = Array.isArray(profile.buying_triggers) ? profile.buying_triggers : [];
+  const pains = Array.isArray(profile.operational_pains) ? profile.operational_pains : [];
+  const investmentFit = Array.isArray(profile.investment_fit) ? profile.investment_fit : [];
+  const risks = Array.isArray(profile.risks) ? profile.risks : [];
+  const safeAnalyzedAt = analyzedAt && !Number.isNaN(new Date(analyzedAt).getTime()) ? new Date(analyzedAt).toLocaleString("es-CO") : "";
+  elements.companyDetailOrigami.innerHTML = `
+    <div class="company-origami-card">
+      <div>
+        <strong>Resumen</strong>
+        <p>${escapeHtml(profile.summary || "Sin resumen disponible.")}</p>
+      </div>
+      <div>
+        <strong>Modelo / mercado</strong>
+        <p>${escapeHtml(profile.business_model || profile.market_context || "Sin contexto disponible.")}</p>
+      </div>
+      <div>
+        <strong>Por que importa</strong>
+        <p>${escapeHtml(profile.why_it_matters || "Pendiente de evaluar.")}</p>
+      </div>
+      <div>
+        <strong>Como abordarla</strong>
+        <p>${escapeHtml(profile.recommended_approach || "Pendiente de definir.")}</p>
+      </div>
+    </div>
+    ${
+      signals.length || triggers.length
+        ? `
+          <div class="origami-pain-box">
+            <strong>Senales de empresa</strong>
+            <div class="origami-pain-chips">
+              ${[...signals, ...triggers].slice(0, 10).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            </div>
+          </div>
+        `
+        : ""
+    }
+    ${
+      pains.length
+        ? `
+          <div class="origami-pain-box">
+            <strong>Dolores operativos</strong>
+            <div class="origami-pain-chips">
+              ${pains.slice(0, 8).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            </div>
+          </div>
+        `
+        : ""
+    }
+    ${
+      investmentFit.length
+        ? `
+          <div class="origami-thesis-box">
+            <strong>Fit de inversion</strong>
+            <div class="origami-thesis-chips">
+              ${investmentFit.slice(0, 8).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            </div>
+          </div>
+        `
+        : ""
+    }
+    ${
+      risks.length
+        ? `
+          <div class="origami-risk-box medium">
+            <strong>Riesgos de cuenta</strong>
+            <ul>${risks.map((risk) => `<li>${escapeHtml(risk)}</li>`).join("")}</ul>
+          </div>
+        `
+        : ""
+    }
+    ${safeAnalyzedAt ? `<small>Ultimo analisis: ${escapeHtml(safeAnalyzedAt)}</small>` : ""}
+  `;
+}
+
 function renderCompanyDetail(detail) {
   const company = detail.company || {};
   elements.companyDetailTitle.textContent = company.name || "Empresa sin nombre";
@@ -3685,6 +3792,8 @@ function renderCompanyDetail(detail) {
         .join("")
     : `<p class="empty">No hay contactos asociados.</p>`;
 
+  renderCompanyOrigami(company);
+
   elements.companyDetailNotes.innerHTML = detail.notes?.length
     ? detail.notes
         .map(
@@ -3709,6 +3818,32 @@ function renderCompanyDetail(detail) {
     if (button.disabled) return;
     button.addEventListener("click", () => openUrl(button.dataset.openUrl, button.dataset.openLabel || "Enlace"));
   });
+}
+
+async function analyzeCompanyOrigami() {
+  if (!activeCompanyId) return;
+  if (!state.origamiConfigured) {
+    setStatus("Falta ORIGAMI_API_KEY en Vercel para analizar empresas.", "warning");
+    return;
+  }
+  const originalText = elements.analyzeCompanyOrigami?.textContent || "";
+  if (elements.analyzeCompanyOrigami) {
+    elements.analyzeCompanyOrigami.disabled = true;
+    elements.analyzeCompanyOrigami.textContent = "Analizando...";
+  }
+  try {
+    await api(`/api/company-origami?company_id=${encodeURIComponent(activeCompanyId)}`, { method: "POST" });
+    const detail = await api(`/api/lead-detail?company_id=${encodeURIComponent(activeCompanyId)}`);
+    renderCompanyDetail(detail);
+    setStatus("Inteligencia de empresa actualizada.", "ok");
+  } catch (error) {
+    setStatus(error.message, "warning");
+  } finally {
+    if (elements.analyzeCompanyOrigami) {
+      elements.analyzeCompanyOrigami.disabled = false;
+      elements.analyzeCompanyOrigami.textContent = originalText || "Analizar empresa";
+    }
+  }
 }
 
 async function openCompanyDetail(companyId) {
@@ -4770,6 +4905,7 @@ elements.origamiJobRole?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") createOrigamiJobSearch();
 });
 elements.addCompanyNote.addEventListener("click", addCompanyNote);
+elements.analyzeCompanyOrigami?.addEventListener("click", analyzeCompanyOrigami);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", applyLeadFiltersFromFirstPage);
 elements.clearLeadFilters.addEventListener("click", clearLeadFilters);

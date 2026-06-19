@@ -2944,6 +2944,35 @@ button.danger {
   line-height: 1.45;
 }
 
+.company-origami-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.company-origami-card div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #dfe8f2;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+}
+
+.company-origami-card strong {
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.company-origami-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .origami-summary {
   display: grid;
   gap: 8px;
@@ -3587,6 +3616,7 @@ li {
     grid-template-columns: 1fr;
   }
 
+  .company-origami-card,
   .lead-executive-card {
     grid-template-columns: 1fr;
   }
