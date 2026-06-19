@@ -734,6 +734,73 @@ function renderTemplate(template, data) {
   );
 }
 
+const SPANISH_COUNTRIES = new Set([
+  "argentina",
+  "bolivia",
+  "chile",
+  "colombia",
+  "costa rica",
+  "cuba",
+  "dominican republic",
+  "ecuador",
+  "el salvador",
+  "guatemala",
+  "honduras",
+  "mexico",
+  "nicaragua",
+  "panama",
+  "paraguay",
+  "peru",
+  "spain",
+  "uruguay",
+  "venezuela",
+]);
+
+const PORTUGUESE_COUNTRIES = new Set(["brazil", "brasil", "portugal"]);
+
+function normalizeCountry(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function leadLanguage(data = {}) {
+  const country = normalizeCountry(data.contact?.country || data.company?.country);
+  const region = String(data.opportunity?.target_region || "").toLowerCase();
+  if (PORTUGUESE_COUNTRIES.has(country)) return "pt";
+  if (SPANISH_COUNTRIES.has(country) || region === "latam") return "es";
+  return "en";
+}
+
+const INVESTOR_LANGUAGE_TEMPLATES = {
+  es: {
+    subject: "Tecnotitan | plataforma de implementacion de IA para LATAM",
+    body:
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de tecnologia aplicada desde Colombia para empresas que necesitan implementacion real de IA, no mas presentaciones.\n\nEl problema que vemos en America Latina es claro: procesos manuales, datos dispersos, presion por adoptar IA y equipos sin capacidad interna para convertir ideas en productos funcionales.\n\nTecnotitan entra por dolores operativos concretos. Diagnosticamos, construimos, implementamos y luego convertimos casos de uso recurrentes en propiedad intelectual, conocimiento sectorial y playbooks operativos. El modelo combina ingresos por servicios hoy y software/licenciamiento escalable manana.\n\nEstamos levantando una ronda pre-seed de US$500K para financiar 18 meses de pilotos pagos, ingenieria de producto, delivery de IA y una plataforma repetible.\n\nVi tu relacion con {{industria}} en {{pais}} y pense que Tecnotitan podria ser relevante para tu tesis alrededor de IA, infraestructura de software y mercados emergentes.\n\nSi esta cerca de tu foco de inversion, con gusto puedo enviarte el deck o coordinar una conversacion de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+  },
+  en: {
+    subject: "Tecnotitan | AI implementation platform for LATAM",
+    body:
+      "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an applied technology company from Colombia for companies that need AI implementation, not more slideware.\n\nThe problem we see across Latin America is clear: manual workflows, scattered data, pressure to adopt AI and teams without the internal capacity to turn ideas into working products.\n\nTecnotitan enters through real operational pain. We diagnose, build, implement and then convert recurring use cases into reusable IP, sector knowledge and operating playbooks. The model is service revenue today, scalable SaaS and licensing tomorrow.\n\nWe are raising a US$500K pre-seed to fund 18 months toward paid pilots, product engineering, AI delivery and a repeatable product platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought Tecnotitan could be relevant to your thesis around AI, software infrastructure and emerging markets.\n\nIf this is close to your investment focus, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+  },
+  pt: {
+    subject: "Tecnotitan | plataforma de implementacao de IA para LATAM",
+    body:
+      "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo uma empresa de tecnologia aplicada a partir da Colombia para companhias que precisam implementar IA de forma pratica, nao apenas discutir ideias.\n\nO problema que vemos na America Latina e claro: processos manuais, dados dispersos, pressao para adotar IA e equipes sem capacidade interna para transformar ideias em produtos funcionando.\n\nA Tecnotitan entra por dores operacionais reais. Diagnosticamos, construimos, implementamos e depois transformamos casos recorrentes em propriedade intelectual, conhecimento setorial e playbooks operacionais. O modelo combina receita de servicos hoje e software/licenciamento escalavel amanha.\n\nEstamos captando uma rodada pre-seed de US$500K para financiar 18 meses de pilotos pagos, engenharia de produto, delivery de IA e uma plataforma repetivel.\n\nVi sua conexao com {{industria}} em {{pais}} e pensei que a Tecnotitan poderia ser relevante para sua tese em IA, infraestrutura de software e mercados emergentes.\n\nSe isso estiver proximo do seu foco de investimento, ficarei feliz em enviar o deck ou agendar uma conversa de 20 minutos.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+  },
+};
+
+function localizedCampaignTemplate(campaign, data, field) {
+  if (campaign.campaign_type !== "investor") return campaign[field];
+  const language = leadLanguage(data);
+  const variant = INVESTOR_LANGUAGE_TEMPLATES[language] || INVESTOR_LANGUAGE_TEMPLATES.en;
+  if (field === "subject_template") return variant.subject;
+  if (field === "body_template") return variant.body;
+  return campaign[field];
+}
+
 function requireCampaignAdmin(user) {
   if (user.role !== "admin") throw new Error("Solo el usuario maestro puede gestionar campanas automaticas.");
 }
@@ -1816,8 +1883,9 @@ async function processCampaign(user, body) {
   let followupsSent = 0;
   for (const recipient of recipients || []) {
     const opportunity = recipient.opportunities || {};
-    const subject = renderTemplate(campaign.subject_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
-    const text = renderTemplate(campaign.body_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
+    const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies };
+    const subject = renderTemplate(localizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
+    const text = renderTemplate(localizedCampaignTemplate(campaign, templateData, "body_template"), templateData);
     const qualityIssues = await emailQualityIssues(recipient.email, opportunity.contacts);
     if (qualityIssues.length) {
       await markDoubtfulEmail(opportunity.contacts?.id, qualityIssues);

@@ -220,6 +220,24 @@ const MESSAGE_TEMPLATES = [
       "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an applied technology company from Colombia for companies that need AI implementation, not more slideware.\n\nThe problem we see across Latin America is clear: manual workflows, scattered data, pressure to adopt AI and teams without the internal capacity to turn ideas into working products.\n\nTecnotitan enters through real operational pain. We diagnose, build, implement and then convert recurring use cases into reusable IP, sector knowledge and operating playbooks. The model is service revenue today, scalable SaaS and licensing tomorrow.\n\nOur roadmap is to validate paid cases and MVPs in 2026, compound product and IP in 2027, and scale as a regional technology platform by 2028.\n\nWe are raising a US$500K pre-seed to fund 18 months toward paid pilots, product engineering, AI delivery and a repeatable product platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought Tecnotitan could be relevant to your thesis around AI, software infrastructure and emerging markets.\n\nIf this is close to your investment focus, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
   },
   {
+    id: "investors-spanish-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Inversionistas - intro por pais ES",
+    subject: "Tecnotitan | plataforma de implementacion de IA para LATAM",
+    body:
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Estamos construyendo una compania de tecnologia aplicada desde Colombia para empresas que necesitan implementacion real de IA, no mas presentaciones.\n\nEl problema que vemos en America Latina es claro: procesos manuales, datos dispersos, presion por adoptar IA y equipos sin capacidad interna para convertir ideas en productos funcionales.\n\nTecnotitan entra por dolores operativos concretos. Diagnosticamos, construimos, implementamos y luego convertimos casos de uso recurrentes en propiedad intelectual, conocimiento sectorial y playbooks operativos. El modelo combina ingresos por servicios hoy y software/licenciamiento escalable manana.\n\nEstamos levantando una ronda pre-seed de US$500K para financiar 18 meses de pilotos pagos, ingenieria de producto, delivery de IA y una plataforma repetible.\n\nVi tu relacion con {{industria}} en {{pais}} y pense que Tecnotitan podria ser relevante para tu tesis alrededor de IA, infraestructura de software y mercados emergentes.\n\nSi esta cerca de tu foco de inversion, con gusto puedo enviarte el deck o coordinar una conversacion de 20 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+  },
+  {
+    id: "investors-portuguese-email-1",
+    category: "inversionistas",
+    channel: "Email",
+    title: "Investidores - intro por pais PT",
+    subject: "Tecnotitan | plataforma de implementacao de IA para LATAM",
+    body:
+      "Ola {{primer_nombre}},\n\nSou David Arias, fundador da Tecnotitan. Estamos construindo uma empresa de tecnologia aplicada a partir da Colombia para companhias que precisam implementar IA de forma pratica, nao apenas discutir ideias.\n\nO problema que vemos na America Latina e claro: processos manuais, dados dispersos, pressao para adotar IA e equipes sem capacidade interna para transformar ideias em produtos funcionando.\n\nA Tecnotitan entra por dores operacionais reais. Diagnosticamos, construimos, implementamos e depois transformamos casos recorrentes em propriedade intelectual, conhecimento setorial e playbooks operacionais. O modelo combina receita de servicos hoje e software/licenciamento escalavel amanha.\n\nEstamos captando uma rodada pre-seed de US$500K para financiar 18 meses de pilotos pagos, engenharia de produto, delivery de IA e uma plataforma repetivel.\n\nVi sua conexao com {{industria}} em {{pais}} e pensei que a Tecnotitan poderia ser relevante para sua tese em IA, infraestrutura de software e mercados emergentes.\n\nSe isso estiver proximo do seu foco de investimento, ficarei feliz em enviar o deck ou agendar uma conversa de 20 minutos.\n\nAtenciosamente,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+  },
+  {
     id: "investors-english-followup-1",
     category: "seguimiento",
     channel: "Email",
