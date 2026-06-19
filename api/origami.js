@@ -37,15 +37,22 @@ function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function preferredWritingLanguage(country) {
+  const normalized = normalize(country)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (["brazil", "brasil", "portugal"].includes(normalized)) return "Portuguese";
+  if (["colombia", "mexico", "chile", "argentina", "peru", "ecuador", "spain"].includes(normalized)) return "Spanish";
+  return "English";
+}
+
 function leadPrompt(opportunity) {
   const contact = opportunity.contacts || {};
   const company = opportunity.companies || {};
   const apollo = contact.apollo_raw_payload || {};
   const companyRaw = company.raw_payload || {};
   const leadKind = opportunity.lead_type === "investor" ? "investor outreach" : "B2B consulting outreach";
-  const language = opportunity.lead_type === "investor" && !["Colombia", "Mexico", "Chile", "Argentina", "Peru", "Ecuador", "Spain", "Brasil", "Brazil"].includes(contact.country || company.country || "")
-    ? "English"
-    : "Spanish";
+  const language = preferredWritingLanguage(contact.country || company.country || "");
 
   return [
     "You are an intelligence and cold email research agent for Tecnotitan.",

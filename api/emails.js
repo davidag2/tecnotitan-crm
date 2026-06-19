@@ -971,6 +971,18 @@ function personalizedCampaignTemplate(campaign, data, field) {
   return localizedCampaignTemplate(campaign, data, field);
 }
 
+function personalizedFollowupTemplate(campaign, data, field) {
+  const draft = data.opportunity?.origami_email_draft || {};
+  const followup = draft.variants?.followup_short || {};
+  if (field === "followup_subject_template") {
+    return String(followup.subject || "").trim() || campaign.followup_subject_template;
+  }
+  if (field === "followup_body_template") {
+    return String(followup.body || "").trim() || campaign.followup_body_template;
+  }
+  return campaign[field];
+}
+
 function campaignDraftVariant(draft = {}, seed = "") {
   const variants = draft.variants && typeof draft.variants === "object" ? draft.variants : {};
   const keys = ["direct", "consultative", "investor", "strategic", "followup_short"].filter((key) => {
@@ -2231,23 +2243,19 @@ async function processCampaign(user, body) {
   const remainingAfterInitial = Math.max(0, sendLimit - sent - failed);
   if (remainingAfterInitial > 0 && campaign.followup_enabled) {
     const { payload: followups } = await supabaseFetch(
-      `/email_campaign_recipients?select=id,email,opportunity_id,followup_step,next_followup_at,opportunities(id,lead_type,target_region,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.sent&reply_received_at=is.null&next_followup_at=lte.${encodeURIComponent(now)}&order=next_followup_at.asc&limit=${remainingAfterInitial}`
+      `/email_campaign_recipients?select=id,email,opportunity_id,followup_step,next_followup_at,opportunities(id,lead_type,target_region,origami_email_draft,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.sent&reply_received_at=is.null&next_followup_at=lte.${encodeURIComponent(now)}&order=next_followup_at.asc&limit=${remainingAfterInitial}`
     );
     for (const recipient of followups || []) {
       const opportunity = recipient.opportunities || {};
       const nextStep = Number(recipient.followup_step || 0) + 1;
-      const subject = renderTemplate(campaign.followup_subject_template, {
+      const templateData = {
         opportunity,
         contact: opportunity.contacts,
         company: opportunity.companies,
         followupStep: nextStep,
-      });
-      const text = renderTemplate(campaign.followup_body_template, {
-        opportunity,
-        contact: opportunity.contacts,
-        company: opportunity.companies,
-        followupStep: nextStep,
-      });
+      };
+      const subject = renderTemplate(personalizedFollowupTemplate(campaign, templateData, "followup_subject_template"), templateData);
+      const text = renderTemplate(personalizedFollowupTemplate(campaign, templateData, "followup_body_template"), templateData);
       const fingerprint = messageFingerprint(subject, text);
       const issues = campaign.reputation_checks_enabled
         ? reputationIssues({
