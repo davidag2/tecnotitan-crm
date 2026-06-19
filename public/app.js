@@ -3174,6 +3174,19 @@ function origamiStatusLabel(status) {
 function renderOrigamiSignals(profile) {
   const signals = Array.isArray(profile?.signals) ? profile.signals : [];
   const risks = Array.isArray(profile?.risks) ? profile.risks : [];
+  const thesis = profile?.investment_thesis_signals || {};
+  const thesisRows = [
+    ["ai", "AI"],
+    ["saas", "SaaS"],
+    ["latam", "LATAM"],
+    ["b2b", "B2B"],
+    ["emerging_markets", "Emerging markets"],
+    ["seed", "Seed"],
+    ["pre_seed", "Pre-seed"],
+  ];
+  const thesisChips = thesisRows
+    .map(([key, label]) => ({ key, label, value: normalizeFilterValue(thesis[key]) || "unknown" }))
+    .filter((item) => item.value === "yes");
   const pitchSource = profile?.official_pitch_url
     ? `<a href="${attr(profile.official_pitch_url)}" target="_blank" rel="noopener">Abrir fuente</a>`
     : "Sin fuente";
@@ -3215,6 +3228,19 @@ function renderOrigamiSignals(profile) {
           : `<p class="empty">Origami no encontro evidencia publica suficiente para un canal oficial.</p>`
       }
     </div>
+    ${
+      thesisChips.length
+        ? `
+          <div class="origami-thesis-box">
+            <strong>Senales de tesis de inversion</strong>
+            <div class="origami-thesis-chips">
+              ${thesisChips.map((item) => `<span class="${item.value}">${item.label}</span>`).join("")}
+            </div>
+            ${thesis.evidence ? `<p>${escapeHtml(thesis.evidence)}</p>` : `<p class="empty">Sin evidencia publica especifica para la tesis.</p>`}
+          </div>
+        `
+        : ""
+    }
     <div class="origami-list-block">
       <strong>Senales</strong>
       ${

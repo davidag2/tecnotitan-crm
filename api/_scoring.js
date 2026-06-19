@@ -131,6 +131,10 @@ function scoreWithOrigami(opportunity, profile = {}) {
   const hasPersonalization = Boolean(profile.personalization_angle);
   const signals = Array.isArray(profile.signals) ? profile.signals : [];
   const risks = Array.isArray(profile.risks) ? profile.risks : [];
+  const thesisSignals = profile.investment_thesis_signals || {};
+  const matchedThesisSignals = ["ai", "saas", "latam", "b2b", "emerging_markets", "seed", "pre_seed"].filter(
+    (key) => normalize(thesisSignals[key]) === "yes"
+  );
 
   if (coldEmailFit === "high") score += addOrigami(reasons, 18, "Origami: alta apertura a cold email");
   else if (coldEmailFit === "medium") score += addOrigami(reasons, 8, "Origami: apertura media a cold email");
@@ -155,6 +159,9 @@ function scoreWithOrigami(opportunity, profile = {}) {
 
   if (hasPersonalization) score += addOrigami(reasons, 6, "Origami: angulo de personalizacion claro");
   if (signals.length) score += addOrigami(reasons, Math.min(signals.length * 3, 9), "Origami: senales publicas relevantes");
+  if (matchedThesisSignals.length) {
+    score += addOrigami(reasons, Math.min(matchedThesisSignals.length * 3, 15), `Origami: tesis inversion alineada (${matchedThesisSignals.join(", ")})`);
+  }
   if (risks.length) score += addOrigami(reasons, -Math.min(risks.length * 4, 12), "Origami: riesgos o dudas detectadas");
 
   const finalScore = clampScore(score);

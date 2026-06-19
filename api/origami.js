@@ -89,6 +89,8 @@ function leadPrompt(opportunity) {
     "- Investor angle: AI implementation platform for LATAM; service revenue today, reusable IP/SaaS/licensing tomorrow.",
     "- Consulting angle: help companies convert manual workflows and scattered data into working systems.",
     "",
+    "For investor outreach only, detect whether the lead/fund publicly matches these thesis signals: AI, SaaS, LATAM, B2B, emerging markets, seed, pre-seed. Use only public evidence or mark as unknown.",
+    "",
     "Return a concise CRM intelligence report and include exactly one JSON object between these markers:",
     "BEGIN_TECNOTITAN_JSON",
     "{",
@@ -114,6 +116,16 @@ function leadPrompt(opportunity) {
     '  "pitch_email_alias_type": "pitch|deals|startups|investment|submissions|partnerships|general|none|unknown",',
     '  "pitch_detection_evidence": "short evidence explaining where this came from",',
     '  "recommended_channel": "email|official_pitch_email|linkedin|form|manual_review",',
+    '  "investment_thesis_signals": {',
+    '    "ai": "yes|no|unknown",',
+    '    "saas": "yes|no|unknown",',
+    '    "latam": "yes|no|unknown",',
+    '    "b2b": "yes|no|unknown",',
+    '    "emerging_markets": "yes|no|unknown",',
+    '    "seed": "yes|no|unknown",',
+    '    "pre_seed": "yes|no|unknown",',
+    '    "evidence": "short evidence for the matched thesis signals"',
+    '  },',
     '  "opening_line": "one highly personalized opening line",',
     '  "recommended_subject": "natural subject line",',
     '  "email_body": "short professional outreach email with unsubscribe sentence if cold email",',
@@ -184,6 +196,26 @@ function normalizeEmailVariants(variants) {
   }, {});
 }
 
+function normalizeYesNoUnknown(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "yes" || normalized === "no") return normalized;
+  return "unknown";
+}
+
+function normalizeInvestmentThesisSignals(signals) {
+  const source = signals && typeof signals === "object" ? signals : {};
+  return {
+    ai: normalizeYesNoUnknown(source.ai),
+    saas: normalizeYesNoUnknown(source.saas),
+    latam: normalizeYesNoUnknown(source.latam),
+    b2b: normalizeYesNoUnknown(source.b2b),
+    emerging_markets: normalizeYesNoUnknown(source.emerging_markets),
+    seed: normalizeYesNoUnknown(source.seed),
+    pre_seed: normalizeYesNoUnknown(source.pre_seed),
+    evidence: String(source.evidence || "").trim(),
+  };
+}
+
 async function saveRunResult(opportunity, run) {
   const status = normalizedStatus(run?.status);
   const patch = {
@@ -223,6 +255,7 @@ async function saveRunResult(opportunity, run) {
       pitch_email_alias_type: intelligence.pitch_email_alias_type || "unknown",
       pitch_detection_evidence: intelligence.pitch_detection_evidence || "",
       recommended_channel: intelligence.recommended_channel || "manual_review",
+      investment_thesis_signals: normalizeInvestmentThesisSignals(intelligence.investment_thesis_signals),
       signals: Array.isArray(intelligence.signals) ? intelligence.signals : [],
       risks: Array.isArray(intelligence.risks) ? intelligence.risks : [],
     };

@@ -2995,6 +2995,40 @@ button.danger {
   padding-left: 18px;
 }
 
+.origami-thesis-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.origami-thesis-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.origami-thesis-chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4f91;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.origami-thesis-box p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .origami-draft {
   margin-top: 12px;
 }
