@@ -299,6 +299,7 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "yopmail.com",
 ]);
 const EMAIL_MX_CACHE = new Map();
+const EMAIL_VALIDATION_CACHE = new Map();
 
 function emailStatusLooksRisky(status) {
   const value = String(status || "").toLowerCase();
@@ -329,6 +330,100 @@ function emailFormatIssue(email) {
   return "";
 }
 
+function emailValidationProvider() {
+  return String(process.env.EMAIL_VALIDATION_PROVIDER || "").trim().toLowerCase();
+}
+
+function emailValidationApiKey(provider) {
+  if (provider === "zerobounce") return process.env.ZEROBOUNCE_API_KEY || process.env.EMAIL_VALIDATION_API_KEY || "";
+  if (provider === "neverbounce") return process.env.NEVERBOUNCE_API_KEY || process.env.EMAIL_VALIDATION_API_KEY || "";
+  if (provider === "millionverifier") return process.env.MILLIONVERIFIER_API_KEY || process.env.EMAIL_VALIDATION_API_KEY || "";
+  return "";
+}
+
+function emailValidationTimeoutMs() {
+  return clampNumber(process.env.EMAIL_VALIDATION_TIMEOUT_MS, 1000, 10000, 4500);
+}
+
+function emailValidationUrl(provider, email, apiKey) {
+  const encodedEmail = encodeURIComponent(email);
+  const encodedKey = encodeURIComponent(apiKey);
+  if (provider === "zerobounce") return `https://api.zerobounce.net/v2/validate?api_key=${encodedKey}&email=${encodedEmail}`;
+  if (provider === "neverbounce") return `https://api.neverbounce.com/v4/single/check?key=${encodedKey}&email=${encodedEmail}`;
+  if (provider === "millionverifier") return `https://api.millionverifier.com/api/v3/?api=${encodedKey}&email=${encodedEmail}&timeout=10`;
+  return "";
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || payload?.error || `Validador respondio ${response.status}`);
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeExternalEmailValidation(provider, payload = {}) {
+  const rawStatus = String(payload.status || payload.result || payload.quality || payload.valid || "").toLowerCase();
+  const rawSubStatus = String(payload.sub_status || payload.subStatus || payload.reason || payload.error || "").toLowerCase();
+  const status = rawStatus || "unknown";
+  const validStatuses = new Set(["valid", "ok", "true", "deliverable"]);
+  const riskyStatuses = new Set([
+    "invalid",
+    "do_not_mail",
+    "spamtrap",
+    "abuse",
+    "disposable",
+    "catch-all",
+    "catchall",
+    "unknown",
+    "undeliverable",
+    "bad",
+    "error",
+  ]);
+  const deliverable = validStatuses.has(status);
+  const risky =
+    !deliverable ||
+    riskyStatuses.has(status) ||
+    riskyStatuses.has(rawSubStatus) ||
+    Boolean(payload.disposable || payload.free_email === false && status === "unknown");
+  return {
+    provider,
+    status,
+    sub_status: rawSubStatus,
+    deliverable,
+    risky,
+    raw: payload,
+  };
+}
+
+async function validateEmailExternally(email) {
+  const normalized = normalizeEmail(email);
+  const provider = emailValidationProvider();
+  const apiKey = emailValidationApiKey(provider);
+  if (!normalized || !provider || !apiKey) return null;
+  const cacheKey = `${provider}:${normalized}`;
+  if (EMAIL_VALIDATION_CACHE.has(cacheKey)) return EMAIL_VALIDATION_CACHE.get(cacheKey);
+  const url = emailValidationUrl(provider, normalized, apiKey);
+  if (!url) return null;
+  const result = await fetchJsonWithTimeout(url, emailValidationTimeoutMs())
+    .then((payload) => normalizeExternalEmailValidation(provider, payload))
+    .catch((error) => ({
+      provider,
+      status: "validation_error",
+      sub_status: error.message,
+      deliverable: false,
+      risky: true,
+      raw: null,
+    }));
+  EMAIL_VALIDATION_CACHE.set(cacheKey, result);
+  return result;
+}
+
 async function emailQualityIssues(email, contact = {}) {
   const issues = [];
   const formatIssue = emailFormatIssue(email);
@@ -350,6 +445,11 @@ async function emailQualityIssues(email, contact = {}) {
     if (!mxRecords?.length) issues.push("Dominio sin registros MX verificables.");
   } catch (_) {
     issues.push("No se pudo verificar MX del dominio.");
+  }
+  const externalValidation = await validateEmailExternally(normalized);
+  if (externalValidation?.risky) {
+    const status = [externalValidation.status, externalValidation.sub_status].filter(Boolean).join(" / ");
+    issues.push(`Validador externo ${externalValidation.provider}: ${status}.`);
   }
   return issues;
 }

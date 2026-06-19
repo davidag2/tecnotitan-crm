@@ -1065,10 +1065,12 @@ function renderEmailStatus(status) {
   }
   const senders = status.senders || [];
   const readySenders = senders.filter((sender) => sender.configured).map((sender) => sender.label).join(" / ");
+  const validator = status.emailValidation || {};
   elements.emailStatus.innerHTML = `
     <span data-tone="ok">Resend conectado</span>
     <span>Remitentes: ${readySenders || "pendientes"}</span>
     <span>Webhook: ${status.webhookTokenConfigured ? "protegido" : "pendiente"}</span>
+    <span data-tone="${validator.configured ? "ok" : "warning"}">Validador: ${validator.configured ? validator.provider : "pendiente"}</span>
   `;
 }
 

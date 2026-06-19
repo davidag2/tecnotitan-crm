@@ -44,9 +44,22 @@ async function resendFetch(path, options = {}) {
 
 function emailStatus() {
   const options = senderOptions();
+  const validationProvider = String(process.env.EMAIL_VALIDATION_PROVIDER || "").trim().toLowerCase();
+  const validationKey =
+    validationProvider === "zerobounce"
+      ? process.env.ZEROBOUNCE_API_KEY || process.env.EMAIL_VALIDATION_API_KEY
+      : validationProvider === "neverbounce"
+        ? process.env.NEVERBOUNCE_API_KEY || process.env.EMAIL_VALIDATION_API_KEY
+        : validationProvider === "millionverifier"
+          ? process.env.MILLIONVERIFIER_API_KEY || process.env.EMAIL_VALIDATION_API_KEY
+          : "";
   return {
     resendConfigured: resendConfigured(),
     webhookTokenConfigured: Boolean(process.env.RESEND_WEBHOOK_TOKEN),
+    emailValidation: {
+      provider: validationProvider || "",
+      configured: Boolean(validationProvider && validationKey),
+    },
     senders: options.map((option) => ({
       key: option.key,
       label: option.label,
