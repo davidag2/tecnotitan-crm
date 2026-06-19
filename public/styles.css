@@ -1717,9 +1717,48 @@ button.danger {
   background: transparent;
 }
 
+.cold-email-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f7f7fb;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.cold-email-badge.high {
+  border-color: #9fe2cf;
+  background: #e8f8f3;
+  color: #0f7a62;
+}
+
+.cold-email-badge.medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #9a6300;
+}
+
+.cold-email-badge.low {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #a33030;
+}
+
+.cold-email-badge.unknown {
+  border-color: #d8e0ec;
+  background: #f8fafc;
+  color: #64748b;
+}
+
 .lead-filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) repeat(4, minmax(120px, 0.8fr)) auto auto;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) repeat(5, minmax(120px, 0.8fr)) auto auto;
   gap: 10px;
   margin-bottom: 14px;
 }

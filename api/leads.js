@@ -36,6 +36,12 @@ function matchesCountry(lead, country) {
   return [contact.country, company.country].some((value) => textIncludes(value, country));
 }
 
+function matchesColdEmailFit(lead, fit) {
+  if (!fit) return true;
+  const value = String(lead.origami_profile?.cold_email_fit || "unknown").toLowerCase();
+  return value === fit;
+}
+
 async function listSearches() {
   const query = [
     "select=id,name,lead_type,target_region,search_template,filters,status,total_entries,pages_requested,results_saved,created_at",
@@ -356,6 +362,7 @@ module.exports = async function handler(req, res) {
     const leadType = param(req, "lead_type");
     const targetRegion = param(req, "target_region");
     const scoreLabel = param(req, "score_label");
+    const coldEmailFit = param(req, "cold_email_fit").toLowerCase();
     const pipelineStatus = param(req, "pipeline_status");
     const createdAfter = param(req, "created_after");
     const q = param(req, "q").toLowerCase();
@@ -363,7 +370,7 @@ module.exports = async function handler(req, res) {
     const assignmentFilter =
       user.role === "admin" ? "" : `&owner_user_id=eq.${encodeURIComponent(user.db_user_id || user.email || "")}`;
     const query = [
-      "select=id,lead_type,target_region,pipeline_status,score,score_label,created_at,owner_user_id,next_follow_up_at,next_follow_up_type,contacts(id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,apollo_enrichment_status,apollo_raw_payload,contact_tags(tags(id,name,color))),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
+      "select=id,lead_type,target_region,pipeline_status,score,score_label,created_at,owner_user_id,next_follow_up_at,next_follow_up_type,origami_profile,contacts(id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,apollo_enrichment_status,apollo_raw_payload,contact_tags(tags(id,name,color))),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
       "deleted_at=is.null",
       assignmentFilter.replace(/^&/, ""),
       leadType ? `lead_type=eq.${encodeURIComponent(leadType)}` : "",
@@ -375,7 +382,10 @@ module.exports = async function handler(req, res) {
       "limit=200",
     ].filter(Boolean).join("&");
     const { payload } = await supabaseFetch(`/opportunities?${query}`);
-    const leads = (payload || []).filter((lead) => matchesText(lead, q)).filter((lead) => matchesCountry(lead, country));
+    const leads = (payload || [])
+      .filter((lead) => matchesText(lead, q))
+      .filter((lead) => matchesCountry(lead, country))
+      .filter((lead) => matchesColdEmailFit(lead, coldEmailFit));
     res.status(200).json({ leads, count: leads.length, user });
   } catch (error) {
     res.status(500).json({ error: error.message });

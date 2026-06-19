@@ -31,6 +31,7 @@ const state = {
   clientCountryFilter: "all",
   clientCategoryFilter: "all",
   clientTagFilter: "all",
+  clientColdEmailFilter: "all",
   clientPage: 1,
   kanbanSearch: "",
   kanbanPage: 1,
@@ -127,6 +128,7 @@ const elements = {
   clientCountryFilter: document.querySelector("#client-country-filter"),
   clientCategoryFilter: document.querySelector("#client-category-filter"),
   clientTagFilter: document.querySelector("#client-tag-filter"),
+  clientColdEmailFilter: document.querySelector("#client-cold-email-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
   userList: document.querySelector("#user-list"),
@@ -135,6 +137,7 @@ const elements = {
   leadTypeFilter: document.querySelector("#lead-type-filter"),
   leadRegionFilter: document.querySelector("#lead-region-filter"),
   leadScoreFilter: document.querySelector("#lead-score-filter"),
+  leadColdEmailFilter: document.querySelector("#lead-cold-email-filter"),
   leadStatusFilter: document.querySelector("#lead-status-filter"),
   applyLeadFilters: document.querySelector("#apply-lead-filters"),
   clearLeadFilters: document.querySelector("#clear-lead-filters"),
@@ -2332,6 +2335,21 @@ function normalizeFilterValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function coldEmailFit(lead) {
+  const value = normalizeFilterValue(lead?.origami_profile?.cold_email_fit);
+  return ["high", "medium", "low", "unknown"].includes(value) ? value : "unknown";
+}
+
+function coldEmailFitLabel(value) {
+  const labels = {
+    high: "Cold email high",
+    medium: "Cold email medium",
+    low: "Cold email low",
+    unknown: "Cold email unknown",
+  };
+  return labels[value] || labels.unknown;
+}
+
 function filterClientsByCountry(clients) {
   const filter = normalizeFilterValue(state.clientCountryFilter);
   if (!filter || filter === "all") return clients;
@@ -2395,8 +2413,14 @@ function filterClientsByTag(clients) {
   return clients.filter((lead) => clientTags(lead).some((tag) => normalizeFilterValue(tag.name) === filter));
 }
 
+function filterClientsByColdEmail(clients) {
+  const filter = normalizeFilterValue(state.clientColdEmailFilter);
+  if (!filter || filter === "all") return clients;
+  return clients.filter((lead) => coldEmailFit(lead) === filter);
+}
+
 function filteredClients(clients) {
-  return filterClientsByTag(filterClientsBySearch(filterClientsByCategory(filterClientsByCountry(filterClientsByContact(clients)))));
+  return filterClientsByColdEmail(filterClientsByTag(filterClientsBySearch(filterClientsByCategory(filterClientsByCountry(filterClientsByContact(clients))))));
 }
 
 function renderClientCountryOptions(clients) {
@@ -2523,11 +2547,13 @@ function renderLeads(leads) {
       const isEnriched = enrichmentStatus === "enriched";
       const isRequested = enrichmentStatus === "requested";
       const enrichLabel = isEnriched ? "Detalles obtenidos" : isRequested ? "Solicitado" : "Obtener detalles";
+      const emailFit = coldEmailFit(lead);
       return `
         <article class="lead-row">
           <div>
             <strong>${contact.full_name || "Contacto sin nombre"}</strong>
             <span>${contact.title || "Cargo no disponible"}</span>
+            <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
             <small>${company.name || "Empresa no disponible"} · ${contact.country || company.country || "Sin pais"}</small>
             <div class="lead-actions admin-only">
               <select data-assign="${lead.id}">
@@ -2610,6 +2636,9 @@ function renderClients(clients) {
   if (elements.clientCategoryFilter) {
     elements.clientCategoryFilter.value = state.clientCategoryFilter || "all";
   }
+  if (elements.clientColdEmailFilter) {
+    elements.clientColdEmailFilter.value = state.clientColdEmailFilter || "all";
+  }
   renderClientCountryOptions(clients);
   renderClientTagOptions(clients);
   const visibleClients = filteredClients(clients);
@@ -2644,6 +2673,7 @@ function renderClients(clients) {
         const email = contact.email || "";
         const tags = clientTags(lead);
         const contactState = clientContactState(lead);
+        const emailFit = coldEmailFit(lead);
         const emailLabel = email || (contactState.apolloHasEmail ? "Email disponible en Apollo" : "Sin email");
         const phoneButtonLabel = phone
           ? "Telefono obtenido"
@@ -2661,6 +2691,7 @@ function renderClients(clients) {
               <strong>${contact.full_name || "Contacto sin nombre"}</strong>
               <span>${contact.title || "Cargo no disponible"}</span>
               <small>${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | ${regionLabel(lead.target_region)} | ${clientCountry(lead) || "Sin pais"}</small>
+              <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
               ${
                 tags.length
                   ? `<div class="client-tags">${tags.map((tag) => `<span>${tag.name}</span>`).join("")}</div>`
@@ -3705,6 +3736,7 @@ function leadFilterQuery() {
   if (elements.leadTypeFilter.value) params.set("lead_type", elements.leadTypeFilter.value);
   if (elements.leadRegionFilter.value) params.set("target_region", elements.leadRegionFilter.value);
   if (elements.leadScoreFilter.value) params.set("score_label", elements.leadScoreFilter.value);
+  if (elements.leadColdEmailFilter.value) params.set("cold_email_fit", elements.leadColdEmailFilter.value);
   if (elements.leadStatusFilter.value) params.set("pipeline_status", elements.leadStatusFilter.value);
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -3763,6 +3795,7 @@ function clearLeadFilters() {
   elements.leadTypeFilter.value = "";
   elements.leadRegionFilter.value = "";
   elements.leadScoreFilter.value = "";
+  elements.leadColdEmailFilter.value = "";
   elements.leadStatusFilter.value = "";
   state.leadPage = 1;
   reloadLeadsOnly();
@@ -4214,6 +4247,7 @@ function logout() {
   state.clientCountryFilter = "all";
   state.clientCategoryFilter = "all";
   state.clientTagFilter = "all";
+  state.clientColdEmailFilter = "all";
   state.clientPage = 1;
   state.kanbanPage = 1;
   sessionStorage.removeItem("tecnotitan_crm_session");
@@ -4327,6 +4361,11 @@ elements.clientCategoryFilter.addEventListener("change", () => {
 });
 elements.clientTagFilter.addEventListener("change", () => {
   state.clientTagFilter = elements.clientTagFilter.value;
+  state.clientPage = 1;
+  refreshClientContactFilter();
+});
+elements.clientColdEmailFilter.addEventListener("change", () => {
+  state.clientColdEmailFilter = elements.clientColdEmailFilter.value;
   state.clientPage = 1;
   refreshClientContactFilter();
 });
