@@ -187,6 +187,63 @@ const BOUNCE_CONTROL_MIN_SENT = 20;
 const BOUNCE_THROTTLE_RATE = 0.03;
 const BOUNCE_PAUSE_RATE = 0.05;
 
+const CAMPAIGN_SEGMENTS = {
+  all_investors: {
+    key: "all_investors",
+    label: "Inversionistas general",
+    target_region: null,
+    templates: [],
+  },
+  usa_vcs: {
+    key: "usa_vcs",
+    label: "VCs USA",
+    target_region: "usa",
+    templates: ["investor:usa:vcs"],
+  },
+  usa_angels: {
+    key: "usa_angels",
+    label: "Angels USA",
+    target_region: "usa",
+    templates: ["investor:usa:angels"],
+  },
+  latam_investors: {
+    key: "latam_investors",
+    label: "LATAM investors",
+    target_region: "latam",
+    templates: ["investor:latam:funds", "investor:latam_angels"],
+  },
+  europe_funds: {
+    key: "europe_funds",
+    label: "Europe funds",
+    target_region: "europe",
+    templates: ["investor:europe:vcs", "investor:europe_family_offices"],
+  },
+  strategic_investors: {
+    key: "strategic_investors",
+    label: "Strategic investors",
+    target_region: null,
+    templates: [
+      "investor:usa_family_offices",
+      "investor:europe_family_offices",
+      "investor:usa_accelerators",
+      "investor:europe_accelerators",
+      "investor:latam_accelerators",
+    ],
+  },
+};
+
+function campaignSegment(key, campaignType = "investor") {
+  if (campaignType !== "investor") {
+    return {
+      key: "consulting_latam",
+      label: "Consultoria LATAM",
+      target_region: "latam",
+      templates: ["consulting_client:latam"],
+    };
+  }
+  return CAMPAIGN_SEGMENTS[key] || CAMPAIGN_SEGMENTS.all_investors;
+}
+
 function hasClearSignature(text) {
   const normalized = String(text || "").toLowerCase();
   return normalized.includes("david arias") && normalized.includes("tecnotitan");
@@ -1171,7 +1228,7 @@ async function enforceBounceControl(campaign, counts = {}) {
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,attach_investor_deck,start_at,end_at,max_recipients,schedule_timezone,send_window_start_minutes,send_window_end_minutes,last_processed_at,created_at&order=created_at.desc&limit=50"
+    "/email_campaigns?select=id,name,campaign_type,sender_key,status,daily_limit,batch_size,min_delay_minutes,max_delay_minutes,followup_enabled,followup_delays_days,followup_subject_template,followup_body_template,subject_template,body_template,target_region,segment_key,segment_label,search_templates,attach_investor_deck,start_at,end_at,max_recipients,schedule_timezone,send_window_start_minutes,send_window_end_minutes,last_processed_at,created_at&order=created_at.desc&limit=50"
   );
   const campaigns = [];
   for (const campaign of payload || []) {
@@ -1484,8 +1541,12 @@ async function revealCampaignLeadEmail(opportunity) {
   return updatedContact.email ? { ...opportunity, contacts: updatedContact } : null;
 }
 
-function campaignTemplateKeys(campaignType, targetRegion) {
+function campaignTemplateKeys(campaignType, targetRegion, segmentKey, searchTemplates = []) {
   if (campaignType !== "investor") return ["consulting_client:latam"];
+  const explicitTemplates = Array.isArray(searchTemplates) ? searchTemplates.filter(Boolean) : [];
+  if (explicitTemplates.length) return explicitTemplates;
+  const segment = campaignSegment(segmentKey, campaignType);
+  if (segment.templates.length) return segment.templates;
   const byRegion = {
     usa: ["investor:usa:vcs", "investor:usa:angels", "investor:usa_family_offices", "investor:usa_accelerators", "investor:usa"],
     latam: ["investor:latam:funds", "investor:latam_angels", "investor:latam_accelerators", "investor:latam"],
@@ -1502,10 +1563,10 @@ function campaignTemplateKeys(campaignType, targetRegion) {
   return interleaved;
 }
 
-async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCount) {
+async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCount, segmentKey = "", searchTemplates = []) {
   let pool = await campaignLeadPool(campaignType, targetRegion);
   let searches = 0;
-  const templateKeys = campaignTemplateKeys(campaignType, targetRegion);
+  const templateKeys = campaignTemplateKeys(campaignType, targetRegion, segmentKey, searchTemplates);
   const maxSearches = Math.min(40, Math.ceil(Math.max(0, desiredCount - pool.length) / 25));
   while (pool.length < desiredCount && searches < maxSearches) {
     const templateKey = templateKeys[searches % templateKeys.length] || "consulting_client:latam";
@@ -1542,7 +1603,14 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
   const maxRecipients = Number(campaign.max_recipients || 100);
   if (count <= 0) return 0;
   const existingEmails = await existingCampaignEmails(campaign.id);
-  const leads = await buildCampaignLeadPool(user, campaign.campaign_type, campaign.target_region, Math.min(count * 3, 100));
+  const leads = await buildCampaignLeadPool(
+    user,
+    campaign.campaign_type,
+    campaign.target_region,
+    Math.min(count * 3, 100),
+    campaign.segment_key,
+    campaign.search_templates
+  );
   const allowedLeads = [];
   const blockedRecipients = [];
   for (const lead of leads) {
@@ -1608,7 +1676,8 @@ async function createCampaign(user, body) {
   const name = String(body.name || "").trim();
   const subject = String(body.subject_template || "").trim();
   const text = String(body.body_template || "").trim();
-  const targetRegion = String(body.target_region || "").trim() || null;
+  const segment = campaignSegment(String(body.segment_key || "").trim(), campaignType);
+  const targetRegion = String(segment.target_region || body.target_region || "").trim() || null;
   const dailyLimit = clampNumber(body.daily_limit, 1, 100, 100);
   const batchSize = clampNumber(body.batch_size, 1, 25, 1);
   const minDelay = clampNumber(body.min_delay_minutes, 1, 60, 6);
@@ -1646,6 +1715,9 @@ async function createCampaign(user, body) {
     subject_template: subject,
     body_template: text,
     target_region: targetRegion,
+    segment_key: segment.key,
+    segment_label: segment.label,
+    search_templates: segment.templates,
     attach_investor_deck: Boolean(body.attach_investor_deck) && senderKey === "investors",
     start_at: startAt ? startAt.toISOString() : null,
     end_at: endAt ? endAt.toISOString() : null,

@@ -59,6 +59,7 @@ const elements = {
   refreshEmailButton: document.querySelector("#refresh-email-button"),
   campaignName: document.querySelector("#campaign-name"),
   campaignType: document.querySelector("#campaign-type"),
+  campaignSegment: document.querySelector("#campaign-segment"),
   campaignSender: document.querySelector("#campaign-sender"),
   campaignTargetRegion: document.querySelector("#campaign-target-region"),
   campaignTemplate: document.querySelector("#campaign-template"),
@@ -1140,6 +1141,39 @@ function campaignTypeLabel(type) {
   return type === "investor" ? "Inversionistas" : "Consultoria LATAM";
 }
 
+const CAMPAIGN_SEGMENTS = {
+  all_investors: { label: "Inversionistas general", region: "" },
+  usa_vcs: { label: "VCs USA", region: "usa" },
+  usa_angels: { label: "Angels USA", region: "usa" },
+  latam_investors: { label: "LATAM investors", region: "latam" },
+  europe_funds: { label: "Europe funds", region: "europe" },
+  strategic_investors: { label: "Strategic investors", region: "" },
+  consulting_latam: { label: "Consultoria LATAM", region: "latam" },
+};
+
+function campaignSegmentLabel(campaign) {
+  return campaign.segment_label || CAMPAIGN_SEGMENTS[campaign.segment_key]?.label || "Sin segmento";
+}
+
+function applyCampaignSegmentDefaults() {
+  if (!elements.campaignSegment || !elements.campaignTargetRegion) return;
+  if (elements.campaignSegment.value !== "consulting_latam" && elements.campaignType.value !== "investor") {
+    elements.campaignType.value = "investor";
+    elements.campaignSender.value = "investors";
+  }
+  if (elements.campaignSegment.value === "consulting_latam") {
+    elements.campaignType.value = "consulting_client";
+    elements.campaignSender.value = "consulting";
+  }
+  if (elements.campaignType.value !== "investor") {
+    elements.campaignSegment.value = "consulting_latam";
+    elements.campaignTargetRegion.value = "latam";
+    return;
+  }
+  const segment = CAMPAIGN_SEGMENTS[elements.campaignSegment.value] || CAMPAIGN_SEGMENTS.all_investors;
+  elements.campaignTargetRegion.value = segment.region || "";
+}
+
 function defaultCampaignTemplate(type) {
   const templateId = type === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
   const template = MESSAGE_TEMPLATES.find((item) => item.id === templateId);
@@ -1152,8 +1186,11 @@ function applyCampaignDefaults(force = false) {
   const template = defaultCampaignTemplate(elements.campaignType.value);
   if (elements.campaignType.value === "investor") elements.campaignSender.value = "investors";
   if (elements.campaignType.value !== "investor") elements.campaignSender.value = "consulting";
+  if (force && elements.campaignSegment) {
+    elements.campaignSegment.value = elements.campaignType.value === "investor" ? "usa_vcs" : "consulting_latam";
+  }
   if (force && elements.campaignTargetRegion) {
-    elements.campaignTargetRegion.value = elements.campaignType.value === "investor" ? "usa" : "latam";
+    applyCampaignSegmentDefaults();
   }
   if (elements.campaignTemplate && force) {
     elements.campaignTemplate.value = elements.campaignType.value === "investor" ? "investors-english-email-1" : "consultoria-latam-email-1";
@@ -1173,6 +1210,7 @@ function applySelectedCampaignTemplate() {
   if (template.category === "inversionistas") {
     elements.campaignType.value = "investor";
     elements.campaignSender.value = "investors";
+    if (elements.campaignSegment && !elements.campaignSegment.value) elements.campaignSegment.value = "usa_vcs";
     if (elements.campaignTargetRegion) elements.campaignTargetRegion.value = "usa";
     if (elements.campaignAttachDeck) elements.campaignAttachDeck.checked = template.id === "investors-english-deck-followup-1";
   }
@@ -1205,7 +1243,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
           <header>
             <div>
               <strong>${campaign.name}</strong>
-              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
+              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaignSegmentLabel(campaign)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
             </div>
             <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
           </header>
@@ -2940,6 +2978,7 @@ async function createCampaign() {
         action: "create_campaign",
         name: elements.campaignName.value.trim(),
         campaign_type: elements.campaignType.value,
+        segment_key: elements.campaignSegment?.value || "",
         sender_key: elements.campaignSender.value,
         target_region: elements.campaignTargetRegion.value,
         daily_limit: elements.campaignDailyLimit.value,
@@ -3178,6 +3217,7 @@ elements.emailSender.addEventListener("change", () => {
 elements.sendEmailButton.addEventListener("click", sendEmail);
 elements.refreshEmailButton.addEventListener("click", refreshEmails);
 elements.campaignType.addEventListener("change", () => applyCampaignDefaults(true));
+elements.campaignSegment?.addEventListener("change", applyCampaignSegmentDefaults);
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
 elements.addExclusionButton.addEventListener("click", addExclusion);
