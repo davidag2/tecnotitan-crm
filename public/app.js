@@ -1199,6 +1199,7 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
       const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
       const startAt = campaign.start_at ? new Date(campaign.start_at).toLocaleString("es-CO") : "Inmediato";
       const endAt = campaign.end_at ? new Date(campaign.end_at).toLocaleString("es-CO") : "Sin fin";
+      const healthItems = campaignHealthItems(campaign, counts, warmup);
       return `
         <article class="campaign-card">
           <header>
@@ -1208,6 +1209,19 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             </div>
             <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
           </header>
+          <div class="campaign-health">
+            ${healthItems
+              .map(
+                (item) => `
+                  <span class="health-pill ${item.tone}">
+                    <i aria-hidden="true"></i>
+                    <strong>${item.label}</strong>
+                    <small>${item.value}</small>
+                  </span>
+                `
+              )
+              .join("")}
+          </div>
           <div class="campaign-stats">
             <span><b>${counts.total || 0}</b>Total</span>
             <span><b>${counts.queued || 0}</b>En cola</span>
@@ -1235,6 +1249,69 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
     button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
   });
+}
+
+function campaignInventoryBucket(campaign) {
+  const inventory = state.leadInventory;
+  if (!inventory?.by_type?.length) return null;
+  return inventory.by_type.find((item) => item.key === campaign.campaign_type) || null;
+}
+
+function healthTone(isGood, isWarning = false) {
+  if (isGood) return "ok";
+  return isWarning ? "warning" : "danger";
+}
+
+function campaignHealthItems(campaign, counts = {}, warmup = null) {
+  const bucket = campaignInventoryBucket(campaign);
+  const queued = Number(counts.queued || 0);
+  const due = Number(counts.due || 0) + Number(counts.followups_due || 0);
+  const sent = Number(counts.sent || 0);
+  const bounced = Number(counts.bounced || 0);
+  const bounceRate = sent ? bounced / sent : 0;
+  const available = Number(bucket?.available_for_campaign || 0);
+  const hasInventory = !bucket || available > 0;
+  const apolloBlocked = Boolean(bucket && available === 0 && Number(bucket.without_email || 0) > 0);
+  const domainHealthy = bounceRate < 0.03 && Number(counts.complained || 0) === 0 && (warmup?.remaining_today ?? 1) > 0;
+  const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin pendientes";
+
+  return [
+    {
+      label: "Campana",
+      value: campaign.status === "active" ? "Activa" : campaign.status === "paused" ? "Pausada" : campaign.status || "Sin estado",
+      tone: campaign.status === "active" ? "ok" : campaign.status === "paused" ? "warning" : "danger",
+    },
+    {
+      label: "Cola",
+      value: queued ? `${queued} en cola` : "Sin cola",
+      tone: healthTone(queued > 0, due > 0),
+    },
+    {
+      label: "Apollo",
+      value: apolloBlocked ? "Bloqueando" : "Disponible",
+      tone: apolloBlocked ? "danger" : "ok",
+    },
+    {
+      label: "Inventario",
+      value: bucket ? `${available} listas` : "Sin lectura",
+      tone: healthTone(hasInventory, bucket && available < 25),
+    },
+    {
+      label: "Rebote",
+      value: sent ? `${Math.round(bounceRate * 100)}%` : "Sin datos",
+      tone: bounceRate >= 0.05 ? "danger" : bounceRate >= 0.03 ? "warning" : "ok",
+    },
+    {
+      label: "Dominio",
+      value: domainHealthy ? "Sano" : "Revisar",
+      tone: domainHealthy ? "ok" : "warning",
+    },
+    {
+      label: "Proximo envio",
+      value: nextSend,
+      tone: counts.next_scheduled_at && campaign.status === "active" ? "ok" : "warning",
+    },
+  ];
 }
 
 function inventoryStatusLabel(status) {
