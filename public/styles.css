@@ -2559,6 +2559,109 @@ button.danger {
   font-size: 13px;
 }
 
+.origami-search-tool {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.origami-search-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.origami-search-form textarea,
+.origami-search-form button,
+#origami-person-search-status,
+.origami-search-results {
+  grid-column: 1 / -1;
+}
+
+#origami-person-search-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.origami-search-results {
+  display: grid;
+  gap: 12px;
+}
+
+.origami-search-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.origami-search-card header,
+.origami-search-card footer {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.origami-search-card strong,
+.origami-search-card span,
+.origami-search-card small {
+  display: block;
+}
+
+.origami-search-card p {
+  margin: 0;
+}
+
+.origami-search-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.origami-search-meta span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: #315f99;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.origami-search-card details {
+  border-top: 1px solid #eef2f7;
+  padding-top: 10px;
+}
+
+.origami-search-card summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.origami-search-card pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  white-space: pre-wrap;
+}
+
 .origami-detail-header {
   display: flex;
   justify-content: space-between;
@@ -2853,6 +2956,7 @@ li {
 
   .multi-sender-grid,
   .multi-campaign-summary,
+  .origami-search-form,
   .origami-overview {
     grid-template-columns: 1fr;
   }

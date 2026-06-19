@@ -330,6 +330,28 @@
               <span>Apertura a cold email, tesis/foco, empresa, etapa, angulo de personalizacion y riesgo.</span>
             </article>
           </div>
+          <div class="origami-search-tool">
+            <div class="panel-title">
+              <h3>Buscador personal</h3>
+              <p>Busca una persona por nombre, empresa o LinkedIn antes de crearla como lead.</p>
+            </div>
+            <div class="origami-search-form">
+              <input id="origami-person-name" type="text" placeholder="Nombre de la persona">
+              <input id="origami-person-company" type="text" placeholder="Empresa o fondo">
+              <input id="origami-person-linkedin" type="url" placeholder="LinkedIn opcional">
+              <select id="origami-person-purpose">
+                <option value="investor">Inversionista / pitch</option>
+                <option value="consulting">Consultoria B2B</option>
+                <option value="lead_research">Investigacion general</option>
+              </select>
+              <textarea id="origami-person-notes" rows="3" placeholder="Notas opcionales: pais, contexto, por que te interesa, posible angulo"></textarea>
+              <button id="origami-person-search-button" type="button">Buscar con Origami</button>
+            </div>
+            <span id="origami-person-search-status"></span>
+            <div class="origami-search-results" id="origami-person-search-results">
+              <p class="empty">No hay busquedas personales todavia.</p>
+            </div>
+          </div>
         </section>
 
         <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">

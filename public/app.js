@@ -14,6 +14,8 @@ const state = {
   origamiConfigured: false,
   origamiPollTimer: null,
   origamiPollAttempts: 0,
+  origamiPeopleSearches: [],
+  origamiSearchPollTimer: null,
   emailMailbox: "compose",
   emailSearch: "",
   selectedEmailId: "",
@@ -46,6 +48,14 @@ const elements = {
   apolloPerformance: document.querySelector("#apollo-performance"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
   origamiConfigStatus: document.querySelector("#origami-config-status"),
+  origamiPersonName: document.querySelector("#origami-person-name"),
+  origamiPersonCompany: document.querySelector("#origami-person-company"),
+  origamiPersonLinkedin: document.querySelector("#origami-person-linkedin"),
+  origamiPersonPurpose: document.querySelector("#origami-person-purpose"),
+  origamiPersonNotes: document.querySelector("#origami-person-notes"),
+  origamiPersonSearchButton: document.querySelector("#origami-person-search-button"),
+  origamiPersonSearchStatus: document.querySelector("#origami-person-search-status"),
+  origamiPersonSearchResults: document.querySelector("#origami-person-search-results"),
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
   messageTemplates: document.querySelector("#message-templates"),
@@ -710,6 +720,167 @@ function renderAssignmentWorkload(workload) {
       )
       .join("")}
   `;
+}
+
+function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
+  if (!elements.origamiPersonSearchResults) return;
+  if (!searches?.length) {
+    elements.origamiPersonSearchResults.innerHTML = `<p class="empty">No hay busquedas personales todavia.</p>`;
+    return;
+  }
+  elements.origamiPersonSearchResults.innerHTML = searches
+    .map((search) => {
+      const profile = search.result_profile || {};
+      const draft = search.email_draft || {};
+      const signals = Array.isArray(profile.signals) ? profile.signals : [];
+      const risks = Array.isArray(profile.risks) ? profile.risks : [];
+      return `
+        <article class="origami-search-card">
+          <header>
+            <div>
+              <strong>${escapeHtml(profile.person_name || search.query_name || "Persona sin nombre")}</strong>
+              <span>${escapeHtml(profile.current_title || "")}${profile.company_name || search.query_company ? ` | ${escapeHtml(profile.company_name || search.query_company)}` : ""}</span>
+            </div>
+            <span class="status-badge">${escapeHtml(origamiStatusLabel(search.status))}</span>
+          </header>
+          ${
+            profile.summary
+              ? `
+                <p>${escapeHtml(profile.summary)}</p>
+                <div class="origami-search-meta">
+                  <span>Fit: ${escapeHtml(profile.fit_for_tecnotitan || "unknown")}</span>
+                  <span>Cold email: ${escapeHtml(profile.cold_email_fit || "unknown")}</span>
+                  <span>Canal: ${escapeHtml(profile.recommended_channel || "manual_review")}</span>
+                  <span>Confianza: ${escapeHtml(profile.confidence || "low")}</span>
+                </div>
+                <div class="origami-search-meta">
+                  <span>Pitch email: ${escapeHtml(profile.official_pitch_email || "No encontrado")}</span>
+                  <span>Politica: ${escapeHtml(profile.pitch_policy || "unknown")}</span>
+                </div>
+                ${profile.personalization_angle ? `<small>Angulo: ${escapeHtml(profile.personalization_angle)}</small>` : ""}
+                ${signals.length ? `<ul>${signals.slice(0, 4).map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>` : ""}
+                ${risks.length ? `<small>Riesgos: ${risks.map(escapeHtml).join(" | ")}</small>` : ""}
+              `
+              : `<p class="empty">${search.status === "running" ? "Origami sigue investigando..." : escapeHtml(search.error || "Sin resultado todavia.")}</p>`
+          }
+          ${
+            draft.email_body || draft.recommended_subject
+              ? `
+                <details>
+                  <summary>Borrador sugerido</summary>
+                  ${draft.recommended_subject ? `<small>Asunto: ${escapeHtml(draft.recommended_subject)}</small>` : ""}
+                  ${draft.email_body ? `<pre>${escapeHtml(draft.email_body)}</pre>` : ""}
+                </details>
+              `
+              : ""
+          }
+          <footer>
+            <button class="secondary" type="button" data-refresh-origami-search="${attr(search.id)}" ${search.status === "running" ? "" : "disabled"}>Actualizar</button>
+            <button class="secondary" type="button" data-copy-origami-search="${attr(search.id)}">Copiar inteligencia</button>
+          </footer>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.origamiPersonSearchResults.querySelectorAll("[data-refresh-origami-search]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => refreshOrigamiPeopleSearch(button.dataset.refreshOrigamiSearch, true));
+  });
+  elements.origamiPersonSearchResults.querySelectorAll("[data-copy-origami-search]").forEach((button) => {
+    button.addEventListener("click", () => copyOrigamiPeopleSearch(button.dataset.copyOrigamiSearch));
+  });
+}
+
+function copyOrigamiPeopleSearch(id) {
+  const search = state.origamiPeopleSearches.find((item) => item.id === id);
+  if (!search) return;
+  const profile = search.result_profile || {};
+  const draft = search.email_draft || {};
+  const text = [
+    `Persona: ${profile.person_name || search.query_name}`,
+    `Empresa: ${profile.company_name || search.query_company || ""}`,
+    `Resumen: ${profile.summary || ""}`,
+    `Fit: ${profile.fit_for_tecnotitan || "unknown"}`,
+    `Cold email fit: ${profile.cold_email_fit || "unknown"}`,
+    `Pitch email: ${profile.official_pitch_email || ""}`,
+    `Canal recomendado: ${profile.recommended_channel || ""}`,
+    `Angulo: ${profile.personalization_angle || ""}`,
+    draft.recommended_subject ? `Asunto: ${draft.recommended_subject}` : "",
+    draft.email_body || "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  copyValue(text, "Inteligencia Origami");
+}
+
+function scheduleOrigamiSearchPoll(id, attempt = 1) {
+  if (!id) return;
+  if (state.origamiSearchPollTimer) window.clearTimeout(state.origamiSearchPollTimer);
+  state.origamiSearchPollTimer = window.setTimeout(async () => {
+    try {
+      const search = await refreshOrigamiPeopleSearch(id, false);
+      if (search?.status === "running" && attempt < ORIGAMI_MAX_POLL_ATTEMPTS) {
+        scheduleOrigamiSearchPoll(id, attempt + 1);
+      }
+    } catch (error) {
+      if (elements.origamiPersonSearchStatus) elements.origamiPersonSearchStatus.textContent = error.message;
+    }
+  }, ORIGAMI_POLL_INTERVAL_MS);
+}
+
+async function refreshOrigamiPeopleSearch(id, manual = false) {
+  const result = await api("/api/origami-search", {
+    method: "POST",
+    body: JSON.stringify({ action: "refresh", id }),
+  });
+  state.origamiPeopleSearches = result.searches || [];
+  renderOrigamiPeopleSearches();
+  if (elements.origamiPersonSearchStatus) {
+    elements.origamiPersonSearchStatus.textContent = manual ? "Busqueda actualizada." : "Origami sigue trabajando...";
+  }
+  return result.search;
+}
+
+async function createOrigamiPeopleSearch() {
+  if (!state.origamiConfigured) {
+    elements.origamiPersonSearchStatus.textContent = "Origami no esta configurado.";
+    return;
+  }
+  const name = elements.origamiPersonName.value.trim();
+  if (!name) {
+    elements.origamiPersonSearchStatus.textContent = "Escribe el nombre de la persona.";
+    return;
+  }
+  const originalText = elements.origamiPersonSearchButton.textContent;
+  elements.origamiPersonSearchButton.disabled = true;
+  elements.origamiPersonSearchButton.textContent = "Buscando...";
+  elements.origamiPersonSearchStatus.textContent = "Origami esta investigando...";
+  try {
+    const result = await api("/api/origami-search", {
+      method: "POST",
+      body: JSON.stringify({
+        query_name: name,
+        query_company: elements.origamiPersonCompany.value.trim(),
+        query_linkedin_url: elements.origamiPersonLinkedin.value.trim(),
+        query_notes: elements.origamiPersonNotes.value.trim(),
+        search_purpose: elements.origamiPersonPurpose.value,
+      }),
+    });
+    state.origamiPeopleSearches = result.searches || [];
+    renderOrigamiPeopleSearches();
+    if (result.search?.status === "running") {
+      scheduleOrigamiSearchPoll(result.search.id);
+      elements.origamiPersonSearchStatus.textContent = "Busqueda creada. El CRM actualizara automaticamente.";
+    } else {
+      elements.origamiPersonSearchStatus.textContent = "Busqueda Origami lista.";
+    }
+  } catch (error) {
+    elements.origamiPersonSearchStatus.textContent = error.message;
+  } finally {
+    elements.origamiPersonSearchButton.disabled = false;
+    elements.origamiPersonSearchButton.textContent = originalText;
+  }
 }
 
 function renderFollowupList(container, rows) {
@@ -3160,7 +3331,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -3170,6 +3341,7 @@ async function loadPrivateData() {
       api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [] })),
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
       api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
+      api("/api/origami-search").catch(() => ({ searches: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -3180,6 +3352,7 @@ async function loadPrivateData() {
     state.emailWarmups = campaigns.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
     state.leadInventory = inventory.inventory || null;
+    state.origamiPeopleSearches = origamiSearches.searches || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -3197,6 +3370,7 @@ async function loadPrivateData() {
     renderLeadInventory(state.leadInventory);
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
+    renderOrigamiPeopleSearches();
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -3771,6 +3945,11 @@ function logout() {
   state.emailExclusions = [];
   state.emailWarmups = [];
   state.emailStatus = null;
+  state.origamiPeopleSearches = [];
+  if (state.origamiSearchPollTimer) {
+    clearTimeout(state.origamiSearchPollTimer);
+    state.origamiSearchPollTimer = null;
+  }
   state.emailMailbox = "compose";
   state.emailSearch = "";
   state.selectedEmailId = "";
@@ -3804,6 +3983,8 @@ function logout() {
   if (elements.senderWarmupList) elements.senderWarmupList.innerHTML = `<p class="empty">No hay calentamiento configurado.</p>`;
   if (elements.exclusionList) elements.exclusionList.innerHTML = `<p class="empty">No hay emails excluidos.</p>`;
   if (elements.campaignStatus) elements.campaignStatus.textContent = "";
+  if (elements.origamiPersonSearchResults) elements.origamiPersonSearchResults.innerHTML = `<p class="empty">Inicia sesion para buscar personas con Origami.</p>`;
+  if (elements.origamiPersonSearchStatus) elements.origamiPersonSearchStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
   renderSessionUser();
   showLogin();
@@ -3824,6 +4005,10 @@ elements.saveScoreTags.addEventListener("click", saveScoreTags);
 elements.addDetailNote.addEventListener("click", addLeadNote);
 elements.analyzeOrigami?.addEventListener("click", () => runOrigamiAnalysis("analyze"));
 elements.refreshOrigami?.addEventListener("click", () => runOrigamiAnalysis("refresh"));
+elements.origamiPersonSearchButton?.addEventListener("click", createOrigamiPeopleSearch);
+elements.origamiPersonName?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") createOrigamiPeopleSearch();
+});
 elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
 elements.applyLeadFilters.addEventListener("click", applyLeadFiltersFromFirstPage);
