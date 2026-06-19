@@ -1558,6 +1558,8 @@ function emptyLeadInventoryBucket(key, label) {
     sent_tagged: 0,
     blocked: 0,
     bounced_or_suppressed: 0,
+    origami_pending: 0,
+    origami_rejected: 0,
     available_for_campaign: 0,
   };
 }
@@ -1574,11 +1576,27 @@ function inventoryStatus(bucket) {
   return "listo";
 }
 
+function origamiCampaignApproval(opportunity = {}) {
+  const profile = opportunity.origami_profile || {};
+  const status = String(opportunity.origami_status || "").toLowerCase();
+  const coldEmailFit = String(profile.cold_email_fit || "unknown").toLowerCase();
+  const recommendedChannel = String(profile.recommended_channel || "manual_review").toLowerCase();
+  const pitchPolicy = String(profile.pitch_policy || "unknown").toLowerCase();
+  const issues = [];
+
+  if (status !== "completed") issues.push("Origami no ha aprobado esta lead todavia.");
+  if (!["high", "medium"].includes(coldEmailFit)) issues.push(`Cold email fit no apto: ${coldEmailFit || "unknown"}.`);
+  if (recommendedChannel === "manual_review") issues.push("Origami recomienda revision manual antes de enviar.");
+  if (pitchPolicy === "no_unsolicited") issues.push("Origami detecto politica no unsolicited.");
+
+  return { approved: issues.length === 0, issues };
+}
+
 async function leadInventory(user) {
   requireCampaignAdmin(user);
   const [{ payload: opportunities }, { payload: exclusions }, { payload: recipients }] = await Promise.all([
     supabaseFetch(
-      "/opportunities?select=id,lead_type,target_region,deleted_at,contacts(id,email,email_status,contact_tags(tags(name))),companies(id,name,country)&deleted_at=is.null&limit=5000"
+      "/opportunities?select=id,lead_type,target_region,deleted_at,origami_status,origami_profile,contacts(id,email,email_status,contact_tags(tags(name))),companies(id,name,country)&deleted_at=is.null&limit=5000"
     ),
     supabaseFetch("/email_exclusions?select=email,reason,active&active=eq.true&limit=5000"),
     supabaseFetch(
@@ -1615,7 +1633,10 @@ async function leadInventory(user) {
     const blocked = (email && excludedEmails.has(email)) || noContactTagged || doubtfulTagged || emailStatusLooksRisky(opportunity.contacts?.email_status);
     const bouncedOrSuppressed = email && unhealthyEmails.has(email);
     const duplicateEmail = email && seenOpportunityEmails.has(email);
-    const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail;
+    const origamiApproval = origamiCampaignApproval(opportunity);
+    const origamiPending = opportunity.origami_status !== "completed";
+    const origamiRejected = !origamiPending && !origamiApproval.approved;
+    const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail && origamiApproval.approved;
 
     if (email) seenOpportunityEmails.add(email);
 
@@ -1626,6 +1647,8 @@ async function leadInventory(user) {
       if (sentTagged) bucket.sent_tagged += 1;
       if (blocked) bucket.blocked += 1;
       if (bouncedOrSuppressed) bucket.bounced_or_suppressed += 1;
+      if (origamiPending) bucket.origami_pending += 1;
+      if (origamiRejected) bucket.origami_rejected += 1;
       if (available) bucket.available_for_campaign += 1;
     }
 
@@ -1664,7 +1687,7 @@ function regionFilter(regions) {
 async function campaignLeadPool(campaignType, targetRegion) {
   const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     regionFilter(regions),
     "deleted_at=is.null",
@@ -1674,6 +1697,7 @@ async function campaignLeadPool(campaignType, targetRegion) {
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   const seen = new Set();
   return (payload || [])
+    .filter((opportunity) => origamiCampaignApproval(opportunity).approved)
     .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
     .filter((opportunity) => opportunity.contacts?.email)
     .filter((opportunity) => {
@@ -1692,7 +1716,7 @@ function hasContactTag(contact, name) {
 async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, limit = 100) {
   const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     regionFilter(regions),
     "deleted_at=is.null",
@@ -1701,6 +1725,7 @@ async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, li
   ].filter(Boolean);
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   return (payload || [])
+    .filter((opportunity) => origamiCampaignApproval(opportunity).approved)
     .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
     .filter((opportunity) => !opportunity.contacts?.email)
     .filter((opportunity) => opportunity.contacts?.apollo_enrichment_status !== "not_available");
@@ -1858,6 +1883,21 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
     const email = normalizeEmail(lead.contacts?.email);
     if (!email || existingEmails.has(email) || openEmails.has(email)) continue;
     existingEmails.add(email);
+    const origamiApproval = origamiCampaignApproval(lead);
+    if (!origamiApproval.approved) {
+      blockedRecipients.push({
+        campaign_id: campaign.id,
+        opportunity_id: lead.id,
+        contact_id: lead.contact_id,
+        company_id: lead.company_id,
+        email,
+        status: "skipped",
+        reputation_status: "blocked",
+        reputation_issues: origamiApproval.issues,
+        last_error: origamiApproval.issues.join(" "),
+      });
+      continue;
+    }
     const exclusion = await findExclusion(email);
     if (exclusion) {
       blockedRecipients.push({
@@ -2033,7 +2073,7 @@ async function processCampaign(user, body) {
   );
   const existingFingerprints = new Set((campaignFingerprints || []).map((row) => row.message_fingerprint).filter(Boolean));
   const { payload: recipients } = await supabaseFetch(
-    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,contacts(id,full_name,email,email_status,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
+    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,origami_status,origami_profile,contacts(id,full_name,email,email_status,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
   );
 
   let sent = 0;
@@ -2041,6 +2081,22 @@ async function processCampaign(user, body) {
   let followupsSent = 0;
   for (const recipient of recipients || []) {
     const opportunity = recipient.opportunities || {};
+    const origamiApproval = origamiCampaignApproval(opportunity);
+    if (!origamiApproval.approved) {
+      await updateRows(
+        "email_campaign_recipients",
+        {
+          status: "skipped",
+          reputation_status: "blocked",
+          reputation_issues: origamiApproval.issues,
+          last_error: origamiApproval.issues.join(" "),
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(recipient.id)}`
+      );
+      failed += 1;
+      continue;
+    }
     const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies };
     const subject = renderTemplate(localizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
     const text = renderTemplate(localizedCampaignTemplate(campaign, templateData, "body_template"), templateData);

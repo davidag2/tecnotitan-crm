@@ -2167,10 +2167,10 @@ function renderLeadInventory(inventory = state.leadInventory) {
   const alertClass = totals.status === "listo" ? "is-ready" : totals.status === "bajo" ? "is-low" : "is-empty";
   const statusCopy =
     totals.status === "sin_inventario"
-      ? "Apollo debe traer o revelar nuevos emails antes de seguir escalando campanas."
+      ? "No hay leads aprobadas por Origami para envio automatico."
       : totals.status === "bajo"
-        ? "Hay leads listas, pero conviene reponer inventario antes de una campana grande."
-        : "Hay leads con email listas para entrar en campanas.";
+        ? "Hay pocas leads aprobadas por Origami; conviene analizar mas antes de una campana grande."
+        : "Hay leads con email y aprobacion Origami listas para entrar en campanas.";
 
   elements.leadInventory.innerHTML = `
     <div class="inventory-status ${alertClass}">
@@ -2178,12 +2178,14 @@ function renderLeadInventory(inventory = state.leadInventory) {
       <span>${statusCopy}</span>
     </div>
     <div class="inventory-grid">
-      <article><b>${totals.available_for_campaign}</b><span>Disponibles campana</span></article>
+      <article><b>${totals.available_for_campaign}</b><span>Aptas campana</span></article>
       <article><b>${totals.with_email}</b><span>Con email</span></article>
       <article><b>${totals.without_email}</b><span>Sin email</span></article>
       <article><b>${totals.sent_tagged}</b><span>Correo enviado</span></article>
       <article><b>${totals.blocked}</b><span>No contactar</span></article>
       <article><b>${totals.bounced_or_suppressed}</b><span>Rebote/suprimido</span></article>
+      <article><b>${totals.origami_pending || 0}</b><span>Pendiente Origami</span></article>
+      <article><b>${totals.origami_rejected || 0}</b><span>No apta Origami</span></article>
     </div>
     <div class="inventory-breakdown">
       ${focusRows
@@ -2191,7 +2193,7 @@ function renderLeadInventory(inventory = state.leadInventory) {
           (item) => `
             <div>
               <strong>${item.label}</strong>
-              <span>${item.available_for_campaign} listas | ${item.with_email} con email | ${item.without_email} sin email</span>
+              <span>${item.available_for_campaign} aptas | ${item.with_email} con email | ${item.origami_pending || 0} pendientes Origami</span>
             </div>
           `
         )
