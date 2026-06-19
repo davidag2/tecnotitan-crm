@@ -12,6 +12,8 @@ const state = {
   leadInventory: null,
   emailStatus: null,
   origamiConfigured: false,
+  origamiPollTimer: null,
+  origamiPollAttempts: 0,
   emailMailbox: "compose",
   emailSearch: "",
   selectedEmailId: "",
@@ -189,6 +191,8 @@ const LEADS_PER_PAGE = 25;
 const CLIENTS_PER_PAGE = 25;
 const KANBAN_CLIENTS_PER_PAGE = 10;
 const EMAILS_PER_PAGE = 25;
+const ORIGAMI_POLL_INTERVAL_MS = 8000;
+const ORIGAMI_MAX_POLL_ATTEMPTS = 45;
 
 const MESSAGE_TEMPLATES = [
   {
@@ -2567,6 +2571,7 @@ function renderOrigamiPanel(opportunity) {
   elements.detailOrigami.innerHTML = `
     <div class="origami-status-row">
       <span class="status-badge">${origamiStatusLabel(status)}</span>
+      ${status === "running" ? `<small>Refresco automatico activo. Esto puede tardar varios minutos.</small>` : ""}
       ${analyzedAt ? `<small>Ultimo analisis: ${escapeHtml(analyzedAt)}</small>` : ""}
       ${!state.origamiConfigured ? `<small>Falta ORIGAMI_API_KEY en Vercel.</small>` : ""}
       ${opportunity.origami_error ? `<small>${escapeHtml(opportunity.origami_error)}</small>` : ""}
@@ -2720,6 +2725,7 @@ async function openLeadDetail(opportunityId) {
 }
 
 function closeLeadDetail() {
+  clearOrigamiPoll();
   activeOpportunityId = "";
   elements.detailModal.classList.add("hidden");
   elements.detailModal.setAttribute("aria-hidden", "true");
@@ -2981,6 +2987,50 @@ function useOrigamiDraft(opportunity) {
   setStatus("Borrador Origami cargado en Nuevo correo.", "ok");
 }
 
+function clearOrigamiPoll() {
+  if (state.origamiPollTimer) {
+    window.clearTimeout(state.origamiPollTimer);
+    state.origamiPollTimer = null;
+  }
+  state.origamiPollAttempts = 0;
+}
+
+function scheduleOrigamiPoll(opportunityId, attempt = 1) {
+  if (!opportunityId || activeOpportunityId !== opportunityId) return;
+  if (state.origamiPollTimer) window.clearTimeout(state.origamiPollTimer);
+  state.origamiPollAttempts = attempt;
+  state.origamiPollTimer = window.setTimeout(async () => {
+    if (activeOpportunityId !== opportunityId) return;
+    try {
+      const result = await api(`/api/origami?id=${encodeURIComponent(opportunityId)}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "refresh" }),
+      });
+      const detail = await api(`/api/lead-detail?id=${encodeURIComponent(opportunityId)}`);
+      renderLeadDetail(detail);
+      const status = result.opportunity?.origami_status || detail.opportunity?.origami_status;
+      if (status === "running" && attempt < ORIGAMI_MAX_POLL_ATTEMPTS) {
+        setStatus(`Origami sigue analizando... intento ${attempt + 1}/${ORIGAMI_MAX_POLL_ATTEMPTS}.`, "ok");
+        scheduleOrigamiPoll(opportunityId, attempt + 1);
+        return;
+      }
+      clearOrigamiPoll();
+      if (status === "running") {
+        setStatus("Origami sigue procesando. Puedes dejar la lead abierta o presionar Actualizar mas tarde.", "warning");
+      } else if (status === "completed") {
+        setStatus("Inteligencia Origami lista.", "ok");
+      } else if (status === "needs_input") {
+        setStatus("Origami requiere revision manual para completar este analisis.", "warning");
+      } else if (status === "failed") {
+        setStatus("Origami no pudo completar este analisis. Revisa el error en el detalle.", "warning");
+      }
+    } catch (error) {
+      clearOrigamiPoll();
+      setStatus(error.message, "warning");
+    }
+  }, ORIGAMI_POLL_INTERVAL_MS);
+}
+
 async function runOrigamiAnalysis(action = "analyze") {
   if (!activeOpportunityId) return;
   if (!state.origamiConfigured) {
@@ -2998,10 +3048,15 @@ async function runOrigamiAnalysis(action = "analyze") {
       method: "POST",
       body: JSON.stringify({ action }),
     });
-    renderLeadDetail({ opportunity: result.opportunity, notes: [], events: [], activities: [], tags: [] });
     await openLeadDetail(activeOpportunityId);
     const status = result.opportunity?.origami_status;
-    setStatus(status === "running" ? "Origami esta analizando la lead. Usa Actualizar en unos segundos." : "Inteligencia Origami actualizada.", "ok");
+    if (status === "running") {
+      scheduleOrigamiPoll(activeOpportunityId);
+      setStatus("Origami esta analizando la lead. El CRM actualizara automaticamente.", "ok");
+    } else {
+      clearOrigamiPoll();
+      setStatus("Inteligencia Origami actualizada.", "ok");
+    }
   } catch (error) {
     setStatus(error.message, "warning");
   } finally {

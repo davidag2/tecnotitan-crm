@@ -134,6 +134,7 @@ function normalizedStatus(status) {
   if (["running", "queued", "pending", "cancelling"].includes(value)) return "running";
   if (["failed", "error", "cancelled", "canceled"].includes(value)) return "failed";
   if (["needs_input"].includes(value)) return "needs_input";
+  if (["completed", "complete", "done", "succeeded", "success", "finished"].includes(value)) return "completed";
   return "completed";
 }
 
