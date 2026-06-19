@@ -578,6 +578,9 @@ function activateTab(tab, updateHash = false) {
     if (isActive && updateHash) {
       history.replaceState(null, "", node.getAttribute("href"));
     }
+    if (isActive) {
+      node.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
   });
 
   elements.tabPanels.forEach((panel) => {
