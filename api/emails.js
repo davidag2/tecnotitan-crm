@@ -1582,10 +1582,18 @@ function origamiCampaignApproval(opportunity = {}) {
   const coldEmailFit = String(profile.cold_email_fit || "unknown").toLowerCase();
   const recommendedChannel = String(profile.recommended_channel || "manual_review").toLowerCase();
   const pitchPolicy = String(profile.pitch_policy || "unknown").toLowerCase();
+  const acceptsColdEmail = String(profile.accepts_cold_email || "unknown").toLowerCase();
+  const acceptsPitches = String(profile.accepts_pitches || "unknown").toLowerCase();
+  const acceptsFounderSubmissions = String(profile.accepts_founder_submissions || "unknown").toLowerCase();
+  const acceptsInboundDeals = String(profile.accepts_inbound_deals || "unknown").toLowerCase();
   const issues = [];
 
   if (status !== "completed") issues.push("Origami no ha aprobado esta lead todavia.");
   if (!["high", "medium"].includes(coldEmailFit)) issues.push(`Cold email fit no apto: ${coldEmailFit || "unknown"}.`);
+  if (acceptsColdEmail === "no") issues.push("Origami detecto que no acepta cold emails.");
+  if ([acceptsPitches, acceptsFounderSubmissions, acceptsInboundDeals].every((value) => value === "no")) {
+    issues.push("Origami no detecto apertura a pitches, submissions ni inbound deals.");
+  }
   if (recommendedChannel === "manual_review") issues.push("Origami recomienda revision manual antes de enviar.");
   if (pitchPolicy === "no_unsolicited") issues.push("Origami detecto politica no unsolicited.");
 

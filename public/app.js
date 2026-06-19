@@ -770,6 +770,8 @@ function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
                   <span>Canal: ${escapeHtml(profile.recommended_channel || "manual_review")}</span>
                   <span>Confianza: ${escapeHtml(profile.confidence || "low")}</span>
                 </div>
+                ${renderOpennessChips(profile)}
+                ${profile.outreach_openness_evidence ? `<small>Apertura: ${escapeHtml(profile.outreach_openness_evidence)}</small>` : ""}
                 <div class="origami-search-meta">
                   <span>Pitch email: ${escapeHtml(profile.official_pitch_email || "No encontrado")}</span>
                   <span>Alias: ${escapeHtml(profile.pitch_email_alias_type || "unknown")}</span>
@@ -824,6 +826,11 @@ function copyOrigamiPeopleSearch(id) {
     `Resumen: ${profile.summary || ""}`,
     `Fit: ${profile.fit_for_tecnotitan || "unknown"}`,
     `Cold email fit: ${profile.cold_email_fit || "unknown"}`,
+    `Acepta pitches: ${profile.accepts_pitches || "unknown"}`,
+    `Founder submissions: ${profile.accepts_founder_submissions || "unknown"}`,
+    `Inbound deals: ${profile.accepts_inbound_deals || "unknown"}`,
+    `Cold emails: ${profile.accepts_cold_email || "unknown"}`,
+    `Evidencia apertura: ${profile.outreach_openness_evidence || ""}`,
     `Pitch email: ${profile.official_pitch_email || ""}`,
     `Canal pitch: ${profile.official_pitch_channel || "unknown"}`,
     `Politica pitch: ${profile.pitch_policy || "unknown"}`,
@@ -2355,6 +2362,36 @@ function coldEmailFitLabel(value) {
   return labels[value] || labels.unknown;
 }
 
+function opennessLabel(value) {
+  const normalized = normalizeFilterValue(value);
+  if (normalized === "yes") return "Si";
+  if (normalized === "no") return "No";
+  return "Unknown";
+}
+
+function opennessClass(value) {
+  const normalized = normalizeFilterValue(value);
+  if (normalized === "yes") return "yes";
+  if (normalized === "no") return "no";
+  return "unknown";
+}
+
+function renderOpennessChips(profile = {}) {
+  const rows = [
+    ["Pitches", profile.accepts_pitches],
+    ["Founder submissions", profile.accepts_founder_submissions],
+    ["Inbound deals", profile.accepts_inbound_deals],
+    ["Cold emails", profile.accepts_cold_email],
+  ];
+  return `
+    <div class="openness-chips">
+      ${rows
+        .map(([label, value]) => `<span class="${opennessClass(value)}">${label}: ${opennessLabel(value)}</span>`)
+        .join("")}
+    </div>
+  `;
+}
+
 function manualReviewReasons(lead) {
   const profile = lead?.origami_profile || {};
   const status = normalizeFilterValue(lead?.origami_status);
@@ -2370,6 +2407,10 @@ function manualReviewReasons(lead) {
   if (fit === "unknown" && status === "completed") reasons.push("Cold email fit unknown");
   if (pitchPolicy === "form_required") reasons.push("Formulario obligatorio");
   if (pitchPolicy === "no_unsolicited") reasons.push("No unsolicited");
+  if (normalizeFilterValue(profile.accepts_cold_email) === "no") reasons.push("No acepta cold emails");
+  if (normalizeFilterValue(profile.accepts_pitches) === "no" && normalizeFilterValue(profile.accepts_founder_submissions) === "no") {
+    reasons.push("No acepta pitches/submissions");
+  }
   if (recommendedChannel === "manual_review") reasons.push("Canal requiere revision");
   if (status === "completed" && signals.length < 2) reasons.push("Senales debiles");
 
@@ -3076,11 +3117,17 @@ function renderOrigamiSignals(profile) {
     </div>
     <div class="origami-pitch-box">
       <strong>Canal oficial para pitch</strong>
+      ${renderOpennessChips(profile)}
       <div class="origami-search-meta">
         <span>Canal: ${escapeHtml(profile?.official_pitch_channel || "unknown")}</span>
         <span>Alias: ${escapeHtml(profile?.pitch_email_alias_type || "unknown")}</span>
         <span>Fuente: ${pitchSource}</span>
       </div>
+      ${
+        profile?.outreach_openness_evidence
+          ? `<p>${escapeHtml(profile.outreach_openness_evidence)}</p>`
+          : ""
+      }
       ${
         profile?.pitch_detection_evidence
           ? `<p>${escapeHtml(profile.pitch_detection_evidence)}</p>`
