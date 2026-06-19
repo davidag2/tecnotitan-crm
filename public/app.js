@@ -3059,6 +3059,19 @@ function renderOrigamiPanel(opportunity) {
   });
 }
 
+function renderScoreReasonRows(reasons) {
+  const rows = Array.isArray(reasons) ? reasons : [];
+  return (
+    rows
+      .map((reason) => {
+        const isOrigami = reason.origin === "origami";
+        const origin = isOrigami ? "Origami" : "Apollo";
+        return `<li><span class="score-origin ${isOrigami ? "origami" : "apollo"}">${origin}</span> ${reason.points} pts - ${escapeHtml(reason.reason || "")}</li>`;
+      })
+      .join("") || "<li>Sin razones registradas.</li>"
+  );
+}
+
 function renderLeadDetail(detail) {
   const opportunity = detail.opportunity;
   const contact = opportunity.contacts || {};
@@ -3102,7 +3115,7 @@ function renderLeadDetail(detail) {
       <strong>${opportunity.score}</strong>
       <span>${opportunity.score_label}</span>
     </div>
-    <ul>${reasons.map((reason) => `<li>${reason.points} · ${reason.reason}</li>`).join("") || "<li>Sin razones registradas.</li>"}</ul>
+    <ul>${renderScoreReasonRows(reasons)}</ul>
   `;
   elements.detailScoreInput.value = opportunity.score ?? 0;
   elements.detailScoreLabel.value = opportunity.score_label || "unqualified";

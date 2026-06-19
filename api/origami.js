@@ -1,6 +1,7 @@
 const { requireUser } = require("./_auth");
 const { createAgentRun, getRun, origamiConfigured } = require("./_origami");
 const { readJsonBody } = require("./_request");
+const { scoreWithOrigami } = require("./_scoring");
 const { insertRow, supabaseFetch, updateRows } = require("./_supabase");
 
 function getOpportunityId(req) {
@@ -10,7 +11,7 @@ function getOpportunityId(req) {
 
 async function loadOpportunity(id, user) {
   const filters = [
-    "select=id,lead_type,target_region,pipeline_status,score,score_label,origami_status,origami_agent_id,origami_run_id,origami_table_id,origami_profile,origami_email_draft,origami_analyzed_at,origami_error,contacts(id,full_name,first_name,last_name,title,seniority,email,email_status,linkedin_url,country,city,state,apollo_enrichment_status,apollo_raw_payload),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,raw_payload)",
+    "select=id,lead_type,target_region,pipeline_status,score,score_label,score_reasons,origami_status,origami_agent_id,origami_run_id,origami_table_id,origami_profile,origami_email_draft,origami_analyzed_at,origami_error,contacts(id,full_name,first_name,last_name,title,seniority,email,email_status,linkedin_url,country,city,state,apollo_enrichment_status,apollo_raw_payload),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count,raw_payload)",
     `id=eq.${encodeURIComponent(id)}`,
     "deleted_at=is.null",
     "limit=1",
@@ -159,7 +160,7 @@ async function saveRunResult(opportunity, run) {
   if (status === "completed") {
     const resultText = extractResultText(run);
     const intelligence = extractJson(resultText) || {};
-    patch.origami_profile = {
+    const origamiProfile = {
       raw_response: resultText,
       summary: intelligence.summary || "",
       personalization_angle: intelligence.personalization_angle || "",
@@ -175,11 +176,16 @@ async function saveRunResult(opportunity, run) {
       signals: Array.isArray(intelligence.signals) ? intelligence.signals : [],
       risks: Array.isArray(intelligence.risks) ? intelligence.risks : [],
     };
+    const origamiScore = scoreWithOrigami(opportunity, origamiProfile);
+    patch.origami_profile = origamiProfile;
     patch.origami_email_draft = {
       opening_line: intelligence.opening_line || "",
       recommended_subject: intelligence.recommended_subject || "",
       email_body: intelligence.email_body || "",
     };
+    patch.score = origamiScore.score;
+    patch.score_label = origamiScore.score_label;
+    patch.score_reasons = origamiScore.score_reasons;
     patch.origami_analyzed_at = new Date().toISOString();
     patch.origami_error = null;
   }

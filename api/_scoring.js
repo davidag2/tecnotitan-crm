@@ -57,6 +57,15 @@ function add(reasons, points, reason) {
   return points;
 }
 
+function addOrigami(reasons, points, reason) {
+  reasons.push({ points, reason, origin: "origami" });
+  return points;
+}
+
+function clampScore(score) {
+  return Math.max(0, Math.min(Math.round(score), 100));
+}
+
 function scoreLead({ leadType, title, country, linkedinUrl, organization }) {
   let score = 0;
   const reasons = [];
@@ -104,8 +113,52 @@ function scoreLead({ leadType, title, country, linkedinUrl, organization }) {
   if (organization?.website_url || organization?.primary_domain) score += add(reasons, 5, "Sitio web o dominio disponible");
   if (organization?.linkedin_url) score += add(reasons, 5, "LinkedIn de empresa disponible");
 
-  const finalScore = Math.max(0, Math.min(score, 100));
+  const finalScore = clampScore(score);
   return { score: finalScore, score_label: label(finalScore), score_reasons: reasons };
 }
 
-module.exports = { scoreLead };
+function scoreWithOrigami(opportunity, profile = {}) {
+  const baseScore = Number.isFinite(Number(opportunity?.score)) ? Number(opportunity.score) : 0;
+  const baseReasons = Array.isArray(opportunity?.score_reasons)
+    ? opportunity.score_reasons.filter((reason) => reason?.origin !== "origami")
+    : [];
+  const reasons = [...baseReasons];
+  let score = baseScore;
+  const coldEmailFit = normalize(profile.cold_email_fit);
+  const recommendedChannel = normalize(profile.recommended_channel);
+  const pitchPolicy = normalize(profile.pitch_policy);
+  const hasOfficialPitchEmail = Boolean(profile.official_pitch_email);
+  const hasPersonalization = Boolean(profile.personalization_angle);
+  const signals = Array.isArray(profile.signals) ? profile.signals : [];
+  const risks = Array.isArray(profile.risks) ? profile.risks : [];
+
+  if (coldEmailFit === "high") score += addOrigami(reasons, 18, "Origami: alta apertura a cold email");
+  else if (coldEmailFit === "medium") score += addOrigami(reasons, 8, "Origami: apertura media a cold email");
+  else if (coldEmailFit === "low") score += addOrigami(reasons, -18, "Origami: baja apertura a cold email");
+  else score += addOrigami(reasons, -4, "Origami: apertura cold email desconocida");
+
+  if (hasOfficialPitchEmail) score += addOrigami(reasons, 10, "Origami: email oficial para pitch detectado");
+  if (recommendedChannel === "official_pitch_email" || recommendedChannel === "email") {
+    score += addOrigami(reasons, 8, "Origami: canal recomendado por email");
+  } else if (recommendedChannel === "form") {
+    score += addOrigami(reasons, 4, "Origami: formulario oficial disponible");
+  } else if (recommendedChannel === "linkedin") {
+    score += addOrigami(reasons, 2, "Origami: canal recomendado LinkedIn");
+  } else if (recommendedChannel === "manual_review") {
+    score += addOrigami(reasons, -5, "Origami: requiere revision manual");
+  }
+
+  if (pitchPolicy === "accepts_pitches") score += addOrigami(reasons, 10, "Origami: acepta pitches o inbound");
+  else if (pitchPolicy === "form_required") score += addOrigami(reasons, 5, "Origami: pitch por formulario obligatorio");
+  else if (pitchPolicy === "referral_only") score += addOrigami(reasons, -8, "Origami: prefiere referidos");
+  else if (pitchPolicy === "no_unsolicited") score += addOrigami(reasons, -20, "Origami: no acepta mensajes no solicitados");
+
+  if (hasPersonalization) score += addOrigami(reasons, 6, "Origami: angulo de personalizacion claro");
+  if (signals.length) score += addOrigami(reasons, Math.min(signals.length * 3, 9), "Origami: senales publicas relevantes");
+  if (risks.length) score += addOrigami(reasons, -Math.min(risks.length * 4, 12), "Origami: riesgos o dudas detectadas");
+
+  const finalScore = clampScore(score);
+  return { score: finalScore, score_label: label(finalScore), score_reasons: reasons };
+}
+
+module.exports = { scoreLead, scoreWithOrigami };
