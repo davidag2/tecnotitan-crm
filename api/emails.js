@@ -3,6 +3,7 @@ const { emailStatus, resendFetch, senderFor } = require("./_resend");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
 const crypto = require("crypto");
+const dns = require("dns").promises;
 const fs = require("fs");
 const path = require("path");
 
@@ -227,6 +228,83 @@ function reputationIssues({ subject, text, sender, senderKey, opportunity, conta
   }
   if (duplicateFingerprint) issues.push("Mensaje demasiado parecido a otro ya preparado.");
   return issues;
+}
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "10minutemail.com",
+  "guerrillamail.com",
+  "mailinator.com",
+  "tempmail.com",
+  "throwawaymail.com",
+  "yopmail.com",
+]);
+const EMAIL_MX_CACHE = new Map();
+
+function emailStatusLooksRisky(status) {
+  const value = String(status || "").toLowerCase();
+  if (!value) return false;
+  return [
+    "invalid",
+    "unavailable",
+    "not_available",
+    "risky",
+    "unknown",
+    "catch",
+    "doubtful",
+    "guessed",
+    "unverified",
+    "bounced",
+    "failed",
+  ].some((item) => value.includes(item));
+}
+
+function emailFormatIssue(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return "Email vacio o invalido.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalized)) return "Formato de email invalido.";
+  const [local, domain] = normalized.split("@");
+  if (!local || local.length > 64) return "Usuario de email invalido.";
+  if (!domain || domain.length > 253 || domain.includes("..")) return "Dominio de email invalido.";
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) return "Dominio temporal o desechable.";
+  return "";
+}
+
+async function emailQualityIssues(email, contact = {}) {
+  const issues = [];
+  const formatIssue = emailFormatIssue(email);
+  if (formatIssue) return [formatIssue];
+  const normalized = normalizeEmail(email);
+  const domain = normalized.split("@")[1];
+  if (emailStatusLooksRisky(contact.email_status)) {
+    issues.push(`Email dudoso segun Apollo: ${contact.email_status}.`);
+  }
+  try {
+    let mxRecords = EMAIL_MX_CACHE.get(domain);
+    if (!mxRecords) {
+      mxRecords = await Promise.race([
+        dns.resolveMx(domain),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("mx_timeout")), 1800)),
+      ]);
+      EMAIL_MX_CACHE.set(domain, mxRecords);
+    }
+    if (!mxRecords?.length) issues.push("Dominio sin registros MX verificables.");
+  } catch (_) {
+    issues.push("No se pudo verificar MX del dominio.");
+  }
+  return issues;
+}
+
+async function markDoubtfulEmail(contactId, issues) {
+  if (!contactId || !issues?.length) return;
+  await ensureContactTag(contactId, "Email dudoso", "#f59e0b").catch(() => null);
+  await updateRows(
+    "contacts",
+    {
+      email_status: "doubtful",
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(contactId)}`
+  ).catch(() => null);
 }
 
 function negativeReplyReason(text) {
@@ -1045,7 +1123,7 @@ async function leadInventory(user) {
   requireCampaignAdmin(user);
   const [{ payload: opportunities }, { payload: exclusions }, { payload: recipients }] = await Promise.all([
     supabaseFetch(
-      "/opportunities?select=id,lead_type,target_region,deleted_at,contacts(id,email,contact_tags(tags(name))),companies(id,name,country)&deleted_at=is.null&limit=5000"
+      "/opportunities?select=id,lead_type,target_region,deleted_at,contacts(id,email,email_status,contact_tags(tags(name))),companies(id,name,country)&deleted_at=is.null&limit=5000"
     ),
     supabaseFetch("/email_exclusions?select=email,reason,active&active=eq.true&limit=5000"),
     supabaseFetch(
@@ -1078,7 +1156,8 @@ async function leadInventory(user) {
     const hasEmail = Boolean(email);
     const sentTagged = hasContactTag(opportunity.contacts, "Correo enviado");
     const noContactTagged = hasContactTag(opportunity.contacts, "No contactar");
-    const blocked = (email && excludedEmails.has(email)) || noContactTagged;
+    const doubtfulTagged = hasContactTag(opportunity.contacts, "Email dudoso");
+    const blocked = (email && excludedEmails.has(email)) || noContactTagged || doubtfulTagged || emailStatusLooksRisky(opportunity.contacts?.email_status);
     const bouncedOrSuppressed = email && unhealthyEmails.has(email);
     const duplicateEmail = email && seenOpportunityEmails.has(email);
     const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail;
@@ -1311,6 +1390,22 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
         reputation_issues: [`Lista global no contactar: ${exclusion.reason}`],
         last_error: `Lista global no contactar: ${exclusion.reason}`,
       });
+      continue;
+    }
+    const qualityIssues = await emailQualityIssues(email, lead.contacts);
+    if (qualityIssues.length) {
+      await markDoubtfulEmail(lead.contact_id || lead.contacts?.id, qualityIssues);
+      blockedRecipients.push({
+        campaign_id: campaign.id,
+        opportunity_id: lead.id,
+        contact_id: lead.contact_id,
+        company_id: lead.company_id,
+        email,
+        status: "skipped",
+        reputation_status: "blocked",
+        reputation_issues: qualityIssues,
+        last_error: qualityIssues.join(" "),
+      });
     } else {
       allowedLeads.push(lead);
     }
@@ -1446,7 +1541,7 @@ async function processCampaign(user, body) {
   );
   const existingFingerprints = new Set((campaignFingerprints || []).map((row) => row.message_fingerprint).filter(Boolean));
   const { payload: recipients } = await supabaseFetch(
-    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
+    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,contacts(id,full_name,email,email_status,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
   );
 
   let sent = 0;
@@ -1456,6 +1551,23 @@ async function processCampaign(user, body) {
     const opportunity = recipient.opportunities || {};
     const subject = renderTemplate(campaign.subject_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
     const text = renderTemplate(campaign.body_template, { opportunity, contact: opportunity.contacts, company: opportunity.companies });
+    const qualityIssues = await emailQualityIssues(recipient.email, opportunity.contacts);
+    if (qualityIssues.length) {
+      await markDoubtfulEmail(opportunity.contacts?.id, qualityIssues);
+      await updateRows(
+        "email_campaign_recipients",
+        {
+          status: "skipped",
+          reputation_status: "blocked",
+          reputation_issues: qualityIssues,
+          last_error: qualityIssues.join(" "),
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(recipient.id)}`
+      );
+      failed += 1;
+      continue;
+    }
     const fingerprint = messageFingerprint(subject, text);
     const duplicate = existingFingerprints.has(fingerprint);
     const issues = campaign.reputation_checks_enabled
