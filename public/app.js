@@ -9,6 +9,7 @@ const state = {
   emailCampaigns: [],
   emailExclusions: [],
   emailWarmups: [],
+  leadInventory: null,
   emailStatus: null,
   emailMailbox: "compose",
   emailSearch: "",
@@ -75,6 +76,7 @@ const elements = {
   createCampaignButton: document.querySelector("#create-campaign-button"),
   campaignStatus: document.querySelector("#campaign-status"),
   campaignList: document.querySelector("#campaign-list"),
+  leadInventory: document.querySelector("#lead-inventory"),
   senderWarmupList: document.querySelector("#sender-warmup-list"),
   exclusionEmail: document.querySelector("#exclusion-email"),
   exclusionReason: document.querySelector("#exclusion-reason"),
@@ -1232,6 +1234,66 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   });
 }
 
+function inventoryStatusLabel(status) {
+  const labels = {
+    listo: "Listo para campana",
+    bajo: "Inventario bajo",
+    sin_inventario: "Sin inventario disponible",
+  };
+  return labels[status] || "Inventario";
+}
+
+function renderLeadInventory(inventory = state.leadInventory) {
+  if (!elements.leadInventory) return;
+  if (!inventory?.totals) {
+    elements.leadInventory.innerHTML = `<p class="empty">No hay inventario cargado.</p>`;
+    return;
+  }
+  const totals = inventory.totals;
+  const investor = (inventory.by_type || []).find((item) => item.key === "investor");
+  const consulting = (inventory.by_type || []).find((item) => item.key === "consulting_client");
+  const focusRows = [investor, consulting].filter(Boolean);
+  const regionRows = (inventory.by_region || []).filter((item) => item.total).slice(0, 4);
+  const alertClass = totals.status === "listo" ? "is-ready" : totals.status === "bajo" ? "is-low" : "is-empty";
+  const statusCopy =
+    totals.status === "sin_inventario"
+      ? "Apollo debe traer o revelar nuevos emails antes de seguir escalando campanas."
+      : totals.status === "bajo"
+        ? "Hay leads listas, pero conviene reponer inventario antes de una campana grande."
+        : "Hay leads con email listas para entrar en campanas.";
+
+  elements.leadInventory.innerHTML = `
+    <div class="inventory-status ${alertClass}">
+      <strong>${inventoryStatusLabel(totals.status)}</strong>
+      <span>${statusCopy}</span>
+    </div>
+    <div class="inventory-grid">
+      <article><b>${totals.available_for_campaign}</b><span>Disponibles campana</span></article>
+      <article><b>${totals.with_email}</b><span>Con email</span></article>
+      <article><b>${totals.without_email}</b><span>Sin email</span></article>
+      <article><b>${totals.sent_tagged}</b><span>Correo enviado</span></article>
+      <article><b>${totals.blocked}</b><span>No contactar</span></article>
+      <article><b>${totals.bounced_or_suppressed}</b><span>Rebote/suprimido</span></article>
+    </div>
+    <div class="inventory-breakdown">
+      ${focusRows
+        .map(
+          (item) => `
+            <div>
+              <strong>${item.label}</strong>
+              <span>${item.available_for_campaign} listas | ${item.with_email} con email | ${item.without_email} sin email</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+    <div class="inventory-regions">
+      ${regionRows.map((item) => `<span>${item.label}: <b>${item.available_for_campaign}</b></span>`).join("") || `<span>Sin regiones cargadas</span>`}
+    </div>
+    <small>Actualizado: ${new Date(inventory.generated_at).toLocaleString("es-CO")}</small>
+  `;
+}
+
 function warmupSenderLabel(senderKey) {
   return senderKey === "investors" ? "Inversionistas" : "Consultoria";
 }
@@ -2380,7 +2442,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -2389,6 +2451,7 @@ async function loadPrivateData() {
       api("/api/emails").catch(() => ({ status: null, messages: [] })),
       api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [] })),
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
+      api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -2398,6 +2461,7 @@ async function loadPrivateData() {
     state.emailCampaigns = campaigns.campaigns || [];
     state.emailWarmups = campaigns.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
+    state.leadInventory = inventory.inventory || null;
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -2412,6 +2476,7 @@ async function loadPrivateData() {
     renderLeadCollections(leadRows);
     renderEmails(state.emailMessages);
     renderCampaigns(state.emailCampaigns);
+    renderLeadInventory(state.leadInventory);
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
     applyRoleVisibility();
@@ -2530,14 +2595,17 @@ async function reloadEmailsOnly() {
 
 async function reloadCampaignsOnly() {
   try {
-    const [data, exclusions] = await Promise.all([
+    const [data, exclusions, inventory] = await Promise.all([
       api("/api/emails?mode=campaigns"),
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
+      api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
     ]);
     state.emailCampaigns = data.campaigns || [];
     state.emailWarmups = data.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
+    state.leadInventory = inventory.inventory || null;
     renderCampaigns(state.emailCampaigns);
+    renderLeadInventory(state.leadInventory);
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
   } catch (error) {

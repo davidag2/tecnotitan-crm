@@ -1015,6 +1015,104 @@ async function listWarmups(user) {
   return Promise.all(["consulting", "investors"].map((senderKey) => warmupStatus(senderKey)));
 }
 
+function emptyLeadInventoryBucket(key, label) {
+  return {
+    key,
+    label,
+    total: 0,
+    with_email: 0,
+    without_email: 0,
+    sent_tagged: 0,
+    blocked: 0,
+    bounced_or_suppressed: 0,
+    available_for_campaign: 0,
+  };
+}
+
+function leadTypeLabel(type) {
+  if (type === "investor") return "Inversionistas";
+  if (type === "consulting_client") return "Consultoria LATAM";
+  return type || "Sin tipo";
+}
+
+function inventoryStatus(bucket) {
+  if (!bucket.available_for_campaign) return "sin_inventario";
+  if (bucket.available_for_campaign < 25) return "bajo";
+  return "listo";
+}
+
+async function leadInventory(user) {
+  requireCampaignAdmin(user);
+  const [{ payload: opportunities }, { payload: exclusions }, { payload: recipients }] = await Promise.all([
+    supabaseFetch(
+      "/opportunities?select=id,lead_type,target_region,deleted_at,contacts(id,email,contact_tags(tags(name))),companies(id,name,country)&deleted_at=is.null&limit=5000"
+    ),
+    supabaseFetch("/email_exclusions?select=email,reason,active&active=eq.true&limit=5000"),
+    supabaseFetch(
+      "/email_campaign_recipients?select=email,status,reputation_status,bounced_at,suppressed_at,complained_at,failed_at&limit=10000"
+    ),
+  ]);
+
+  const excludedEmails = new Set((exclusions || []).map((row) => normalizeEmail(row.email)).filter(Boolean));
+  const unhealthyEmails = new Set();
+  for (const row of recipients || []) {
+    const email = normalizeEmail(row.email);
+    if (!email) continue;
+    if (row.reputation_status === "blocked" || row.bounced_at || row.suppressed_at || row.complained_at) {
+      unhealthyEmails.add(email);
+    }
+  }
+
+  const totals = emptyLeadInventoryBucket("all", "Todas las leads");
+  const byType = {};
+  const byRegion = {};
+  const seenOpportunityEmails = new Set();
+
+  for (const opportunity of opportunities || []) {
+    const typeKey = opportunity.lead_type || "sin_tipo";
+    const regionKey = opportunity.target_region || "sin_region";
+    const typeBucket = byType[typeKey] || emptyLeadInventoryBucket(typeKey, leadTypeLabel(typeKey));
+    const regionBucket = byRegion[regionKey] || emptyLeadInventoryBucket(regionKey, regionKey === "sin_region" ? "Sin region" : regionKey.toUpperCase());
+    const buckets = [totals, typeBucket, regionBucket];
+    const email = normalizeEmail(opportunity.contacts?.email);
+    const hasEmail = Boolean(email);
+    const sentTagged = hasContactTag(opportunity.contacts, "Correo enviado");
+    const noContactTagged = hasContactTag(opportunity.contacts, "No contactar");
+    const blocked = (email && excludedEmails.has(email)) || noContactTagged;
+    const bouncedOrSuppressed = email && unhealthyEmails.has(email);
+    const duplicateEmail = email && seenOpportunityEmails.has(email);
+    const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail;
+
+    if (email) seenOpportunityEmails.add(email);
+
+    for (const bucket of buckets) {
+      bucket.total += 1;
+      if (hasEmail) bucket.with_email += 1;
+      if (!hasEmail) bucket.without_email += 1;
+      if (sentTagged) bucket.sent_tagged += 1;
+      if (blocked) bucket.blocked += 1;
+      if (bouncedOrSuppressed) bucket.bounced_or_suppressed += 1;
+      if (available) bucket.available_for_campaign += 1;
+    }
+
+    byType[typeKey] = typeBucket;
+    byRegion[regionKey] = regionBucket;
+  }
+
+  const enrichBucket = (bucket) => ({
+    ...bucket,
+    status: inventoryStatus(bucket),
+    email_coverage_pct: bucket.total ? Math.round((bucket.with_email / bucket.total) * 100) : 0,
+  });
+
+  return {
+    generated_at: new Date().toISOString(),
+    totals: enrichBucket(totals),
+    by_type: Object.values(byType).map(enrichBucket).sort((a, b) => b.total - a.total),
+    by_region: Object.values(byRegion).map(enrichBucket).sort((a, b) => b.available_for_campaign - a.available_for_campaign),
+  };
+}
+
 async function campaignLeadPool(campaignType, targetRegion) {
   const filters = [
     "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
@@ -1824,6 +1922,10 @@ module.exports = async function handler(req, res) {
       }
       if (req.query.mode === "campaigns") {
         res.status(200).json({ campaigns: await listCampaigns(user), warmups: await listWarmups(user) });
+        return;
+      }
+      if (req.query.mode === "lead_inventory") {
+        res.status(200).json({ inventory: await leadInventory(user) });
         return;
       }
       res.status(200).json({ status: emailStatus(), messages: await listMessages(user, req) });

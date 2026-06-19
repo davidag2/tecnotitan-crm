@@ -591,6 +591,7 @@ button.danger {
 }
 
 .exclusion-panel,
+.lead-inventory-panel,
 .warmup-panel {
   display: grid;
   gap: 10px;
@@ -601,8 +602,99 @@ button.danger {
 }
 
 .exclusion-panel h3,
+.lead-inventory-panel h3,
 .warmup-panel h3 {
   margin: 0;
+}
+
+.inventory-status {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.inventory-status strong {
+  color: var(--text);
+}
+
+.inventory-status span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.inventory-status.is-ready {
+  border-color: #bfe6d8;
+  background: #effbf6;
+}
+
+.inventory-status.is-low {
+  border-color: #f2d28a;
+  background: #fff8e8;
+}
+
+.inventory-status.is-empty {
+  border-color: #f0b8b8;
+  background: #fff1f1;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-grid article {
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.inventory-grid b {
+  display: block;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.inventory-grid span,
+.inventory-breakdown span,
+.inventory-regions span,
+.lead-inventory-panel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-breakdown {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-breakdown div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.inventory-regions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inventory-regions span {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
 }
 
 .warmup-row {
