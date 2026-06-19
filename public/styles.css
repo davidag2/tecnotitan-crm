@@ -680,7 +680,8 @@ button.danger {
 
 .exclusion-panel,
 .lead-inventory-panel,
-.warmup-panel {
+.warmup-panel,
+.multi-campaign-panel {
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -691,8 +692,104 @@ button.danger {
 
 .exclusion-panel h3,
 .lead-inventory-panel h3,
-.warmup-panel h3 {
+.warmup-panel h3,
+.multi-campaign-panel h3 {
   margin: 0;
+}
+
+.multi-campaign-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.multi-campaign-summary article,
+.multi-sender-grid article {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.multi-campaign-summary span,
+.multi-sender-grid small,
+.multi-sender-grid header span,
+.multi-campaign-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.multi-campaign-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.multi-sender-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.multi-sender-grid article {
+  display: grid;
+  gap: 8px;
+}
+
+.multi-sender-grid article.is-active {
+  border-color: #bfe6d8;
+  background: #f2fbf7;
+}
+
+.multi-sender-grid header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.multi-sender-grid strong {
+  font-size: 13px;
+}
+
+.multi-domain-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.multi-domain-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f5eff, #16856e);
+}
+
+.multi-campaign-table {
+  overflow-x: auto;
+}
+
+.multi-campaign-row {
+  min-width: 620px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(76px, 0.7fr));
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #eef2f7;
+}
+
+.multi-campaign-row span:first-child {
+  color: var(--text);
+}
+
+.multi-head span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .inventory-status {
@@ -2559,6 +2656,11 @@ li {
   }
 
   .campaign-control-top {
+    grid-template-columns: 1fr;
+  }
+
+  .multi-sender-grid,
+  .multi-campaign-summary {
     grid-template-columns: 1fr;
   }
 }

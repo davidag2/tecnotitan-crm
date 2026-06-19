@@ -1599,10 +1599,25 @@ async function existingCampaignEmails(campaignId) {
   return new Set((payload || []).map((row) => normalizeEmail(row.email)).filter(Boolean));
 }
 
+async function openCampaignEmails(currentCampaignId) {
+  const { payload: campaigns } = await supabaseFetch(
+    `/email_campaigns?select=id&status=in.(active,paused)&id=neq.${encodeURIComponent(currentCampaignId)}&limit=200`
+  );
+  const ids = (campaigns || []).map((campaign) => campaign.id).filter(Boolean);
+  if (!ids.length) return new Set();
+  const { payload } = await supabaseFetch(
+    `/email_campaign_recipients?select=email&campaign_id=in.(${ids.join(",")})&status=in.(queued,sent)&limit=10000`
+  );
+  return new Set((payload || []).map((row) => normalizeEmail(row.email)).filter(Boolean));
+}
+
 async function addCampaignRecipients(user, campaign, count, startAt = new Date()) {
   const maxRecipients = Number(campaign.max_recipients || 100);
   if (count <= 0) return 0;
-  const existingEmails = await existingCampaignEmails(campaign.id);
+  const [existingEmails, openEmails] = await Promise.all([
+    existingCampaignEmails(campaign.id),
+    openCampaignEmails(campaign.id),
+  ]);
   const leads = await buildCampaignLeadPool(
     user,
     campaign.campaign_type,
@@ -1616,7 +1631,7 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
   for (const lead of leads) {
     if (allowedLeads.length >= count) break;
     const email = normalizeEmail(lead.contacts?.email);
-    if (!email || existingEmails.has(email)) continue;
+    if (!email || existingEmails.has(email) || openEmails.has(email)) continue;
     existingEmails.add(email);
     const exclusion = await findExclusion(email);
     if (exclusion) {
@@ -2038,15 +2053,42 @@ async function updateCampaignStatus(user, body) {
 
 async function processDueCampaigns() {
   const { payload } = await supabaseFetch(
-    "/email_campaigns?select=id,name,status&status=eq.active&order=created_at.asc&limit=20"
+    "/email_campaigns?select=id,name,status,sender_key,batch_size&status=eq.active&order=created_at.asc&limit=20"
   );
   const user = systemCampaignUser();
   const results = [];
-  for (const campaign of payload || []) {
+  const campaigns = payload || [];
+  const senderState = {};
+  for (const campaign of campaigns) {
+    const senderKey = campaign.sender_key === "investors" ? "investors" : "consulting";
+    if (!senderState[senderKey]) {
+      senderState[senderKey] = {
+        warmup: await warmupStatus(senderKey),
+        remaining_campaigns: campaigns.filter((item) => (item.sender_key === "investors" ? "investors" : "consulting") === senderKey).length,
+      };
+    }
+  }
+
+  for (const campaign of campaigns) {
+    const senderKey = campaign.sender_key === "investors" ? "investors" : "consulting";
+    const state = senderState[senderKey];
+    const fairShare = state ? Math.ceil(Number(state.warmup.remaining_today || 0) / Math.max(1, state.remaining_campaigns || 1)) : Number(campaign.batch_size || 1);
+    const maxSend = Math.min(Number(campaign.batch_size || 1), fairShare);
+    if (!maxSend) {
+      results.push({ campaign_id: campaign.id, name: campaign.name, sent: 0, failed: 0, skipped: 0, message: "Sin cupo diario disponible para este dominio." });
+      if (state) state.remaining_campaigns = Math.max(0, state.remaining_campaigns - 1);
+      continue;
+    }
     try {
-      const result = await processCampaign(user, { campaign_id: campaign.id });
-      results.push({ campaign_id: campaign.id, name: campaign.name, ...result });
+      const result = await processCampaign(user, { campaign_id: campaign.id, max_send: maxSend });
+      const used = Number(result.sent || 0) + Number(result.followups_sent || 0);
+      if (state) {
+        state.warmup.remaining_today = Math.max(0, Number(state.warmup.remaining_today || 0) - used);
+        state.remaining_campaigns = Math.max(0, state.remaining_campaigns - 1);
+      }
+      results.push({ campaign_id: campaign.id, name: campaign.name, fair_share: maxSend, ...result });
     } catch (error) {
+      if (state) state.remaining_campaigns = Math.max(0, state.remaining_campaigns - 1);
       results.push({ campaign_id: campaign.id, name: campaign.name, sent: 0, failed: 0, error: error.message });
     }
   }

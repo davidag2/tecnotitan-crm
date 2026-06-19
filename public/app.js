@@ -78,6 +78,7 @@ const elements = {
   createCampaignButton: document.querySelector("#create-campaign-button"),
   campaignStatus: document.querySelector("#campaign-status"),
   campaignList: document.querySelector("#campaign-list"),
+  multiCampaignManager: document.querySelector("#multi-campaign-manager"),
   leadInventory: document.querySelector("#lead-inventory"),
   senderWarmupList: document.querySelector("#sender-warmup-list"),
   exclusionEmail: document.querySelector("#exclusion-email"),
@@ -1395,6 +1396,7 @@ function applySelectedCampaignTemplate() {
 
 function renderCampaigns(campaigns = state.emailCampaigns) {
   if (!elements.campaignList) return;
+  renderMultiCampaignManager(campaigns);
   if (!campaigns?.length) {
     elements.campaignList.innerHTML = `<p class="empty">No hay campanas automaticas todavia.</p>`;
     return;
@@ -1492,6 +1494,101 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   elements.campaignList.querySelectorAll("[data-campaign-status]").forEach((button) => {
     button.addEventListener("click", () => updateCampaignStatus(button.dataset.campaignStatus, button.dataset.nextStatus, button));
   });
+}
+
+function renderMultiCampaignManager(campaigns = state.emailCampaigns) {
+  if (!elements.multiCampaignManager) return;
+  const openStatuses = new Set(["active", "paused"]);
+  const openCampaigns = (campaigns || []).filter((campaign) => openStatuses.has(campaign.status));
+  const activeCampaigns = openCampaigns.filter((campaign) => campaign.status === "active");
+  const bySender = ["investors", "consulting"].map((senderKey) => {
+    const warmup = state.emailWarmups.find((item) => item.sender_key === senderKey) || {};
+    const senderCampaigns = openCampaigns.filter((campaign) => campaign.sender_key === senderKey);
+    const activeSenderCampaigns = senderCampaigns.filter((campaign) => campaign.status === "active");
+    const remainingToday = Number(warmup.remaining_today ?? 0);
+    const fairShare = activeSenderCampaigns.length ? Math.ceil(remainingToday / activeSenderCampaigns.length) : 0;
+    const sent = senderCampaigns.reduce((sum, campaign) => sum + Number(campaign.counts?.sent || 0), 0);
+    const bounced = senderCampaigns.reduce((sum, campaign) => sum + Number(campaign.counts?.bounced || 0), 0);
+    const replied = senderCampaigns.reduce((sum, campaign) => sum + Number(campaign.counts?.replied || 0), 0);
+    return {
+      senderKey,
+      label: senderKey === "investors" ? "tecnotitaninvestors.com" : "tecnotitanconsultoria.com",
+      dailyLimit: Number(warmup.daily_limit || 0),
+      remainingToday,
+      fairShare,
+      open: senderCampaigns.length,
+      active: activeSenderCampaigns.length,
+      sent,
+      bounced,
+      replied,
+      bounceRate: sent ? Math.round((bounced / sent) * 1000) / 10 : 0,
+      replyRate: sent ? Math.round((replied / sent) * 1000) / 10 : 0,
+    };
+  });
+
+  const campaignRows = openCampaigns
+    .map((campaign) => {
+      const progress = campaignProgress(campaign.counts, campaign);
+      const quality = campaignQuality(campaign.counts, state.emailWarmups.find((item) => item.sender_key === campaign.sender_key));
+      return `
+        <div class="multi-campaign-row">
+          <span>${attr(campaign.name)}</span>
+          <span>${campaignStatusLabel(campaign.status)}</span>
+          <span>${progress.sent}/${progress.objective}</span>
+          <span>${quality.score}/100</span>
+          <span>${quality.bounceRate}%</span>
+          <span>${quality.replyRate}%</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  elements.multiCampaignManager.innerHTML = `
+    <div class="multi-campaign-summary">
+      <article>
+        <span>Campanas abiertas</span>
+        <strong>${openCampaigns.length}</strong>
+      </article>
+      <article>
+        <span>Activas ahora</span>
+        <strong>${activeCampaigns.length}</strong>
+      </article>
+      <article>
+        <span>Dominios en uso</span>
+        <strong>${bySender.filter((sender) => sender.open).length}</strong>
+      </article>
+    </div>
+    <div class="multi-sender-grid">
+      ${bySender
+        .map(
+          (sender) => `
+            <article class="${sender.active ? "is-active" : ""}">
+              <header>
+                <strong>${sender.label}</strong>
+                <span>${sender.active} activas / ${sender.open} abiertas</span>
+              </header>
+              <div class="multi-domain-meter">
+                <span style="width: ${sender.dailyLimit ? Math.max(0, Math.min(100, ((sender.dailyLimit - sender.remainingToday) / sender.dailyLimit) * 100)) : 0}%"></span>
+              </div>
+              <small>Cupo hoy: ${sender.remainingToday}/${sender.dailyLimit || 0} restantes | Sugerido por campana: ${sender.fairShare}</small>
+              <small>Rebote ${sender.bounceRate}% | Respuesta ${sender.replyRate}%</small>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+    <div class="multi-campaign-table">
+      <div class="multi-campaign-row multi-head">
+        <span>Campana</span>
+        <span>Estado</span>
+        <span>Progreso</span>
+        <span>Calidad</span>
+        <span>Rebote</span>
+        <span>Respuesta</span>
+      </div>
+      ${campaignRows || `<p class="empty">No hay campanas activas o pausadas. Puedes crear varias campanas y activarlas por segmento.</p>`}
+    </div>
+  `;
 }
 
 function campaignInventoryBucket(campaign) {
