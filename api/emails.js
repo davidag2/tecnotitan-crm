@@ -961,13 +961,27 @@ function localizedCampaignTemplate(campaign, data, field) {
 
 function personalizedCampaignTemplate(campaign, data, field) {
   const draft = data.opportunity?.origami_email_draft || {};
+  const variant = campaignDraftVariant(draft, data.variant_seed || data.opportunity?.id || campaign.id);
   if (field === "subject_template") {
-    return String(draft.recommended_subject || "").trim() || localizedCampaignTemplate(campaign, data, field);
+    return String(variant?.subject || draft.recommended_subject || "").trim() || localizedCampaignTemplate(campaign, data, field);
   }
   if (field === "body_template") {
-    return String(draft.email_body || draft.opening_line || "").trim() || localizedCampaignTemplate(campaign, data, field);
+    return String(variant?.body || draft.email_body || draft.opening_line || "").trim() || localizedCampaignTemplate(campaign, data, field);
   }
   return localizedCampaignTemplate(campaign, data, field);
+}
+
+function campaignDraftVariant(draft = {}, seed = "") {
+  const variants = draft.variants && typeof draft.variants === "object" ? draft.variants : {};
+  const keys = ["direct", "consultative", "investor", "strategic", "followup_short"].filter((key) => {
+    const variant = variants[key] || {};
+    return String(variant.subject || "").trim() || String(variant.body || "").trim();
+  });
+  if (!keys.length) return null;
+  const hash = String(seed || "")
+    .split("")
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return variants[keys[hash % keys.length]];
 }
 
 function requireCampaignAdmin(user) {
@@ -2116,7 +2130,7 @@ async function processCampaign(user, body) {
       failed += 1;
       continue;
     }
-    const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies };
+    const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies, variant_seed: `${campaign.id}:${recipient.id}` };
     const subject = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
     const text = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "body_template"), templateData);
     const qualityIssues = await emailQualityIssues(recipient.email, opportunity.contacts);

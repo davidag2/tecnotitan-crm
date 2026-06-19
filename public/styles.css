@@ -2983,6 +2983,26 @@ button.danger {
   white-space: pre-wrap;
 }
 
+.origami-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.origami-variant-grid article {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.origami-variant-grid pre {
+  max-height: 150px;
+}
+
 .detail-score strong {
   display: block;
   font-size: 36px;

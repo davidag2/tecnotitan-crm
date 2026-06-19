@@ -1558,6 +1558,28 @@ function origamiDraftBody(lead) {
   return body || opening;
 }
 
+const ORIGAMI_VARIANT_LABELS = {
+  direct: "Directa",
+  consultative: "Consultiva",
+  investor: "Inversionista",
+  strategic: "Estrategica",
+  followup_short: "Follow-up corto",
+};
+
+const ORIGAMI_VARIANT_KEYS = ["direct", "consultative", "investor", "strategic", "followup_short"];
+
+function origamiDraftVariant(draft, key) {
+  const variant = draft?.variants?.[key] || {};
+  const subject = String(variant.subject || "").trim();
+  const body = String(variant.body || "").trim();
+  if (!subject && !body) return null;
+  return { key, subject, body };
+}
+
+function origamiDraftVariants(draft) {
+  return ORIGAMI_VARIANT_KEYS.map((key) => origamiDraftVariant(draft, key)).filter(Boolean);
+}
+
 function fillEmailFromLead() {
   const lead = selectedEmailLead();
   if (!lead) return;
@@ -3213,6 +3235,7 @@ function renderOrigamiPanel(opportunity) {
   const status = opportunity.origami_status || "not_requested";
   const profile = opportunity.origami_profile || {};
   const draft = opportunity.origami_email_draft || {};
+  const variants = origamiDraftVariants(draft);
   const analyzedAt = opportunity.origami_analyzed_at ? new Date(opportunity.origami_analyzed_at).toLocaleString("es-CO") : "";
 
   if (elements.analyzeOrigami) {
@@ -3256,6 +3279,29 @@ function renderOrigamiPanel(opportunity) {
               <button type="button" data-use-origami-draft>Usar en nuevo correo</button>
               <button class="secondary" type="button" data-copy-origami-draft>Copiar borrador</button>
             </div>
+            ${
+              variants.length
+                ? `
+                  <div class="origami-variant-grid">
+                    ${variants
+                      .map(
+                        (variant) => `
+                          <article>
+                            <strong>${ORIGAMI_VARIANT_LABELS[variant.key] || variant.key}</strong>
+                            ${variant.subject ? `<small>Asunto: ${escapeHtml(variant.subject)}</small>` : ""}
+                            ${variant.body ? `<pre>${escapeHtml(variant.body)}</pre>` : ""}
+                            <div class="origami-actions">
+                              <button class="secondary" type="button" data-use-origami-variant="${attr(variant.key)}">Usar</button>
+                              <button class="secondary" type="button" data-copy-origami-variant="${attr(variant.key)}">Copiar</button>
+                            </div>
+                          </article>
+                        `
+                      )
+                      .join("")}
+                  </div>
+                `
+                : ""
+            }
           </div>
         `
         : ""
@@ -3263,9 +3309,20 @@ function renderOrigamiPanel(opportunity) {
   `;
 
   elements.detailOrigami.querySelector("[data-use-origami-draft]")?.addEventListener("click", () => useOrigamiDraft(opportunity));
+  elements.detailOrigami.querySelectorAll("[data-use-origami-variant]").forEach((button) => {
+    button.addEventListener("click", () => useOrigamiDraft(opportunity, button.dataset.useOrigamiVariant));
+  });
   elements.detailOrigami.querySelector("[data-copy-origami-draft]")?.addEventListener("click", () => {
     const text = [draft.recommended_subject ? `Subject: ${draft.recommended_subject}` : "", draft.email_body || ""].filter(Boolean).join("\n\n");
     copyValue(text, "Borrador Origami");
+  });
+  elements.detailOrigami.querySelectorAll("[data-copy-origami-variant]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const variant = origamiDraftVariant(draft, button.dataset.copyOrigamiVariant);
+      if (!variant) return;
+      const text = [variant.subject ? `Subject: ${variant.subject}` : "", variant.body || ""].filter(Boolean).join("\n\n");
+      copyValue(text, `Variante ${ORIGAMI_VARIANT_LABELS[variant.key] || variant.key}`);
+    });
   });
 }
 
@@ -3641,19 +3698,27 @@ async function addLeadNote() {
   }
 }
 
-function useOrigamiDraft(opportunity) {
+function useOrigamiDraft(opportunity, variantKey = "") {
   const contact = opportunity.contacts || {};
   const draft = opportunity.origami_email_draft || {};
+  const variant = variantKey ? origamiDraftVariant(draft, variantKey) : null;
   const email = contact.email || "";
   if (elements.emailOpportunity) elements.emailOpportunity.value = opportunity.id;
   if (elements.emailTo && email) elements.emailTo.value = email;
-  if (elements.emailSubject && draft.recommended_subject) elements.emailSubject.value = draft.recommended_subject;
-  if (elements.emailBody && draft.email_body) elements.emailBody.value = draft.email_body;
+  if (elements.emailSubject && (variant?.subject || draft.recommended_subject)) {
+    elements.emailSubject.value = variant?.subject || draft.recommended_subject;
+  }
+  if (elements.emailBody && (variant?.body || draft.email_body)) {
+    elements.emailBody.value = variant?.body || draft.email_body;
+  }
   if (elements.emailSender) elements.emailSender.value = opportunity.lead_type === "investor" ? "investors" : "consulting";
   closeLeadDetail();
   activateTab("correos", true);
   switchEmailMailbox("compose");
-  setStatus("Borrador Origami cargado en Nuevo correo.", "ok");
+  setStatus(
+    variant ? `Variante ${ORIGAMI_VARIANT_LABELS[variant.key] || variant.key} cargada en Nuevo correo.` : "Borrador Origami cargado en Nuevo correo.",
+    "ok"
+  );
 }
 
 function clearOrigamiPoll() {

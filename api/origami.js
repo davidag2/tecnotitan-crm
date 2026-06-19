@@ -111,6 +111,13 @@ function leadPrompt(opportunity) {
     '  "opening_line": "one highly personalized opening line",',
     '  "recommended_subject": "natural subject line",',
     '  "email_body": "short professional outreach email with unsubscribe sentence if cold email",',
+    '  "email_variants": {',
+    '    "direct": { "subject": "direct subject", "body": "direct concise outreach email" },',
+    '    "consultative": { "subject": "consultative subject", "body": "consultative problem-led outreach email" },',
+    '    "investor": { "subject": "investor subject", "body": "investor-oriented outreach email" },',
+    '    "strategic": { "subject": "strategic subject", "body": "strategic partnership/value creation outreach email" },',
+    '    "followup_short": { "subject": "short follow-up subject", "body": "very short follow-up email" }',
+    '  },',
     '  "signals": ["specific signal 1", "specific signal 2"],',
     '  "risks": ["risk or caveat 1"]',
     "}",
@@ -153,6 +160,24 @@ function normalizedStatus(status) {
   return "completed";
 }
 
+function normalizeEmailVariant(variant) {
+  if (!variant || typeof variant !== "object") return null;
+  const subject = String(variant.subject || variant.recommended_subject || "").trim();
+  const body = String(variant.body || variant.email_body || "").trim();
+  if (!subject && !body) return null;
+  return { subject, body };
+}
+
+function normalizeEmailVariants(variants) {
+  const source = variants && typeof variants === "object" ? variants : {};
+  const keys = ["direct", "consultative", "investor", "strategic", "followup_short"];
+  return keys.reduce((acc, key) => {
+    const variant = normalizeEmailVariant(source[key]);
+    if (variant) acc[key] = variant;
+    return acc;
+  }, {});
+}
+
 async function saveRunResult(opportunity, run) {
   const status = normalizedStatus(run?.status);
   const patch = {
@@ -192,6 +217,7 @@ async function saveRunResult(opportunity, run) {
       opening_line: intelligence.opening_line || "",
       recommended_subject: intelligence.recommended_subject || "",
       email_body: intelligence.email_body || "",
+      variants: normalizeEmailVariants(intelligence.email_variants),
     };
     patch.score = origamiScore.score;
     patch.score_label = origamiScore.score_label;
