@@ -1281,6 +1281,50 @@ function campaignSegmentLabel(campaign) {
   return campaign.segment_label || CAMPAIGN_SEGMENTS[campaign.segment_key]?.label || "Sin segmento";
 }
 
+function campaignStatusLabel(status) {
+  const labels = {
+    draft: "Borrador",
+    active: "Activa",
+    paused: "Pausada",
+    stopped: "Detenida",
+    completed: "Completada",
+  };
+  return labels[status] || status || "Sin estado";
+}
+
+function campaignProgress(counts = {}, campaign = {}) {
+  const sent = Number(counts.sent || 0);
+  const objective = Math.max(1, Number(campaign.max_recipients || counts.total || sent || 1));
+  const percent = Math.max(0, Math.min(100, Math.round((sent / objective) * 100)));
+  return { sent, objective, percent };
+}
+
+function campaignQuality(counts = {}, warmup = null) {
+  const sent = Number(counts.sent || 0);
+  const bounced = Number(counts.bounced || 0);
+  const replies = Number(counts.replied || 0);
+  const blocked = Number(counts.reputation_blocked || 0);
+  const complaints = Number(counts.complained || 0);
+  const bounceRate = sent ? bounced / sent : 0;
+  const replyRate = sent ? replies / sent : 0;
+  let score = 100;
+  score -= Math.min(45, bounceRate * 900);
+  score -= Math.min(18, complaints * 12);
+  score -= Math.min(16, blocked * 2);
+  if (sent >= 25 && replyRate === 0) score -= 8;
+  if ((warmup?.remaining_today ?? 1) <= 0) score -= 8;
+  score = Math.max(0, Math.round(score));
+  const tone = score >= 82 ? "ok" : score >= 62 ? "warning" : "danger";
+  const label = score >= 82 ? "Sana" : score >= 62 ? "En observacion" : "Riesgosa";
+  return {
+    score,
+    tone,
+    label,
+    bounceRate: Math.round(bounceRate * 1000) / 10,
+    replyRate: Math.round(replyRate * 1000) / 10,
+  };
+}
+
 function applyCampaignSegmentDefaults() {
   if (!elements.campaignSegment || !elements.campaignTargetRegion) return;
   if (elements.campaignSegment.value !== "consulting_latam" && elements.campaignType.value !== "investor") {
@@ -1364,15 +1408,42 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
       const startAt = campaign.start_at ? new Date(campaign.start_at).toLocaleString("es-CO") : "Inmediato";
       const endAt = campaign.end_at ? new Date(campaign.end_at).toLocaleString("es-CO") : "Sin fin";
       const healthItems = campaignHealthItems(campaign, counts, warmup);
+      const progress = campaignProgress(counts, campaign);
+      const quality = campaignQuality(counts, warmup);
+      const canStart = campaign.status === "paused";
+      const canPause = campaign.status === "active";
+      const canStop = !["stopped", "completed"].includes(campaign.status);
       return `
-        <article class="campaign-card">
+        <article class="campaign-card campaign-control-card ${quality.tone}">
           <header>
             <div>
-              <strong>${campaign.name}</strong>
-              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaignSegmentLabel(campaign)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"} | ${campaign.status}</small>
+              <strong>${attr(campaign.name)}</strong>
+              <small>${campaignTypeLabel(campaign.campaign_type)} | ${campaignSegmentLabel(campaign)} | ${campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria"}</small>
             </div>
-            <button type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
+            <span class="campaign-status-pill ${campaign.status}">${campaignStatusLabel(campaign.status)}</span>
           </header>
+          <div class="campaign-control-top">
+            <div class="campaign-progress-block">
+              <div class="campaign-progress-label">
+                <strong>${progress.sent} de ${progress.objective} correos</strong>
+                <span>${progress.percent}% completado</span>
+              </div>
+              <div class="campaign-progress-meter" aria-label="Progreso de campana">
+                <span style="width: ${progress.percent}%"></span>
+              </div>
+            </div>
+            <div class="campaign-quality ${quality.tone}">
+              <span>Calidad</span>
+              <strong>${quality.score}/100</strong>
+              <small>${quality.label}</small>
+            </div>
+          </div>
+          <div class="campaign-action-bar">
+            <button class="campaign-action start" type="button" data-campaign-status="${campaign.id}" data-next-status="active" ${canStart ? "" : "disabled"}>Iniciar</button>
+            <button class="campaign-action pause" type="button" data-campaign-status="${campaign.id}" data-next-status="paused" ${canPause ? "" : "disabled"}>Pausar</button>
+            <button class="campaign-action stop" type="button" data-campaign-status="${campaign.id}" data-next-status="stopped" ${canStop ? "" : "disabled"}>Detener</button>
+            <button class="campaign-action process" type="button" data-process-campaign="${campaign.id}" ${campaign.status !== "active" || !(counts.due || counts.followups_due) ? "disabled" : ""}>Procesar listos</button>
+          </div>
           <div class="campaign-health">
             ${healthItems
               .map(
@@ -1404,6 +1475,8 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
             <span><b>${remaining}</b>Restantes hoy</span>
             <span><b>${campaign.max_recipients || 100}</b>Max total</span>
             <span><b>${warmup?.daily_limit || 100}</b>Limite remitente</span>
+            <span><b>${quality.bounceRate}%</b>Rebote</span>
+            <span><b>${quality.replyRate}%</b>Respuesta</span>
           </div>
           <small>Inicio: ${startAt} | Fin: ${endAt} | Limite diario: ${campaign.daily_limit || 100} | Maximo por ejecucion: ${campaign.batch_size || 1} | Ritmo: ${campaign.min_delay_minutes || 6}-${campaign.max_delay_minutes || 12} min | Ventana: ${Math.floor((campaign.send_window_start_minutes || 555) / 60)}:${String((campaign.send_window_start_minutes || 555) % 60).padStart(2, "0")}-${Math.floor((campaign.send_window_end_minutes || 705) / 60)}:${String((campaign.send_window_end_minutes || 705) % 60).padStart(2, "0")} | Deck: ${campaign.attach_investor_deck ? "adjunto" : "no"} | Proximo envio: ${nextSend}</small>
         </article>
@@ -1412,6 +1485,9 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
     .join("");
   elements.campaignList.querySelectorAll("[data-process-campaign]").forEach((button) => {
     button.addEventListener("click", () => processCampaign(button.dataset.processCampaign, button));
+  });
+  elements.campaignList.querySelectorAll("[data-campaign-status]").forEach((button) => {
+    button.addEventListener("click", () => updateCampaignStatus(button.dataset.campaignStatus, button.dataset.nextStatus, button));
   });
 }
 
@@ -3175,6 +3251,37 @@ async function processCampaign(campaignId, button) {
       }),
     });
     elements.campaignStatus.textContent = `Lote terminado: ${result.sent || 0} iniciales, ${result.followups_sent || 0} follow-ups, ${result.failed || 0} fallidos.`;
+    await Promise.all([reloadCampaignsOnly(), reloadEmailsOnly()]);
+  } catch (error) {
+    elements.campaignStatus.textContent = error.message;
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function updateCampaignStatus(campaignId, nextStatus, button) {
+  const originalText = button.textContent;
+  const labels = {
+    active: "Iniciando...",
+    paused: "Pausando...",
+    stopped: "Deteniendo...",
+  };
+  button.disabled = true;
+  button.textContent = labels[nextStatus] || "Actualizando...";
+  elements.campaignStatus.textContent = "Actualizando estado de campana...";
+  try {
+    await api("/api/emails", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "update_campaign_status",
+        campaign_id: campaignId,
+        status: nextStatus,
+      }),
+    });
+    elements.campaignStatus.textContent = `Campana ${campaignStatusLabel(nextStatus).toLowerCase()}.`;
     await Promise.all([reloadCampaignsOnly(), reloadEmailsOnly()]);
   } catch (error) {
     elements.campaignStatus.textContent = error.message;

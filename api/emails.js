@@ -2004,6 +2004,35 @@ async function processCampaign(user, body) {
   };
 }
 
+async function updateCampaignStatus(user, body) {
+  requireCampaignAdmin(user);
+  const campaignId = String(body.campaign_id || "").trim();
+  const nextStatus = String(body.status || "").trim().toLowerCase();
+  const allowedStatuses = new Set(["active", "paused", "stopped", "completed"]);
+  if (!campaignId) throw new Error("Selecciona una campana.");
+  if (!allowedStatuses.has(nextStatus)) throw new Error("Estado de campana no permitido.");
+
+  const { payload } = await supabaseFetch(`/email_campaigns?select=id,name,status&id=eq.${encodeURIComponent(campaignId)}&limit=1`);
+  const campaign = payload?.[0];
+  if (!campaign) throw new Error("Campana no encontrada.");
+  if (campaign.status === "completed" && nextStatus === "active") {
+    throw new Error("Una campana completada no se debe reactivar. Crea una nueva campana para continuar.");
+  }
+  if (campaign.status === "stopped" && nextStatus === "active") {
+    throw new Error("Una campana detenida no se debe reactivar. Usa pausa si necesitas retomarla despues.");
+  }
+
+  await updateRows(
+    "email_campaigns",
+    {
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(campaign.id)}`
+  );
+  return { campaign_id: campaign.id, status: nextStatus };
+}
+
 async function processDueCampaigns() {
   const { payload } = await supabaseFetch(
     "/email_campaigns?select=id,name,status&status=eq.active&order=created_at.asc&limit=20"
@@ -2333,6 +2362,10 @@ module.exports = async function handler(req, res) {
       }
       if (req.body?.action === "process_campaign") {
         res.status(200).json(await processCampaign(user, req.body));
+        return;
+      }
+      if (req.body?.action === "update_campaign_status") {
+        res.status(200).json(await updateCampaignStatus(user, req.body));
         return;
       }
       const message = await sendEmail(user, req.body || {});
