@@ -76,9 +76,10 @@ function mergePayload(existingPayload, incomingPayload) {
   };
 }
 
-async function nextPageForTemplate(templateKey) {
+async function nextPageForTemplate(templateKey, perPage = 25) {
   const previousSearches = await countRows("lead_searches", `&search_template=eq.${encodeURIComponent(templateKey)}`);
-  return previousSearches + 1;
+  const maxSafePage = Math.max(1, Math.floor(10000 / Math.max(1, Number(perPage || 25))));
+  return (previousSearches % maxSafePage) + 1;
 }
 
 async function findCompany(companyRow) {
@@ -296,8 +297,8 @@ async function savePerson(person, template, leadSearchId, position, page) {
 
 async function runApolloSearch(user, body = {}) {
   const template = getTemplate(body.template_key || "consulting_client:latam");
-  const page = Number(body.page || (await nextPageForTemplate(template.key)));
   const perPage = Math.min(Number(body.per_page || template.default_per_page), 25);
+  const page = Number(body.page || (await nextPageForTemplate(template.key, perPage)));
   const payload = { ...buildApolloPayload(template, body.filters), page, per_page: perPage };
   const apollo = await searchApollo(payload);
   const people = apollo.people || [];
