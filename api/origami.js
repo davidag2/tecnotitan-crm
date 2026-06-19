@@ -90,6 +90,7 @@ function leadPrompt(opportunity) {
     "- Consulting angle: help companies convert manual workflows and scattered data into working systems.",
     "",
     "For investor outreach only, detect whether the lead/fund publicly matches these thesis signals: AI, SaaS, LATAM, B2B, emerging markets, seed, pre-seed. Use only public evidence or mark as unknown.",
+    "For B2B consulting outreach only, detect whether the company likely has these operational pain signals: manual processes, growth pressure, automation need, CRM need, scattered data. Use only public evidence or mark as unknown.",
     "",
     "Return a concise CRM intelligence report and include exactly one JSON object between these markers:",
     "BEGIN_TECNOTITAN_JSON",
@@ -125,6 +126,14 @@ function leadPrompt(opportunity) {
     '    "seed": "yes|no|unknown",',
     '    "pre_seed": "yes|no|unknown",',
     '    "evidence": "short evidence for the matched thesis signals"',
+    '  },',
+    '  "operational_pain_signals": {',
+    '    "manual_processes": "yes|no|unknown",',
+    '    "growth": "yes|no|unknown",',
+    '    "automation": "yes|no|unknown",',
+    '    "crm": "yes|no|unknown",',
+    '    "scattered_data": "yes|no|unknown",',
+    '    "evidence": "short evidence for the matched operational pain signals"',
     '  },',
     '  "opening_line": "one highly personalized opening line",',
     '  "recommended_subject": "natural subject line",',
@@ -216,6 +225,18 @@ function normalizeInvestmentThesisSignals(signals) {
   };
 }
 
+function normalizeOperationalPainSignals(signals) {
+  const source = signals && typeof signals === "object" ? signals : {};
+  return {
+    manual_processes: normalizeYesNoUnknown(source.manual_processes),
+    growth: normalizeYesNoUnknown(source.growth),
+    automation: normalizeYesNoUnknown(source.automation),
+    crm: normalizeYesNoUnknown(source.crm),
+    scattered_data: normalizeYesNoUnknown(source.scattered_data),
+    evidence: String(source.evidence || "").trim(),
+  };
+}
+
 async function saveRunResult(opportunity, run) {
   const status = normalizedStatus(run?.status);
   const patch = {
@@ -256,6 +277,7 @@ async function saveRunResult(opportunity, run) {
       pitch_detection_evidence: intelligence.pitch_detection_evidence || "",
       recommended_channel: intelligence.recommended_channel || "manual_review",
       investment_thesis_signals: normalizeInvestmentThesisSignals(intelligence.investment_thesis_signals),
+      operational_pain_signals: normalizeOperationalPainSignals(intelligence.operational_pain_signals),
       signals: Array.isArray(intelligence.signals) ? intelligence.signals : [],
       risks: Array.isArray(intelligence.risks) ? intelligence.risks : [],
     };

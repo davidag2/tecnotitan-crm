@@ -135,6 +135,10 @@ function scoreWithOrigami(opportunity, profile = {}) {
   const matchedThesisSignals = ["ai", "saas", "latam", "b2b", "emerging_markets", "seed", "pre_seed"].filter(
     (key) => normalize(thesisSignals[key]) === "yes"
   );
+  const operationalPainSignals = profile.operational_pain_signals || {};
+  const matchedOperationalPainSignals = ["manual_processes", "growth", "automation", "crm", "scattered_data"].filter(
+    (key) => normalize(operationalPainSignals[key]) === "yes"
+  );
 
   if (coldEmailFit === "high") score += addOrigami(reasons, 18, "Origami: alta apertura a cold email");
   else if (coldEmailFit === "medium") score += addOrigami(reasons, 8, "Origami: apertura media a cold email");
@@ -161,6 +165,9 @@ function scoreWithOrigami(opportunity, profile = {}) {
   if (signals.length) score += addOrigami(reasons, Math.min(signals.length * 3, 9), "Origami: senales publicas relevantes");
   if (matchedThesisSignals.length) {
     score += addOrigami(reasons, Math.min(matchedThesisSignals.length * 3, 15), `Origami: tesis inversion alineada (${matchedThesisSignals.join(", ")})`);
+  }
+  if (matchedOperationalPainSignals.length) {
+    score += addOrigami(reasons, Math.min(matchedOperationalPainSignals.length * 3, 15), `Origami: dolor operativo detectado (${matchedOperationalPainSignals.join(", ")})`);
   }
   if (risks.length) score += addOrigami(reasons, -Math.min(risks.length * 4, 12), "Origami: riesgos o dudas detectadas");
 

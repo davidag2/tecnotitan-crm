@@ -3187,6 +3187,17 @@ function renderOrigamiSignals(profile) {
   const thesisChips = thesisRows
     .map(([key, label]) => ({ key, label, value: normalizeFilterValue(thesis[key]) || "unknown" }))
     .filter((item) => item.value === "yes");
+  const pain = profile?.operational_pain_signals || {};
+  const painRows = [
+    ["manual_processes", "Procesos manuales"],
+    ["growth", "Crecimiento"],
+    ["automation", "Automatizacion"],
+    ["crm", "CRM"],
+    ["scattered_data", "Datos dispersos"],
+  ];
+  const painChips = painRows
+    .map(([key, label]) => ({ key, label, value: normalizeFilterValue(pain[key]) || "unknown" }))
+    .filter((item) => item.value === "yes");
   const pitchSource = profile?.official_pitch_url
     ? `<a href="${attr(profile.official_pitch_url)}" target="_blank" rel="noopener">Abrir fuente</a>`
     : "Sin fuente";
@@ -3237,6 +3248,19 @@ function renderOrigamiSignals(profile) {
               ${thesisChips.map((item) => `<span class="${item.value}">${item.label}</span>`).join("")}
             </div>
             ${thesis.evidence ? `<p>${escapeHtml(thesis.evidence)}</p>` : `<p class="empty">Sin evidencia publica especifica para la tesis.</p>`}
+          </div>
+        `
+        : ""
+    }
+    ${
+      painChips.length
+        ? `
+          <div class="origami-pain-box">
+            <strong>Senales de dolor operativo</strong>
+            <div class="origami-pain-chips">
+              ${painChips.map((item) => `<span class="${item.value}">${item.label}</span>`).join("")}
+            </div>
+            ${pain.evidence ? `<p>${escapeHtml(pain.evidence)}</p>` : `<p class="empty">Sin evidencia publica especifica del dolor operativo.</p>`}
           </div>
         `
         : ""
