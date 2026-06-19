@@ -2472,7 +2472,47 @@ function sumStats(items, field) {
   return (items || []).reduce((sum, item) => sum + Number(item[field] || 0), 0);
 }
 
-function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso }) {
+function percent(part, total) {
+  const denominator = Number(total || 0);
+  return denominator ? Math.round((Number(part || 0) / denominator) * 1000) / 10 : 0;
+}
+
+function campaignHealthLabel(counts = {}) {
+  const sent = Number(counts.sent || 0);
+  const bounceRate = percent(counts.bounced, sent);
+  const replyRate = percent(counts.replied, sent);
+  if (bounceRate >= 5 || Number(counts.complained || 0) > 0) return "Riesgo alto";
+  if (bounceRate >= 3 || Number(counts.reputation_blocked || 0) > 20) return "En observacion";
+  if (sent >= 20 && replyRate >= 3) return "Saludable";
+  return "Normal";
+}
+
+function campaignManagerRecommendations({ campaigns, warmups, totalCounts, recentTotals, inventory }) {
+  const recommendations = [];
+  const activeCampaigns = campaigns.filter((campaign) => campaign.status === "active");
+  const pausedCampaigns = campaigns.filter((campaign) => campaign.status === "paused");
+  const sent = Number(totalCounts.sent || 0);
+  const bounceRate = percent(totalCounts.bounced, sent);
+  const replyRate = percent(totalCounts.replied, sent);
+  const investorInventory = inventory?.by_type?.find((row) => row.type === "investor" || row.label === "Inversionistas");
+
+  if (!activeCampaigns.length) recommendations.push("No hay campanas activas. Revisar si se debe iniciar una nueva campana o reactivar una pausada.");
+  if (pausedCampaigns.length) recommendations.push(`${pausedCampaigns.length} campana(s) pausada(s). Revisar motivo antes de reactivar.`);
+  if (bounceRate >= 5) recommendations.push(`Rebote total en ${bounceRate}%. Pausar o reducir ritmo antes de seguir enviando.`);
+  else if (bounceRate >= 3) recommendations.push(`Rebote total en ${bounceRate}%. Mantener bajo observacion y validar emails antes de ampliar volumen.`);
+  if (replyRate >= 3) recommendations.push(`Respuesta acumulada ${replyRate}%. Buen indicador: priorizar segmentos/plantillas que estan respondiendo.`);
+  if (recentTotals.replied > 0) recommendations.push(`Hay ${recentTotals.replied} respuesta(s) nuevas en 24h. Prioridad: revisar inbox y mover interesados a Kanban.`);
+  if (recentTotals.sent === 0 && activeCampaigns.length) recommendations.push("No hubo envios en 24h aunque hay campanas activas. Revisar inventario aprobado, cupo diario o fecha de inicio.");
+  if (investorInventory && Number(investorInventory.available_for_campaign || 0) < 25) {
+    recommendations.push(`Inventario inversionista apto bajo: ${investorInventory.available_for_campaign}. Necesita mas Apollo + Origami antes de escalar.`);
+  }
+  for (const warmup of warmups || []) {
+    if (warmup.remaining_today <= 0) recommendations.push(`${warmup.domain}: cupo diario agotado. No se enviara mas desde ese dominio hoy.`);
+  }
+  return recommendations.length ? recommendations : ["Sistema sin alertas criticas. Mantener monitoreo diario."];
+}
+
+function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso, inventory }) {
   const recentTotals = campaigns.reduce((totals, campaign) => {
     const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
     for (const key of Object.keys(totals)) totals[key] += Number(recent[key] || 0);
@@ -2495,10 +2535,30 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
     },
     { queued: 0, sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, failed: 0, blocked: 0 }
   );
+  const activeCampaigns = campaigns.filter((campaign) => campaign.status === "active");
+  const pendingCapacity = campaigns.reduce((sum, campaign) => sum + Math.max(0, Number(campaign.max_recipients || 0) - Number(campaign.counts?.sent || 0)), 0);
+  const totalReplyRate = percent(totalCounts.replied, totalCounts.sent);
+  const totalBounceRate = percent(totalCounts.bounced, totalCounts.sent);
+  const recentReplyRate = percent(recentTotals.replied, recentTotals.sent + recentTotals.followups_sent);
+  const recentBounceRate = percent(recentTotals.bounced, recentTotals.sent + recentTotals.followups_sent);
+  const recommendations = campaignManagerRecommendations({ campaigns, warmups, totalCounts, recentTotals, inventory });
   const lines = [
     `Reporte diario de campanas Tecnotitan`,
     `Fecha de envio: ${campaignReportDate()}`,
     `Ventana analizada: ultimas 24 horas desde ${new Date(sinceIso).toLocaleString("es-CO", { timeZone: "America/Bogota" })}`,
+    "",
+    "Resumen ejecutivo para gerencia",
+    `- Estado general: ${campaignHealthLabel(totalCounts)}`,
+    `- Campanas activas: ${activeCampaigns.length} de ${campaigns.length}`,
+    `- Capacidad restante configurada: ${pendingCapacity} correos`,
+    `- Tasa acumulada de respuesta: ${totalReplyRate}%`,
+    `- Tasa acumulada de rebote: ${totalBounceRate}%`,
+    `- Tasa de respuesta ultimas 24h: ${recentReplyRate}%`,
+    `- Tasa de rebote ultimas 24h: ${recentBounceRate}%`,
+    `- Creditos Apollo usados ultimas 24h: ${apolloCredits}`,
+    "",
+    "Decisiones recomendadas",
+    ...recommendations.map((item) => `- ${item}`),
     "",
     "Resumen ultimas 24 horas",
     `- Enviados iniciales: ${recentTotals.sent}`,
@@ -2527,6 +2587,16 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
     "Calentamiento por remitente",
     ...warmups.map((warmup) => `- ${warmup.domain}: etapa ${warmup.stage}, limite ${warmup.daily_limit}/dia, usados hoy ${warmup.sent_today}, restantes ${warmup.remaining_today}`),
     "",
+    "Inventario para campanas",
+    ...(inventory?.by_type || []).map(
+      (row) =>
+        `- ${row.label || row.type}: ${row.available_for_campaign || 0} aptas, ${row.with_email || 0} con email, ${row.origami_pending || 0} pendientes Origami, ${row.origami_rejected || 0} no aptas`
+    ),
+    ...(inventory?.by_region || []).map(
+      (row) =>
+        `- Region ${row.label || row.region}: ${row.available_for_campaign || 0} aptas, cobertura email ${row.email_coverage_pct || 0}%, estado ${row.status}`
+    ),
+    "",
     "Detalle por campana",
   ];
 
@@ -2537,8 +2607,10 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
       "",
       `${campaign.name}`,
       `- Tipo: ${campaign.campaign_type} | Region: ${campaign.target_region || "todas"} | Remitente: ${campaign.sender_key} | Estado: ${campaign.status}`,
+      `- Salud: ${campaignHealthLabel(counts)} | Progreso: ${counts.sent || 0}/${campaign.max_recipients || counts.total || 0} | Restante: ${Math.max(0, Number(campaign.max_recipients || 0) - Number(counts.sent || 0))}`,
       `- Cola: ${counts.queued || 0} | Listos ahora: ${(counts.due || 0) + (counts.followups_due || 0)} | Proximo envio: ${counts.next_scheduled_at || "sin pendientes"}`,
       `- Total enviados: ${counts.sent || 0} | Follow-ups: ${counts.followups_sent || 0} | Respuestas: ${counts.replied || 0}`,
+      `- Tasas: respuesta ${percent(counts.replied, counts.sent)}% | rebote ${percent(counts.bounced, counts.sent)}%`,
       `- Tracking total: entregados ${counts.delivered || 0}, abiertos ${counts.opened || 0}, clics ${counts.clicked || 0}, rebotes ${counts.bounced || 0}, errores ${counts.failed_events || 0}`,
       `- Ultimas 24h: enviados ${recent.sent}, follow-ups ${recent.followups_sent}, entregados ${recent.delivered}, abiertos ${recent.opened}, clics ${recent.clicked}, respuestas ${recent.replied}, rebotes ${recent.bounced}, errores ${recent.failed}`
     );
@@ -2553,14 +2625,15 @@ async function sendDailyCampaignReport() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const campaigns = await listCampaigns(user);
   const warmups = await listWarmups(user);
-  const [{ payload: recentRecipients }, { payload: apolloLogs }] = await Promise.all([
+  const [{ payload: recentRecipients }, { payload: apolloLogs }, inventory] = await Promise.all([
     supabaseFetch(
       `/email_campaign_recipients?select=campaign_id,status,sent_at,last_followup_sent_at,delivered_at,opened_at,clicked_at,bounced_at,failed_at,complained_at,reply_received_at,updated_at&updated_at=gte.${encodeURIComponent(since)}&limit=10000`
     ),
     supabaseFetch(`/apollo_sync_logs?select=operation,credits_used,created_at&created_at=gte.${encodeURIComponent(since)}&limit=10000`),
+    leadInventory(user).catch(() => null),
   ]);
   const recentByCampaign = countRecentCampaignActivity(recentRecipients || [], since);
-  const text = buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs: apolloLogs || [], sinceIso: since });
+  const text = buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs: apolloLogs || [], sinceIso: since, inventory });
   const message = await sendEmail(user, {
     sender_key: "consulting",
     to: "info@tecnotitan.com",
