@@ -352,6 +352,31 @@
               <p class="empty">No hay busquedas personales todavia.</p>
             </div>
           </div>
+          <div class="origami-search-tool">
+            <div class="panel-title">
+              <h3>Buscador de empleo para Oscar</h3>
+              <p>Encuentra vacantes, empresas, reclutadores, emails de HR, LinkedIn y mensajes personalizados.</p>
+            </div>
+            <div class="origami-search-form">
+              <input id="origami-job-role" type="text" placeholder="Cargo objetivo, ejemplo: analista de datos">
+              <input id="origami-job-locations" type="text" placeholder="Ubicaciones, ejemplo: Colombia, remoto, USA">
+              <input id="origami-job-keywords" type="text" placeholder="Keywords: Python, ventas, soporte, IA">
+              <select id="origami-job-seniority">
+                <option value="">Seniority opcional</option>
+                <option value="junior">Junior</option>
+                <option value="mid">Mid-level</option>
+                <option value="senior">Senior</option>
+                <option value="entry_level">Entry level</option>
+              </select>
+              <textarea id="origami-job-profile" rows="3" placeholder="Perfil de Oscar: experiencia, estudios, habilidades, idiomas"></textarea>
+              <textarea id="origami-job-notes" rows="3" placeholder="Notas opcionales: tipo de empresa, salario, modalidad, restricciones"></textarea>
+              <button id="origami-job-search-button" type="button">Buscar empleos con Origami</button>
+            </div>
+            <span id="origami-job-search-status"></span>
+            <div class="origami-search-results" id="origami-job-search-results">
+              <p class="empty">No hay busquedas laborales todavia.</p>
+            </div>
+          </div>
         </section>
 
         <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">

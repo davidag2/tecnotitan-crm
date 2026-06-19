@@ -2662,6 +2662,25 @@ button.danger {
   white-space: pre-wrap;
 }
 
+.origami-job-opportunities {
+  display: grid;
+  gap: 10px;
+}
+
+.origami-job-opportunities section {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.origami-job-opportunities section > span,
+.origami-job-opportunities small {
+  color: var(--muted);
+}
+
 .origami-detail-header {
   display: flex;
   justify-content: space-between;

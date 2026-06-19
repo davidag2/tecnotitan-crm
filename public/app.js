@@ -16,6 +16,8 @@ const state = {
   origamiPollAttempts: 0,
   origamiPeopleSearches: [],
   origamiSearchPollTimer: null,
+  origamiJobSearches: [],
+  origamiJobPollTimer: null,
   emailMailbox: "compose",
   emailSearch: "",
   selectedEmailId: "",
@@ -56,6 +58,15 @@ const elements = {
   origamiPersonSearchButton: document.querySelector("#origami-person-search-button"),
   origamiPersonSearchStatus: document.querySelector("#origami-person-search-status"),
   origamiPersonSearchResults: document.querySelector("#origami-person-search-results"),
+  origamiJobRole: document.querySelector("#origami-job-role"),
+  origamiJobLocations: document.querySelector("#origami-job-locations"),
+  origamiJobKeywords: document.querySelector("#origami-job-keywords"),
+  origamiJobSeniority: document.querySelector("#origami-job-seniority"),
+  origamiJobProfile: document.querySelector("#origami-job-profile"),
+  origamiJobNotes: document.querySelector("#origami-job-notes"),
+  origamiJobSearchButton: document.querySelector("#origami-job-search-button"),
+  origamiJobSearchStatus: document.querySelector("#origami-job-search-status"),
+  origamiJobSearchResults: document.querySelector("#origami-job-search-results"),
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
   messageTemplates: document.querySelector("#message-templates"),
@@ -880,6 +891,206 @@ async function createOrigamiPeopleSearch() {
   } finally {
     elements.origamiPersonSearchButton.disabled = false;
     elements.origamiPersonSearchButton.textContent = originalText;
+  }
+}
+
+function renderOrigamiJobSearches(searches = state.origamiJobSearches) {
+  if (!elements.origamiJobSearchResults) return;
+  if (!searches?.length) {
+    elements.origamiJobSearchResults.innerHTML = `<p class="empty">No hay busquedas laborales todavia.</p>`;
+    return;
+  }
+  elements.origamiJobSearchResults.innerHTML = searches
+    .map((search) => {
+      const summary = search.result_summary || {};
+      const opportunities = Array.isArray(search.opportunities) ? search.opportunities : [];
+      const templates = search.message_templates || {};
+      return `
+        <article class="origami-search-card">
+          <header>
+            <div>
+              <strong>${escapeHtml(search.target_person || "Oscar")} | ${escapeHtml(search.target_role || "Cargo objetivo")}</strong>
+              <span>${escapeHtml(search.target_locations || "Ubicacion abierta")}${search.seniority ? ` | ${escapeHtml(search.seniority)}` : ""}</span>
+            </div>
+            <span class="status-badge">${escapeHtml(origamiStatusLabel(search.status))}</span>
+          </header>
+          ${
+            summary.summary
+              ? `
+                <p>${escapeHtml(summary.summary)}</p>
+                <div class="origami-search-meta">
+                  <span>Angulo: ${escapeHtml(summary.best_search_angle || "Por definir")}</span>
+                  <span>Confianza: ${escapeHtml(summary.confidence || "low")}</span>
+                  <span>Oportunidades: ${opportunities.length}</span>
+                </div>
+                ${
+                  opportunities.length
+                    ? `
+                      <div class="origami-job-opportunities">
+                        ${opportunities
+                          .slice(0, 8)
+                          .map(
+                            (item, index) => `
+                              <section>
+                                <strong>#${index + 1} ${escapeHtml(item.role || "Rol objetivo")} | ${escapeHtml(item.company || "Empresa")}</strong>
+                                <span>${escapeHtml(item.location || "Ubicacion no confirmada")} | Fit: ${escapeHtml(item.fit_score || "unknown")} | Canal: ${escapeHtml(item.application_channel || "manual_review")}</span>
+                                ${item.why_fit ? `<p>${escapeHtml(item.why_fit)}</p>` : ""}
+                                <div class="origami-search-meta">
+                                  ${item.hr_email ? `<span>HR: ${escapeHtml(item.hr_email)}</span>` : ""}
+                                  ${item.recruiter_name ? `<span>Recruiter: ${escapeHtml(item.recruiter_name)}</span>` : ""}
+                                  ${item.job_url ? `<span>Vacante oficial encontrada</span>` : ""}
+                                  ${item.recruiter_linkedin ? `<span>LinkedIn recruiter</span>` : ""}
+                                </div>
+                                ${item.message_angle ? `<small>Mensaje: ${escapeHtml(item.message_angle)}</small>` : ""}
+                              </section>
+                            `
+                          )
+                          .join("")}
+                      </div>
+                    `
+                    : `<p class="empty">Origami no encontro oportunidades concretas todavia.</p>`
+                }
+                ${
+                  Array.isArray(summary.next_steps) && summary.next_steps.length
+                    ? `<small>Proximos pasos: ${summary.next_steps.map(escapeHtml).join(" | ")}</small>`
+                    : ""
+                }
+              `
+              : `<p class="empty">${search.status === "running" ? "Origami sigue buscando oportunidades..." : escapeHtml(search.error || "Sin resultado todavia.")}</p>`
+          }
+          ${
+            templates.recruiter_email_body || templates.linkedin_connection
+              ? `
+                <details>
+                  <summary>Mensajes sugeridos</summary>
+                  ${templates.linkedin_connection ? `<small>LinkedIn: ${escapeHtml(templates.linkedin_connection)}</small>` : ""}
+                  ${templates.recruiter_email_subject ? `<small>Asunto: ${escapeHtml(templates.recruiter_email_subject)}</small>` : ""}
+                  ${templates.recruiter_email_body ? `<pre>${escapeHtml(templates.recruiter_email_body)}</pre>` : ""}
+                  ${templates.follow_up ? `<small>Follow-up: ${escapeHtml(templates.follow_up)}</small>` : ""}
+                </details>
+              `
+              : ""
+          }
+          <footer>
+            <button class="secondary" type="button" data-refresh-origami-job="${attr(search.id)}" ${search.status === "running" ? "" : "disabled"}>Actualizar</button>
+            <button class="secondary" type="button" data-copy-origami-job="${attr(search.id)}">Copiar oportunidades</button>
+          </footer>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.origamiJobSearchResults.querySelectorAll("[data-refresh-origami-job]").forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => refreshOrigamiJobSearch(button.dataset.refreshOrigamiJob, true));
+  });
+  elements.origamiJobSearchResults.querySelectorAll("[data-copy-origami-job]").forEach((button) => {
+    button.addEventListener("click", () => copyOrigamiJobSearch(button.dataset.copyOrigamiJob));
+  });
+}
+
+function copyOrigamiJobSearch(id) {
+  const search = state.origamiJobSearches.find((item) => item.id === id);
+  if (!search) return;
+  const summary = search.result_summary || {};
+  const opportunities = Array.isArray(search.opportunities) ? search.opportunities : [];
+  const templates = search.message_templates || {};
+  const text = [
+    `Busqueda empleo: ${search.target_person || "Oscar"} - ${search.target_role || ""}`,
+    `Resumen: ${summary.summary || ""}`,
+    `Angulo: ${summary.best_search_angle || ""}`,
+    "",
+    ...opportunities.slice(0, 8).map((item, index) =>
+      [
+        `#${index + 1} ${item.company || ""} - ${item.role || ""}`,
+        `Ubicacion: ${item.location || ""}`,
+        `Fit: ${item.fit_score || "unknown"} | Canal: ${item.application_channel || ""}`,
+        `Vacante: ${item.job_url || ""}`,
+        `HR: ${item.hr_email || ""}`,
+        `Recruiter: ${item.recruiter_name || ""} ${item.recruiter_linkedin || ""}`,
+        `Por que: ${item.why_fit || ""}`,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    ),
+    "",
+    templates.recruiter_email_subject ? `Asunto: ${templates.recruiter_email_subject}` : "",
+    templates.recruiter_email_body || "",
+    templates.linkedin_connection ? `LinkedIn: ${templates.linkedin_connection}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  copyValue(text, "Oportunidades para Oscar");
+}
+
+function scheduleOrigamiJobPoll(id, attempt = 1) {
+  if (!id) return;
+  if (state.origamiJobPollTimer) window.clearTimeout(state.origamiJobPollTimer);
+  state.origamiJobPollTimer = window.setTimeout(async () => {
+    try {
+      const search = await refreshOrigamiJobSearch(id, false);
+      if (search?.status === "running" && attempt < ORIGAMI_MAX_POLL_ATTEMPTS) {
+        scheduleOrigamiJobPoll(id, attempt + 1);
+      }
+    } catch (error) {
+      if (elements.origamiJobSearchStatus) elements.origamiJobSearchStatus.textContent = error.message;
+    }
+  }, ORIGAMI_POLL_INTERVAL_MS);
+}
+
+async function refreshOrigamiJobSearch(id, manual = false) {
+  const result = await api("/api/origami-jobs", {
+    method: "POST",
+    body: JSON.stringify({ action: "refresh", id }),
+  });
+  state.origamiJobSearches = result.searches || [];
+  renderOrigamiJobSearches();
+  if (elements.origamiJobSearchStatus) {
+    elements.origamiJobSearchStatus.textContent = manual ? "Busqueda laboral actualizada." : "Origami sigue buscando empleos...";
+  }
+  return result.search;
+}
+
+async function createOrigamiJobSearch() {
+  if (!state.origamiConfigured) {
+    elements.origamiJobSearchStatus.textContent = "Origami no esta configurado.";
+    return;
+  }
+  const role = elements.origamiJobRole.value.trim();
+  if (!role) {
+    elements.origamiJobSearchStatus.textContent = "Escribe el cargo objetivo para Oscar.";
+    return;
+  }
+  const originalText = elements.origamiJobSearchButton.textContent;
+  elements.origamiJobSearchButton.disabled = true;
+  elements.origamiJobSearchButton.textContent = "Buscando...";
+  elements.origamiJobSearchStatus.textContent = "Origami esta buscando oportunidades para Oscar...";
+  try {
+    const result = await api("/api/origami-jobs", {
+      method: "POST",
+      body: JSON.stringify({
+        target_person: "Oscar",
+        target_role: role,
+        target_locations: elements.origamiJobLocations.value.trim(),
+        target_keywords: elements.origamiJobKeywords.value.trim(),
+        seniority: elements.origamiJobSeniority.value,
+        candidate_profile: elements.origamiJobProfile.value.trim(),
+        notes: elements.origamiJobNotes.value.trim(),
+      }),
+    });
+    state.origamiJobSearches = result.searches || [];
+    renderOrigamiJobSearches();
+    if (result.search?.status === "running") {
+      scheduleOrigamiJobPoll(result.search.id);
+      elements.origamiJobSearchStatus.textContent = "Busqueda laboral creada. El CRM actualizara automaticamente.";
+    } else {
+      elements.origamiJobSearchStatus.textContent = "Busqueda laboral lista.";
+    }
+  } catch (error) {
+    elements.origamiJobSearchStatus.textContent = error.message;
+  } finally {
+    elements.origamiJobSearchButton.disabled = false;
+    elements.origamiJobSearchButton.textContent = originalText;
   }
 }
 
@@ -3331,7 +3542,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -3342,6 +3553,7 @@ async function loadPrivateData() {
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
       api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
       api("/api/origami-search").catch(() => ({ searches: [] })),
+      api("/api/origami-jobs").catch(() => ({ searches: [] })),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -3353,6 +3565,7 @@ async function loadPrivateData() {
     state.emailExclusions = exclusions.exclusions || [];
     state.leadInventory = inventory.inventory || null;
     state.origamiPeopleSearches = origamiSearches.searches || [];
+    state.origamiJobSearches = origamiJobs.searches || [];
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -3371,6 +3584,7 @@ async function loadPrivateData() {
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
     renderOrigamiPeopleSearches();
+    renderOrigamiJobSearches();
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {
@@ -3950,6 +4164,11 @@ function logout() {
     clearTimeout(state.origamiSearchPollTimer);
     state.origamiSearchPollTimer = null;
   }
+  state.origamiJobSearches = [];
+  if (state.origamiJobPollTimer) {
+    clearTimeout(state.origamiJobPollTimer);
+    state.origamiJobPollTimer = null;
+  }
   state.emailMailbox = "compose";
   state.emailSearch = "";
   state.selectedEmailId = "";
@@ -3985,6 +4204,8 @@ function logout() {
   if (elements.campaignStatus) elements.campaignStatus.textContent = "";
   if (elements.origamiPersonSearchResults) elements.origamiPersonSearchResults.innerHTML = `<p class="empty">Inicia sesion para buscar personas con Origami.</p>`;
   if (elements.origamiPersonSearchStatus) elements.origamiPersonSearchStatus.textContent = "";
+  if (elements.origamiJobSearchResults) elements.origamiJobSearchResults.innerHTML = `<p class="empty">Inicia sesion para buscar empleos con Origami.</p>`;
+  if (elements.origamiJobSearchStatus) elements.origamiJobSearchStatus.textContent = "";
   elements.searchResults.classList.add("hidden");
   renderSessionUser();
   showLogin();
@@ -4008,6 +4229,10 @@ elements.refreshOrigami?.addEventListener("click", () => runOrigamiAnalysis("ref
 elements.origamiPersonSearchButton?.addEventListener("click", createOrigamiPeopleSearch);
 elements.origamiPersonName?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") createOrigamiPeopleSearch();
+});
+elements.origamiJobSearchButton?.addEventListener("click", createOrigamiJobSearch);
+elements.origamiJobRole?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") createOrigamiJobSearch();
 });
 elements.addCompanyNote.addEventListener("click", addCompanyNote);
 elements.createUser.addEventListener("click", createUser);
