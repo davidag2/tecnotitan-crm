@@ -115,6 +115,9 @@ const elements = {
   campaignArchiveList: document.querySelector("#campaign-archive-list"),
   multiCampaignManager: document.querySelector("#multi-campaign-manager"),
   prepareWarehouseButton: document.querySelector("#prepare-warehouse-button"),
+  origamiSourceButton: document.querySelector("#origami-source-button"),
+  origamiSourceCount: document.querySelector("#origami-source-count"),
+  origamiSourceQuery: document.querySelector("#origami-source-query"),
   warehouseStatus: document.querySelector("#warehouse-status"),
   leadInventory: document.querySelector("#lead-inventory"),
   senderWarmupList: document.querySelector("#sender-warmup-list"),
@@ -2494,13 +2497,18 @@ function renderLeadInventory(inventory = state.leadInventory) {
   `;
 }
 
-async function prepareWarehouse() {
+async function prepareWarehouse(options = {}) {
   if (!elements.prepareWarehouseButton) return;
-  const originalText = elements.prepareWarehouseButton.textContent;
-  elements.prepareWarehouseButton.disabled = true;
-  elements.prepareWarehouseButton.textContent = "Preparando...";
+  const button = options.origamiOnly ? elements.origamiSourceButton : elements.prepareWarehouseButton;
+  const originalText = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = options.origamiOnly ? "Buscando..." : "Preparando...";
+  }
   if (elements.warehouseStatus) {
-    elements.warehouseStatus.textContent = "Warehouse trabajando: Apollo, emails, Origami y cola de campana...";
+    elements.warehouseStatus.textContent = options.origamiOnly
+      ? "Origami esta buscando leads nuevas y creando inventario inteligente..."
+      : "Warehouse trabajando: Apollo, emails, Origami y cola de campana...";
   }
   try {
     const result = await api("/api/emails", {
@@ -2508,13 +2516,16 @@ async function prepareWarehouse() {
       body: JSON.stringify({
         action: "prepare_warehouse",
         target_queue: 250,
-        search_batches: 2,
-        reveal_limit: 25,
+        search_batches: options.origamiOnly ? 0 : 2,
+        reveal_limit: options.origamiOnly ? 0 : 25,
         analyze_limit: 10,
+        origami_sourcing: true,
+        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 50) : 50,
+        origami_source_query: options.origamiOnly ? elements.origamiSourceQuery?.value.trim() : "",
       }),
     });
     const summary = (result.campaigns || [])
-      .map((item) => `${item.name}: +${item.queued_added || 0} en cola, ${item.analyzed || 0} analizadas, ${item.revealed || 0} emails`)
+      .map((item) => `${item.name}: ${item.origami_sourced || 0} Origami, +${item.queued_added || 0} en cola, ${item.analyzed || 0} analizadas, ${item.revealed || 0} emails`)
       .join(" | ");
     if (elements.warehouseStatus) elements.warehouseStatus.textContent = summary || "Warehouse actualizado.";
     const [inventory, campaigns] = await Promise.all([
@@ -2531,8 +2542,10 @@ async function prepareWarehouse() {
     if (elements.warehouseStatus) elements.warehouseStatus.textContent = error.message;
     setStatus(error.message, "warning");
   } finally {
-    elements.prepareWarehouseButton.disabled = false;
-    elements.prepareWarehouseButton.textContent = originalText;
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
 }
 
@@ -5223,7 +5236,8 @@ elements.campaignSectionButtons?.forEach((button) => {
 });
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);
-elements.prepareWarehouseButton?.addEventListener("click", prepareWarehouse);
+elements.prepareWarehouseButton?.addEventListener("click", () => prepareWarehouse());
+elements.origamiSourceButton?.addEventListener("click", () => prepareWarehouse({ origamiOnly: true }));
 elements.addExclusionButton.addEventListener("click", addExclusion);
 elements.clientSearch.addEventListener("input", () => {
   state.clientSearch = elements.clientSearch.value;

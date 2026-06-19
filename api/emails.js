@@ -1,5 +1,7 @@
 const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
+const { createAgentRun, getRun, origamiConfigured } = require("./_origami");
+const { scoreLead } = require("./_scoring");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
 const { analyzeOpportunity } = require("./origami");
@@ -1020,6 +1022,23 @@ function systemCampaignUser() {
     role: "admin",
     db_user_id: null,
   };
+}
+
+async function firstRow(path) {
+  const { payload } = await supabaseFetch(path);
+  return payload?.[0] || null;
+}
+
+function keepValue(incoming, existing) {
+  return incoming === null || incoming === undefined || incoming === "" ? existing || null : incoming;
+}
+
+function keepRicherText(incoming, existing) {
+  const next = String(incoming || "").trim();
+  const current = String(existing || "").trim();
+  if (!next) return current || null;
+  if (!current) return next;
+  return next.split(/\s+/).length > current.split(/\s+/).length || next.length > current.length ? next : current;
 }
 
 async function loadOpportunity(id, user) {
@@ -2049,6 +2068,440 @@ async function warehouseAnalyzeCandidates(campaign, limit = 25) {
   return payload || [];
 }
 
+function origamiRunStatus(status) {
+  const value = String(status || "").toLowerCase();
+  if (["failed", "error", "cancelled", "canceled"].includes(value)) return "failed";
+  if (["completed", "complete", "done", "succeeded", "success", "finished"].includes(value)) return "completed";
+  return "running";
+}
+
+function extractOrigamiText(run) {
+  const response = run?.response || run?.result || run?.output || run;
+  if (typeof response === "string") return response;
+  if (response?.text) return String(response.text);
+  if (response?.message) return String(response.message);
+  if (response?.content) return typeof response.content === "string" ? response.content : JSON.stringify(response.content);
+  return JSON.stringify(response || {});
+}
+
+function extractOrigamiJson(text, marker = "TECNOTITAN_ORIGAMI_SOURCE_JSON") {
+  const match = String(text || "").match(new RegExp(`BEGIN_${marker}\\s*([\\s\\S]*?)\\s*END_${marker}`, "i"));
+  const raw = match?.[1] || "";
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function origamiSourcePrompt({ campaign, targetCount, query }) {
+  const segment = campaignSegment(campaign.segment_key, campaign.campaign_type);
+  const defaultQuery =
+    campaign.campaign_type === "investor"
+      ? `${targetCount} pre-seed and seed investors who invest in AI, applied software, B2B SaaS, automation or LATAM/emerging markets. Prioritize people/firms open to founder pitches or cold email.`
+      : `${targetCount} LATAM companies likely to need AI implementation, CRM automation, sales ops, data integration or internal software consulting.`;
+  const regionHint = campaign.target_region === "usa" ? "USA, especially California and major tech hubs" : campaign.target_region === "europe" ? "Europe" : campaign.target_region === "latam" ? "Latin America" : "USA, LATAM and Europe";
+  return [
+    "You are an Origami lead sourcing agent for Tecnotitan CRM.",
+    "Goal: create a CRM-ready lead list, not a generic explanation.",
+    "Use public information only. Do not invent emails, titles, LinkedIn URLs, websites or evidence.",
+    "Prioritize leads where outreach is allowed or has a clear official pitch channel.",
+    "",
+    "Tecnotitan context:",
+    "- Colombian applied technology company building practical AI implementation, CRM, sales automation, integrations and internal software.",
+    "- Investor pitch: AI implementation platform for LATAM.",
+    "- Consulting pitch: convert manual workflows and scattered data into working systems.",
+    "",
+    `Campaign name: ${campaign.name}`,
+    `Campaign type: ${campaign.campaign_type}`,
+    `Segment: ${segment.label}`,
+    `Target region: ${regionHint}`,
+    `Requested candidates: ${targetCount}`,
+    `User sourcing query: ${query || defaultQuery}`,
+    "",
+    "For each lead, find specific evidence for at least one of these:",
+    "- invests in AI, B2B SaaS, automation, emerging markets, LATAM, seed or pre-seed;",
+    "- accepts cold email, founder submissions, startup pitches, inbound deals or has a public pitch email/form;",
+    "- role is relevant: partner, investor, principal, angel, founder, corporate development, accelerator lead.",
+    "",
+    "Return at most the requested number of leads. Include exactly one JSON object between these markers:",
+    "BEGIN_TECNOTITAN_ORIGAMI_SOURCE_JSON",
+    "{",
+    '  "query_summary": "what was searched",',
+    '  "leads": [',
+    "    {",
+    '      "person_name": "full name or investment team name",',
+    '      "first_name": "first name if known",',
+    '      "last_name": "last name if known",',
+    '      "title": "role/title",',
+    '      "email": "best direct or official pitch email if publicly found",',
+    '      "email_status": "public|official_pitch|unknown",',
+    '      "linkedin_url": "person LinkedIn URL if found",',
+    '      "country": "country",',
+    '      "city": "city",',
+    '      "state": "state/region",',
+    '      "company_name": "fund/company",',
+    '      "company_domain": "domain without https",',
+    '      "company_website": "website",',
+    '      "company_linkedin_url": "company LinkedIn URL",',
+    '      "industry": "VC|Angel investor|Family office|Accelerator|Corporate VC|Consulting prospect|Other",',
+    '      "cold_email_fit": "high|medium|low|unknown",',
+    '      "accepts_cold_email": "yes|no|unknown",',
+    '      "accepts_pitches": "yes|no|unknown",',
+    '      "accepts_founder_submissions": "yes|no|unknown",',
+    '      "accepts_inbound_deals": "yes|no|unknown",',
+    '      "official_pitch_email": "pitch/deals/startups/investment email if found",',
+    '      "official_pitch_channel": "email|form|linkedin|referral|unknown",',
+    '      "official_pitch_url": "source URL for pitch channel",',
+    '      "pitch_policy": "accepts_pitches|form_required|referral_only|no_unsolicited|unknown",',
+    '      "outreach_openness_evidence": "short evidence",',
+    '      "investment_stage": "pre-seed|seed|series a|growth|unknown",',
+    '      "investment_thesis": "short thesis match",',
+    '      "personalization_angle": "specific reason Tecnotitan should contact them",',
+    '      "recommended_subject": "natural subject line",',
+    '      "email_body": "short personalized first email",',
+    '      "signals": ["signal 1", "signal 2"],',
+    '      "risks": ["risk or caveat"],',
+    '      "confidence": "high|medium|low"',
+    "    }",
+    "  ]",
+    "}",
+    "END_TECNOTITAN_ORIGAMI_SOURCE_JSON",
+  ].join("\n");
+}
+
+function origamiLeadRegion(lead, campaign) {
+  const text = [lead.country, lead.state, lead.city].filter(Boolean).join(" ").toLowerCase();
+  if (campaign.campaign_type !== "investor") return "latam";
+  if (/(united states|usa|u\.s\.|california|new york|texas|florida|massachusetts|washington)/i.test(text)) return "usa";
+  if (/(colombia|mexico|argentina|chile|peru|brazil|brasil|latam|latin america)/i.test(text)) return "latam";
+  if (/(spain|espa|france|germany|italy|netherlands|switzerland|uk|united kingdom|europe)/i.test(text)) return "europe";
+  return campaign.target_region || "usa";
+}
+
+function origamiCompanyRow(lead) {
+  const domain = String(lead.company_domain || lead.domain || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].trim().toLowerCase();
+  const name = String(lead.company_name || lead.company || "").trim();
+  if (!name && !domain) return null;
+  return {
+    name: name || domain,
+    domain: domain || null,
+    website_url: lead.company_website || (domain ? `https://${domain}` : null),
+    linkedin_url: lead.company_linkedin_url || null,
+    industry: lead.industry || null,
+    country: lead.country || null,
+    city: lead.city || null,
+    state: lead.state || null,
+    raw_payload: {
+      source: "origami",
+      tecnotitan_origami_sourced_at: new Date().toISOString(),
+      lead,
+    },
+  };
+}
+
+function origamiContactRow(lead, companyId) {
+  const email = normalizeEmail(lead.email || lead.official_pitch_email);
+  const fullName = String(lead.person_name || [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "").trim();
+  return {
+    company_id: companyId || null,
+    first_name: lead.first_name || fullName.split(/\s+/)[0] || null,
+    last_name: lead.last_name || null,
+    full_name: fullName || `Investment team - ${lead.company_name || "Origami lead"}`,
+    title: lead.title || null,
+    email: email || null,
+    email_status: lead.email_status || (email ? "origami_public" : "unknown"),
+    linkedin_url: lead.linkedin_url || null,
+    country: lead.country || null,
+    city: lead.city || null,
+    state: lead.state || null,
+    lead_source: "other",
+    apollo_raw_payload: {
+      source: "origami",
+      tecnotitan_origami_sourced_at: new Date().toISOString(),
+      lead,
+    },
+    apollo_last_synced_at: new Date().toISOString(),
+    apollo_enrichment_status: email ? "enriched" : "not_requested",
+  };
+}
+
+async function findOrigamiCompany(row) {
+  if (!row) return null;
+  if (row.domain) {
+    const existing = await firstRow(`/companies?select=*&domain=ilike.${encodeURIComponent(row.domain)}&deleted_at=is.null&limit=1`);
+    if (existing) return existing;
+  }
+  if (row.name) {
+    const countryFilter = row.country ? `country=ilike.${encodeURIComponent(row.country)}` : "or=(country.is.null,country.eq.)";
+    return firstRow(`/companies?select=*&name=ilike.${encodeURIComponent(row.name)}&${countryFilter}&deleted_at=is.null&limit=1`);
+  }
+  return null;
+}
+
+async function saveOrigamiCompany(row) {
+  if (!row) return null;
+  const existing = await findOrigamiCompany(row);
+  if (existing) {
+    const rows = await updateRows(
+      "companies",
+      {
+        name: keepValue(row.name, existing.name),
+        domain: keepValue(row.domain, existing.domain),
+        website_url: keepValue(row.website_url, existing.website_url),
+        linkedin_url: keepValue(row.linkedin_url, existing.linkedin_url),
+        industry: keepValue(row.industry, existing.industry),
+        country: keepValue(row.country, existing.country),
+        city: keepValue(row.city, existing.city),
+        state: keepValue(row.state, existing.state),
+        raw_payload: { ...(row.raw_payload || {}), ...(existing.raw_payload || {}), tecnotitan_origami_last_source_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(existing.id)}`
+    );
+    return rows[0] || existing;
+  }
+  return insertRow("companies", row);
+}
+
+async function findOrigamiContact(row) {
+  if (!row) return null;
+  if (row.email) {
+    const existing = await firstRow(`/contacts?select=*&email=ilike.${encodeURIComponent(row.email)}&deleted_at=is.null&limit=1`);
+    if (existing) return existing;
+  }
+  if (row.linkedin_url) {
+    const existing = await firstRow(`/contacts?select=*&linkedin_url=ilike.${encodeURIComponent(row.linkedin_url)}&deleted_at=is.null&limit=1`);
+    if (existing) return existing;
+  }
+  if (row.full_name && row.company_id) {
+    return firstRow(`/contacts?select=*&full_name=ilike.${encodeURIComponent(row.full_name)}&company_id=eq.${encodeURIComponent(row.company_id)}&deleted_at=is.null&limit=1`);
+  }
+  return null;
+}
+
+async function saveOrigamiContact(row) {
+  const existing = await findOrigamiContact(row);
+  if (existing) {
+    const rows = await updateRows(
+      "contacts",
+      {
+        company_id: existing.company_id || row.company_id,
+        first_name: keepValue(row.first_name, existing.first_name),
+        last_name: keepValue(row.last_name, existing.last_name),
+        full_name: keepRicherText(row.full_name, existing.full_name),
+        title: keepValue(row.title, existing.title),
+        email: keepValue(row.email, existing.email),
+        email_status: keepValue(row.email_status, existing.email_status),
+        linkedin_url: keepValue(row.linkedin_url, existing.linkedin_url),
+        country: keepValue(row.country, existing.country),
+        city: keepValue(row.city, existing.city),
+        state: keepValue(row.state, existing.state),
+        apollo_raw_payload: { ...(row.apollo_raw_payload || {}), ...(existing.apollo_raw_payload || {}), tecnotitan_origami_last_source_at: new Date().toISOString() },
+        apollo_last_synced_at: new Date().toISOString(),
+        apollo_enrichment_status: existing.apollo_enrichment_status || row.apollo_enrichment_status,
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(existing.id)}`
+    );
+    return rows[0] || existing;
+  }
+  return insertRow("contacts", row);
+}
+
+function origamiProfileFromLead(lead) {
+  return {
+    summary: lead.summary || lead.investment_thesis || "",
+    cold_email_fit: lead.cold_email_fit || "unknown",
+    accepts_cold_email: lead.accepts_cold_email || "unknown",
+    accepts_pitches: lead.accepts_pitches || "unknown",
+    accepts_founder_submissions: lead.accepts_founder_submissions || "unknown",
+    accepts_inbound_deals: lead.accepts_inbound_deals || "unknown",
+    outreach_openness_evidence: lead.outreach_openness_evidence || "",
+    official_pitch_email: lead.official_pitch_email || "",
+    official_pitch_channel: lead.official_pitch_channel || "unknown",
+    official_pitch_url: lead.official_pitch_url || "",
+    pitch_policy: lead.pitch_policy || "unknown",
+    recommended_channel: lead.recommended_channel || (lead.official_pitch_email ? "official_pitch_email" : "email"),
+    personalization_angle: lead.personalization_angle || "",
+    signals: Array.isArray(lead.signals) ? lead.signals : [],
+    risks: Array.isArray(lead.risks) ? lead.risks : [],
+    confidence: lead.confidence || "low",
+    contact_risk: {
+      level: String(lead.pitch_policy || "").toLowerCase() === "no_unsolicited" ? "high" : "medium",
+      reason: (Array.isArray(lead.risks) ? lead.risks[0] : "") || "",
+    },
+    source: "origami_sourcing",
+  };
+}
+
+async function saveOrigamiSourcedLead(user, campaign, lead, leadSearchId, position) {
+  const company = await saveOrigamiCompany(origamiCompanyRow(lead));
+  const contact = await saveOrigamiContact(origamiContactRow(lead, company?.id || null));
+  const targetRegion = origamiLeadRegion(lead, campaign);
+  const score = scoreLead({
+    leadType: campaign.campaign_type,
+    title: contact.title,
+    country: contact.country || company?.country,
+    linkedinUrl: contact.linkedin_url,
+    organization: company || {},
+  });
+  const origamiProfile = origamiProfileFromLead(lead);
+  const existingOpportunity = await firstRow(
+    `/opportunities?select=*&contact_id=eq.${encodeURIComponent(contact.id)}&lead_type=eq.${encodeURIComponent(campaign.campaign_type)}&target_region=eq.${encodeURIComponent(targetRegion)}&deleted_at=is.null&limit=1`
+  );
+  const opportunityPatch = {
+    company_id: company?.id || existingOpportunity?.company_id || null,
+    lead_type: campaign.campaign_type,
+    target_region: targetRegion,
+    pipeline_status: existingOpportunity?.pipeline_status || "nuevo",
+    investor_type: campaign.campaign_type === "investor" ? lead.industry || existingOpportunity?.investor_type || null : existingOpportunity?.investor_type || null,
+    investment_stage: campaign.campaign_type === "investor" ? lead.investment_stage || existingOpportunity?.investment_stage || null : existingOpportunity?.investment_stage || null,
+    investment_thesis: campaign.campaign_type === "investor" ? lead.investment_thesis || existingOpportunity?.investment_thesis || null : existingOpportunity?.investment_thesis || null,
+    score: Math.max(Number(existingOpportunity?.score || 0), Number(score.score || 0)),
+    score_label: existingOpportunity?.score_label || score.score_label,
+    score_reasons: existingOpportunity?.score_reasons?.length ? existingOpportunity.score_reasons : score.score_reasons,
+    origami_status: "completed",
+    origami_profile: origamiProfile,
+    origami_email_draft: {
+      recommended_subject: lead.recommended_subject || "",
+      email_body: lead.email_body || "",
+    },
+    origami_analyzed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const opportunity = existingOpportunity
+    ? (await updateRows("opportunities", opportunityPatch, `id=eq.${encodeURIComponent(existingOpportunity.id)}`))[0] || existingOpportunity
+    : await insertRow("opportunities", {
+        contact_id: contact.id,
+        ...opportunityPatch,
+      });
+
+  await insertRow("lead_search_results", {
+    lead_search_id: leadSearchId,
+    contact_id: contact.id,
+    company_id: company?.id || null,
+    opportunity_id: opportunity.id,
+    page: 1,
+    position,
+  }).catch(() => null);
+
+  if (contact?.id) await ensureContactTag(contact.id, "Origami sourced", "#db2777").catch(() => null);
+  return { contact, company, opportunity };
+}
+
+async function completeOrigamiSourceSearch(user, leadSearch) {
+  const origami = leadSearch?.filters?.origami_source || {};
+  if (!origami.agent_id || !origami.run_id) return { saved: 0, status: leadSearch.status };
+  const { run } = await getRun(origami.agent_id, origami.run_id);
+  const status = origamiRunStatus(run?.status);
+  if (status !== "completed") {
+    await updateRows("lead_searches", { status, updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(leadSearch.id)}`);
+    return { saved: 0, status };
+  }
+  const text = extractOrigamiText(run);
+  const parsed = extractOrigamiJson(text) || {};
+  const leads = Array.isArray(parsed.leads) ? parsed.leads : [];
+  let saved = 0;
+  const campaign = origami.campaign || {
+    campaign_type: leadSearch.lead_type,
+    target_region: leadSearch.target_region,
+    segment_key: origami.segment_key || "",
+    name: leadSearch.name,
+  };
+  for (const [index, lead] of leads.entries()) {
+    await saveOrigamiSourcedLead(user, campaign, lead, leadSearch.id, index + 1).then(() => {
+      saved += 1;
+    }).catch(() => null);
+  }
+  await updateRows(
+    "lead_searches",
+    {
+      status: "completed",
+      results_saved: saved,
+      total_entries: leads.length,
+      filters: { ...(leadSearch.filters || {}), origami_source: { ...origami, query_summary: parsed.query_summary || "", completed_at: new Date().toISOString() } },
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(leadSearch.id)}`
+  );
+  return { saved, status: "completed", returned: leads.length };
+}
+
+async function refreshOrigamiSourceSearches(user, limit = 5) {
+  const { payload } = await supabaseFetch(
+    `/lead_searches?select=*&search_template=eq.origami_sourcing&status=eq.running&order=created_at.asc&limit=${Math.max(1, Math.min(20, Number(limit || 5)))}`
+  );
+  const results = [];
+  for (const search of payload || []) {
+    results.push(await completeOrigamiSourceSearch(user, search).catch((error) => ({ saved: 0, status: "failed", error: error.message })));
+  }
+  return results;
+}
+
+async function sourceLeadsWithOrigami(user, campaign, body = {}) {
+  if (!origamiConfigured()) return { started: false, reason: "ORIGAMI_API_KEY no configurada.", saved: 0 };
+  const targetCount = clampNumber(body.origami_source_count || body.count, 1, 200, 50);
+  const query = String(body.origami_source_query || body.query || "").trim();
+  const leadSearch = await insertRow("lead_searches", {
+    name: `Origami Warehouse ${campaign.name}`.slice(0, 120),
+    lead_type: campaign.campaign_type,
+    target_region: campaign.target_region || (campaign.campaign_type === "investor" ? "usa" : "latam"),
+    search_template: "origami_sourcing",
+    filters: {
+      query,
+      target_count: targetCount,
+      campaign_id: campaign.id,
+      campaign_name: campaign.name,
+      segment_key: campaign.segment_key,
+    },
+    status: "running",
+    pages_requested: 1,
+    results_saved: 0,
+    created_by: user.db_user_id || null,
+  });
+  const result = await createAgentRun({
+    name: `Tecnotitan lead sourcing - ${campaign.name}`.slice(0, 90),
+    prompt: origamiSourcePrompt({ campaign, targetCount, query }),
+  });
+  const agent = result.agent || result.data?.agent || {};
+  const run = result.run || result.data?.run || result;
+  const filters = {
+    ...(leadSearch.filters || {}),
+    origami_source: {
+      agent_id: agent.id || run.agentId || run.agent_id || null,
+      run_id: run.id || null,
+      campaign: {
+        id: campaign.id,
+        name: campaign.name,
+        campaign_type: campaign.campaign_type,
+        target_region: campaign.target_region,
+        segment_key: campaign.segment_key,
+      },
+      started_at: new Date().toISOString(),
+    },
+  };
+  const rows = await updateRows(
+    "lead_searches",
+    {
+      status: origamiRunStatus(run?.status),
+      filters,
+      updated_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(leadSearch.id)}`
+  );
+  const savedSearch = rows[0] || { ...leadSearch, filters };
+  const completion = await completeOrigamiSourceSearch(user, savedSearch).catch(() => ({ saved: 0, status: savedSearch.status }));
+  return {
+    started: true,
+    lead_search_id: leadSearch.id,
+    status: completion.status || savedSearch.status,
+    requested: targetCount,
+    saved: completion.saved || 0,
+  };
+}
+
 async function prepareCampaignWarehouse(user, body = {}) {
   requireCampaignAdmin(user);
   const campaignId = String(body.campaign_id || "").trim();
@@ -2056,6 +2509,9 @@ async function prepareCampaignWarehouse(user, body = {}) {
   const searchBatches = clampNumber(body.search_batches, 0, 10, 2);
   const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
   const analyzeLimit = clampNumber(body.analyze_limit, 0, 25, 10);
+  const useOrigamiSourcing = body.origami_sourcing !== false;
+  const origamiSourceCount = clampNumber(body.origami_source_count, 0, 200, 50);
+  const refreshedOrigami = await refreshOrigamiSourceSearches(user, 5).catch(() => []);
   const campaignFilters = [
     "select=*",
     campaignId ? `id=eq.${encodeURIComponent(campaignId)}` : "status=eq.active",
@@ -2073,7 +2529,16 @@ async function prepareCampaignWarehouse(user, body = {}) {
     let revealed = 0;
     let analyzed = 0;
     let queued = 0;
+    let origamiSourced = 0;
     const templateKeys = campaignTemplateKeys(campaign.campaign_type, campaign.target_region, campaign.segment_key, campaign.search_templates);
+
+    if (useOrigamiSourcing && origamiSourceCount > 0 && missing > 0) {
+      const sourceResult = await sourceLeadsWithOrigami(user, campaign, {
+        count: origamiSourceCount,
+        query: body.origami_source_query,
+      }).catch(() => null);
+      origamiSourced = Number(sourceResult?.saved || 0);
+    }
 
     for (let index = 0; index < searchBatches && missing > 0; index += 1) {
       const templateKey = templateKeys[index % templateKeys.length] || "investor:usa:vcs";
@@ -2110,6 +2575,8 @@ async function prepareCampaignWarehouse(user, body = {}) {
       name: campaign.name,
       target_queue: targetQueue,
       searches,
+      origami_sourced: origamiSourced,
+      origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
       revealed,
       analyzed,
       queued_added: queued,
