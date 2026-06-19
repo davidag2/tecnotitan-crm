@@ -377,7 +377,7 @@ module.exports = async function handler(req, res) {
     const assignmentFilter =
       user.role === "admin" ? "" : `&owner_user_id=eq.${encodeURIComponent(user.db_user_id || user.email || "")}`;
     const query = [
-      "select=id,lead_type,target_region,pipeline_status,score,score_label,created_at,owner_user_id,next_follow_up_at,next_follow_up_type,origami_status,origami_profile,contacts(id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,apollo_enrichment_status,apollo_raw_payload,contact_tags(tags(id,name,color))),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
+      "select=id,lead_type,target_region,pipeline_status,score,score_label,created_at,owner_user_id,next_follow_up_at,next_follow_up_type,origami_status,origami_profile,origami_email_draft,contacts(id,full_name,title,email,email_status,phone,mobile_phone,linkedin_url,country,city,apollo_enrichment_status,apollo_raw_payload,contact_tags(tags(id,name,color))),companies(id,name,domain,website_url,linkedin_url,industry,country,city,state,employee_count)",
       "deleted_at=is.null",
       assignmentFilter.replace(/^&/, ""),
       leadType ? `lead_type=eq.${encodeURIComponent(leadType)}` : "",

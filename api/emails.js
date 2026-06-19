@@ -959,6 +959,17 @@ function localizedCampaignTemplate(campaign, data, field) {
   return campaign[field];
 }
 
+function personalizedCampaignTemplate(campaign, data, field) {
+  const draft = data.opportunity?.origami_email_draft || {};
+  if (field === "subject_template") {
+    return String(draft.recommended_subject || "").trim() || localizedCampaignTemplate(campaign, data, field);
+  }
+  if (field === "body_template") {
+    return String(draft.email_body || draft.opening_line || "").trim() || localizedCampaignTemplate(campaign, data, field);
+  }
+  return localizedCampaignTemplate(campaign, data, field);
+}
+
 function requireCampaignAdmin(user) {
   if (user.role !== "admin") throw new Error("Solo el usuario maestro puede gestionar campanas automaticas.");
 }
@@ -987,7 +998,7 @@ function systemCampaignUser() {
 async function loadOpportunity(id, user) {
   if (!id) return null;
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_email_draft,contacts(id,full_name,email,title,country,city),companies(id,name,country,city,industry)",
     `id=eq.${encodeURIComponent(id)}`,
     "deleted_at=is.null",
     "limit=1",
@@ -1695,7 +1706,7 @@ function regionFilter(regions) {
 async function campaignLeadPool(campaignType, targetRegion) {
   const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,origami_email_draft,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     regionFilter(regions),
     "deleted_at=is.null",
@@ -1724,7 +1735,7 @@ function hasContactTag(contact, name) {
 async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, limit = 100) {
   const regions = campaignLeadRegions(campaignType, targetRegion);
   const filters = [
-    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
+    "select=id,contact_id,company_id,lead_type,target_region,owner_user_id,origami_status,origami_profile,origami_email_draft,contacts(id,apollo_person_id,first_name,last_name,full_name,email,email_status,title,country,city,linkedin_url,apollo_raw_payload,apollo_enrichment_status,contact_tags(tags(name))),companies(id,name,domain,country,city,industry)",
     `lead_type=eq.${encodeURIComponent(campaignType)}`,
     regionFilter(regions),
     "deleted_at=is.null",
@@ -2081,7 +2092,7 @@ async function processCampaign(user, body) {
   );
   const existingFingerprints = new Set((campaignFingerprints || []).map((row) => row.message_fingerprint).filter(Boolean));
   const { payload: recipients } = await supabaseFetch(
-    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,origami_status,origami_profile,contacts(id,full_name,email,email_status,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
+    `/email_campaign_recipients?select=id,email,opportunity_id,status,opportunities(id,lead_type,target_region,origami_status,origami_profile,origami_email_draft,contacts(id,full_name,email,email_status,title,country,city),companies(id,name,country,city,industry))&campaign_id=eq.${encodeURIComponent(campaign.id)}&status=eq.queued&scheduled_at=lte.${encodeURIComponent(now)}&order=scheduled_at.asc&limit=${sendLimit}`
   );
 
   let sent = 0;
@@ -2106,8 +2117,8 @@ async function processCampaign(user, body) {
       continue;
     }
     const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies };
-    const subject = renderTemplate(localizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
-    const text = renderTemplate(localizedCampaignTemplate(campaign, templateData, "body_template"), templateData);
+    const subject = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
+    const text = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "body_template"), templateData);
     const qualityIssues = await emailQualityIssues(recipient.email, opportunity.contacts);
     if (qualityIssues.length) {
       await markDoubtfulEmail(opportunity.contacts?.id, qualityIssues);

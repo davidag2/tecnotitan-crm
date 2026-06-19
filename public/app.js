@@ -1547,17 +1547,35 @@ function selectedEmailLead() {
   return (state.leadRows || []).find((lead) => lead.id === id) || null;
 }
 
+function origamiDraftSubject(lead) {
+  return String(lead?.origami_email_draft?.recommended_subject || "").trim();
+}
+
+function origamiDraftBody(lead) {
+  const draft = lead?.origami_email_draft || {};
+  const body = String(draft.email_body || "").trim();
+  const opening = String(draft.opening_line || "").trim();
+  return body || opening;
+}
+
 function fillEmailFromLead() {
   const lead = selectedEmailLead();
   if (!lead) return;
   const contact = lead.contacts || {};
   const company = lead.companies || {};
+  const draftSubject = origamiDraftSubject(lead);
+  const draftBody = origamiDraftBody(lead);
   elements.emailTo.value = contact.email || "";
   elements.emailSender.value = lead.lead_type === "investor" ? "investors" : "consulting";
   if (elements.emailAttachDeck) elements.emailAttachDeck.checked = lead.lead_type === "investor";
   if (!elements.emailSubject.value.trim()) {
     elements.emailSubject.value =
-      lead.lead_type === "investor" ? `Tecnotitan - ${company.name || "oportunidad"}` : `Idea rapida para ${company.name || "tu equipo"}`;
+      draftSubject ||
+      (lead.lead_type === "investor" ? `Tecnotitan - ${company.name || "oportunidad"}` : `Idea rapida para ${company.name || "tu equipo"}`);
+  }
+  if (!elements.emailBody.value.trim() && draftBody) {
+    elements.emailBody.value = draftBody;
+    setStatus("Borrador personalizado de Origami cargado para esta lead.", "ok");
   }
 }
 
