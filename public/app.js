@@ -9,6 +9,7 @@ const state = {
   emailCampaigns: [],
   emailExclusions: [],
   emailWarmups: [],
+  statistics: null,
   leadInventory: null,
   emailStatus: null,
   origamiConfigured: false,
@@ -53,6 +54,7 @@ const elements = {
   executiveWeekly: document.querySelector("#executive-weekly"),
   apolloPerformance: document.querySelector("#apollo-performance"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
+  statistics: document.querySelector("#statistics"),
   origamiConfigStatus: document.querySelector("#origami-config-status"),
   origamiPerformance: document.querySelector("#origami-performance"),
   origamiPersonName: document.querySelector("#origami-person-name"),
@@ -776,6 +778,132 @@ function renderOrigamiPerformance(data = state.origamiPerformance) {
       ${performanceTable("Por pais", data.by_country, "Pais")}
       ${performanceTable("Por segmento", data.by_segment, "Segmento")}
       ${performanceTable("Por plantilla", data.by_template, "Plantilla")}
+    </div>
+  `;
+}
+
+const STAT_COLORS = ["#16856e", "#1f5eff", "#f59e0b", "#7c3aed", "#dc2626", "#0f766e", "#64748b", "#0891b2"];
+
+function statisticsMax(rows, field) {
+  return Math.max(1, ...(rows || []).map((row) => Number(row[field] || 0)));
+}
+
+function statisticsBarChart(rows = [], field, label) {
+  const max = statisticsMax(rows, field);
+  return `
+    <div class="stats-bar-chart">
+      ${(rows || [])
+        .map((row) => {
+          const value = Number(row[field] || 0);
+          const height = Math.max(4, Math.round((value / max) * 100));
+          const weekLabel = new Date(`${row.week}T00:00:00Z`).toLocaleDateString("es-CO", { month: "short", day: "numeric" });
+          return `
+            <div class="stats-bar-item" title="${escapeHtml(`${label}: ${value}`)}">
+              <span>${formatMetricNumber(value)}</span>
+              <i style="height: ${height}%"></i>
+              <small>${escapeHtml(weekLabel)}</small>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function pieGradient(rows = []) {
+  const total = rows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+  if (!total) return "#eef2f7 0deg 360deg";
+  let current = 0;
+  return rows
+    .map((row, index) => {
+      const degrees = (Number(row.value || 0) / total) * 360;
+      const start = current;
+      current += degrees;
+      return `${STAT_COLORS[index % STAT_COLORS.length]} ${start}deg ${current}deg`;
+    })
+    .join(", ");
+}
+
+function statisticsPie(title, rows = []) {
+  const visibleRows = rows.slice(0, 8);
+  return `
+    <article class="stats-pie-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="stats-pie-wrap">
+        <div class="stats-pie" style="background: conic-gradient(${pieGradient(visibleRows)})"></div>
+        <div class="stats-legend">
+          ${
+            visibleRows.length
+              ? visibleRows
+                  .map(
+                    (row, index) => `
+                      <span>
+                        <i style="background:${STAT_COLORS[index % STAT_COLORS.length]}"></i>
+                        ${escapeHtml(row.label)} <b>${formatMetricNumber(row.value)}</b> <small>${formatMetricNumber(row.share, "%")}</small>
+                      </span>
+                    `
+                  )
+                  .join("")
+              : `<p class="empty">Sin datos.</p>`
+          }
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderStatistics(data = state.statistics) {
+  if (!elements.statistics) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.statistics.innerHTML = "";
+    return;
+  }
+  if (!data) {
+    elements.statistics.innerHTML = `<p class="empty">No hay estadisticas disponibles todavia.</p>`;
+    return;
+  }
+
+  const totals = data.totals || {};
+  const trends = data.trends || {};
+  elements.statistics.innerHTML = `
+    <div class="executive-summary stats-kpis">
+      <article><span>Leads</span><strong>${formatMetricNumber(totals.leads)}</strong></article>
+      <article><span>Clientes</span><strong>${formatMetricNumber(totals.clients)}</strong></article>
+      <article><span>Correos enviados</span><strong>${formatMetricNumber(totals.emails_sent)}</strong></article>
+      <article><span>Respuestas</span><strong>${formatMetricNumber(totals.reply_rate, "%")}</strong></article>
+      <article><span>Rebote</span><strong>${formatMetricNumber(totals.bounce_rate, "%")}</strong></article>
+      <article><span>Creditos Apollo</span><strong>${formatMetricNumber(totals.apollo_credits)}</strong></article>
+      <article><span>Pendiente leads</span><strong>${formatMetricNumber(trends.leads_slope)}/sem</strong></article>
+      <article><span>Promedio movil</span><strong>${formatMetricNumber(trends.leads_moving_avg)}</strong></article>
+    </div>
+    <div class="stats-insights">
+      ${(data.insights || []).map((insight) => `<article>${escapeHtml(insight)}</article>`).join("")}
+    </div>
+    <div class="stats-chart-grid">
+      <article class="stats-chart-card">
+        <h3>Leads por semana</h3>
+        ${statisticsBarChart(data.weekly || [], "leads", "Leads")}
+      </article>
+      <article class="stats-chart-card">
+        <h3>Correos enviados por semana</h3>
+        ${statisticsBarChart(data.weekly || [], "emails_sent", "Correos")}
+      </article>
+      <article class="stats-chart-card">
+        <h3>Respuestas por semana</h3>
+        ${statisticsBarChart(data.weekly || [], "replies", "Respuestas")}
+      </article>
+      <article class="stats-chart-card">
+        <h3>Creditos Apollo por semana</h3>
+        ${statisticsBarChart(data.weekly || [], "apollo_credits", "Creditos")}
+      </article>
+    </div>
+    <div class="stats-pie-grid">
+      ${statisticsPie("Tipo de oportunidad", data.distributions?.lead_type || [])}
+      ${statisticsPie("Estado pipeline", data.distributions?.pipeline_status || [])}
+      ${statisticsPie("Region", data.distributions?.region || [])}
+      ${statisticsPie("Score", data.distributions?.score || [])}
+      ${statisticsPie("Paises", data.distributions?.country || [])}
+      ${statisticsPie("Campanas", data.distributions?.campaign || [])}
     </div>
   `;
 }
@@ -4307,7 +4435,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs, origamiPerformance] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs, origamiPerformance, statistics] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -4320,6 +4448,7 @@ async function loadPrivateData() {
       api("/api/origami-search").catch(() => ({ searches: [] })),
       api("/api/origami-jobs").catch(() => ({ searches: [] })),
       api("/api/origami-performance").catch(() => null),
+      api("/api/statistics").catch(() => null),
     ]);
     state.currentUser = dashboard.user;
     state.users = users.users || [];
@@ -4333,6 +4462,7 @@ async function loadPrivateData() {
     state.origamiPeopleSearches = origamiSearches.searches || [];
     state.origamiJobSearches = origamiJobs.searches || [];
     state.origamiPerformance = origamiPerformance;
+    state.statistics = statistics;
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
     renderMetrics({
@@ -4350,6 +4480,7 @@ async function loadPrivateData() {
     renderLeadInventory(state.leadInventory);
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
+    renderStatistics(state.statistics);
     renderOrigamiPerformance(state.origamiPerformance);
     renderOrigamiPeopleSearches();
     renderOrigamiJobSearches();

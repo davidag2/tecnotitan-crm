@@ -42,6 +42,7 @@
         </div>
         <nav id="main-tabs">
           <a class="active" href="#dashboard" data-tab="dashboard">Dashboard</a>
+          <a class="admin-only role-hidden" href="#estadisticas" data-tab="estadisticas">Estadisticas</a>
           <a href="#leads" data-tab="leads">Leads</a>
           <a href="#clientes" data-tab="clientes">Clientes</a>
           <a href="#revision" data-tab="revision">Revision manual</a>
@@ -95,6 +96,14 @@
             <p>Distribucion de leads, clientes y seguimientos pendientes por persona.</p>
           </div>
           <div class="workload-grid" id="assignment-workload"></div>
+        </section>
+
+        <section class="panel admin-only role-hidden tab-panel" id="statistics-panel" data-tab-panel="estadisticas">
+          <div class="panel-title">
+            <h2>Estadisticas</h2>
+            <p>Motor matematico para analizar tendencias, cifras y distribuciones del CRM.</p>
+          </div>
+          <div id="statistics"></div>
         </section>
 
         <section class="panel tab-panel" id="seguimientos" data-tab-panel="seguimientos">
