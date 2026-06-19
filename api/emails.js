@@ -183,6 +183,9 @@ function expectedSenderDomain(senderKey) {
 
 const WARMUP_LIMITS = [20, 40, 60, 100];
 const WARMUP_STAGE_DAYS = 7;
+const BOUNCE_CONTROL_MIN_SENT = 20;
+const BOUNCE_THROTTLE_RATE = 0.03;
+const BOUNCE_PAUSE_RATE = 0.05;
 
 function hasClearSignature(text) {
   const normalized = String(text || "").toLowerCase();
@@ -995,6 +998,70 @@ async function campaignCounts(campaignId) {
   return counts;
 }
 
+function campaignBounceRate(counts = {}) {
+  const sent = Number(counts.sent || 0);
+  if (!sent) return 0;
+  return Number(counts.bounced || 0) / sent;
+}
+
+async function enforceBounceControl(campaign, counts = {}) {
+  const sent = Number(counts.sent || 0);
+  const bounced = Number(counts.bounced || 0);
+  const bounceRate = campaignBounceRate(counts);
+  if (sent < BOUNCE_CONTROL_MIN_SENT || bounced <= 0) return null;
+
+  const percent = Math.round(bounceRate * 1000) / 10;
+  if (bounceRate >= BOUNCE_PAUSE_RATE) {
+    await updateRows(
+      "email_campaigns",
+      {
+        status: "paused",
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(campaign.id)}`
+    );
+    return {
+      action: "paused",
+      reason: `Rebote alto: ${percent}% (${bounced}/${sent}). Campana pausada para proteger el dominio.`,
+      bounce_rate: bounceRate,
+    };
+  }
+
+  if (bounceRate >= BOUNCE_THROTTLE_RATE) {
+    const nextDailyLimit = Math.max(5, Math.floor(Number(campaign.daily_limit || 100) / 2));
+    const nextMinDelay = Math.max(12, Number(campaign.min_delay_minutes || 6));
+    const nextMaxDelay = Math.max(18, Number(campaign.max_delay_minutes || 12), nextMinDelay + 3);
+    const alreadyThrottled =
+      Number(campaign.daily_limit || 100) <= nextDailyLimit &&
+      Number(campaign.batch_size || 1) <= 1 &&
+      Number(campaign.min_delay_minutes || 0) >= nextMinDelay;
+
+    if (!alreadyThrottled) {
+      await updateRows(
+        "email_campaigns",
+        {
+          daily_limit: nextDailyLimit,
+          batch_size: 1,
+          min_delay_minutes: nextMinDelay,
+          max_delay_minutes: nextMaxDelay,
+          updated_at: new Date().toISOString(),
+        },
+        `id=eq.${encodeURIComponent(campaign.id)}`
+      );
+    }
+
+    return {
+      action: alreadyThrottled ? "throttled_active" : "throttled",
+      reason: `Rebote en observacion: ${percent}% (${bounced}/${sent}). Ritmo diario reducido para proteger el dominio.`,
+      bounce_rate: bounceRate,
+      daily_limit: nextDailyLimit,
+      batch_size: 1,
+    };
+  }
+
+  return null;
+}
+
 async function listCampaigns(user) {
   requireCampaignAdmin(user);
   const { payload } = await supabaseFetch(
@@ -1513,6 +1580,13 @@ async function processCampaign(user, body) {
   if (campaign.max_recipients && counts.sent >= campaign.max_recipients) {
     await updateRows("email_campaigns", { status: "completed", updated_at: nowDate.toISOString() }, `id=eq.${encodeURIComponent(campaign.id)}`);
     return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, completed: true, reason: "max_recipients_reached" };
+  }
+  const bounceControl = await enforceBounceControl(campaign, counts);
+  if (bounceControl?.action === "paused") {
+    return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, bounce_control: bounceControl };
+  }
+  if (bounceControl?.action === "throttled") {
+    return { sent: 0, failed: 0, skipped: 0, followups_sent: 0, bounce_control: bounceControl };
   }
   const queuedAndSent = (counts.queued || 0) + (counts.sent || 0);
   const remainingToQueue = campaign.max_recipients ? Math.max(0, campaign.max_recipients - queuedAndSent) : 0;
