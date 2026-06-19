@@ -33,6 +33,7 @@ const state = {
   clientTagFilter: "all",
   clientColdEmailFilter: "all",
   clientPage: 1,
+  manualReviewPage: 1,
   kanbanSearch: "",
   kanbanPage: 1,
   messageTemplateFilter: "all",
@@ -131,6 +132,7 @@ const elements = {
   clientColdEmailFilter: document.querySelector("#client-cold-email-filter"),
   clientFilterSummary: document.querySelector("#client-filter-summary"),
   archive: document.querySelector("#archive"),
+  manualReview: document.querySelector("#manual-review"),
   userList: document.querySelector("#user-list"),
   leadSearch: document.querySelector("#lead-search"),
   leadCountry: document.querySelector("#lead-country"),
@@ -213,6 +215,7 @@ const PIPELINE_STATUSES = [
 const ARCHIVE_STATUS = "archivado";
 const LEADS_PER_PAGE = 25;
 const CLIENTS_PER_PAGE = 25;
+const MANUAL_REVIEW_PER_PAGE = 25;
 const KANBAN_CLIENTS_PER_PAGE = 10;
 const EMAILS_PER_PAGE = 25;
 const ORIGAMI_POLL_INTERVAL_MS = 8000;
@@ -2352,6 +2355,34 @@ function coldEmailFitLabel(value) {
   return labels[value] || labels.unknown;
 }
 
+function manualReviewReasons(lead) {
+  const profile = lead?.origami_profile || {};
+  const status = normalizeFilterValue(lead?.origami_status);
+  const fit = coldEmailFit(lead);
+  const pitchPolicy = normalizeFilterValue(profile.pitch_policy);
+  const recommendedChannel = normalizeFilterValue(profile.recommended_channel);
+  const signals = Array.isArray(profile.signals) ? profile.signals : [];
+  const reasons = [];
+
+  if (status === "failed") reasons.push("Origami con error");
+  if (status === "needs_input") reasons.push("Origami requiere revision");
+  if (fit === "low") reasons.push("Cold email fit low");
+  if (fit === "unknown" && status === "completed") reasons.push("Cold email fit unknown");
+  if (pitchPolicy === "form_required") reasons.push("Formulario obligatorio");
+  if (pitchPolicy === "no_unsolicited") reasons.push("No unsolicited");
+  if (recommendedChannel === "manual_review") reasons.push("Canal requiere revision");
+  if (status === "completed" && signals.length < 2) reasons.push("Senales debiles");
+
+  return reasons;
+}
+
+function manualReviewLeads(leads) {
+  return (leads || [])
+    .filter((lead) => lead.pipeline_status !== ARCHIVE_STATUS)
+    .map((lead) => ({ lead, reasons: manualReviewReasons(lead) }))
+    .filter((item) => item.reasons.length);
+}
+
 function filterClientsByCountry(clients) {
   const filter = normalizeFilterValue(state.clientCountryFilter);
   if (!filter || filter === "all") return clients;
@@ -2512,6 +2543,7 @@ function renderLeadCollections(leads) {
   const collections = splitLeadCollections(leads);
   renderLeads(collections.airportLeads);
   renderClients(collections.clients);
+  renderManualReview(manualReviewLeads(leads));
   renderKanban(collections.clients);
   renderArchive(collections.archived);
 }
@@ -2749,6 +2781,76 @@ function renderClients(clients) {
     button.addEventListener("click", () => {
       state.clientPage = Number(button.dataset.clientPage || 1);
       renderClients(clients);
+    });
+  });
+}
+
+function renderManualReview(items) {
+  if (!elements.manualReview) return;
+  if (!items.length) {
+    elements.manualReview.innerHTML = `<p class="empty">No hay leads pendientes de revision manual.</p>`;
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(items.length / MANUAL_REVIEW_PER_PAGE));
+  if (state.manualReviewPage > totalPages) state.manualReviewPage = totalPages;
+  if (state.manualReviewPage < 1) state.manualReviewPage = 1;
+  const pageStart = (state.manualReviewPage - 1) * MANUAL_REVIEW_PER_PAGE;
+  const pageItems = items.slice(pageStart, pageStart + MANUAL_REVIEW_PER_PAGE);
+
+  elements.manualReview.innerHTML = `
+    <div class="manual-review-summary">
+      <strong>${items.length}</strong>
+      <span>leads requieren decision humana antes de campana</span>
+    </div>
+    ${pageItems
+      .map(({ lead, reasons }) => {
+        const contact = lead.contacts || {};
+        const company = lead.companies || {};
+        const profile = lead.origami_profile || {};
+        const emailFit = coldEmailFit(lead);
+        return `
+          <article class="manual-review-row">
+            <div>
+              <strong>${contact.full_name || "Contacto sin nombre"}</strong>
+              <span>${contact.title || "Cargo no disponible"}</span>
+              <small>${company.name || "Empresa no disponible"} | ${lead.lead_type === "investor" ? "Inversionista" : "Consultoria"} | Score ${lead.score}</small>
+              <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
+            </div>
+            <div class="manual-review-reasons">
+              ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
+            </div>
+            <div>
+              <small>Canal: ${escapeHtml(profile.recommended_channel || "manual_review")}</small>
+              <small>Politica: ${escapeHtml(profile.pitch_policy || "unknown")}</small>
+              <small>Senales: ${Array.isArray(profile.signals) ? profile.signals.length : 0}</small>
+            </div>
+            <div class="crm-client-actions">
+              <button class="secondary" type="button" data-open-detail="${lead.id}">Detalle</button>
+              <button class="secondary" type="button" data-open-company="${company.id || ""}" ${company.id ? "" : "disabled"}>Empresa</button>
+              <button type="button" data-send-kanban="${lead.id}">Enviar a Kanban</button>
+              <button class="danger" type="button" data-archive-lead="${lead.id}">Archivar lead</button>
+            </div>
+          </article>
+        `;
+      })
+      .join("")}
+    <div class="client-pagination">
+      <span>Mostrando ${pageStart + 1}-${Math.min(pageStart + MANUAL_REVIEW_PER_PAGE, items.length)} de ${items.length}</span>
+      <div>
+        ${Array.from({ length: totalPages }, (_, index) => {
+          const page = index + 1;
+          return `<button class="${page === state.manualReviewPage ? "" : "secondary"}" type="button" data-manual-review-page="${page}">Pagina ${page}</button>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+
+  attachClientActions(elements.manualReview);
+  elements.manualReview.querySelectorAll("[data-manual-review-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.manualReviewPage = Number(button.dataset.manualReviewPage || 1);
+      renderManualReview(items);
     });
   });
 }
@@ -4264,10 +4366,12 @@ function logout() {
   state.clientTagFilter = "all";
   state.clientColdEmailFilter = "all";
   state.clientPage = 1;
+  state.manualReviewPage = 1;
   state.kanbanPage = 1;
   sessionStorage.removeItem("tecnotitan_crm_session");
   elements.leads.innerHTML = `<p class="empty">Inicia sesion para cargar leads.</p>`;
   elements.clients.innerHTML = `<p class="empty">Aun no hay clientes procesados.</p>`;
+  if (elements.manualReview) elements.manualReview.innerHTML = `<p class="empty">No hay leads pendientes de revision manual.</p>`;
   elements.kanban.innerHTML = `<p class="empty">Aun no hay clientes en el tablero.</p>`;
   elements.archive.innerHTML = `<p class="empty">No hay clientes archivados.</p>`;
   elements.metrics.innerHTML = "";
