@@ -862,6 +862,10 @@ button.danger {
   gap: 10px;
 }
 
+.email-pagination {
+  margin: 0;
+}
+
 .email-row {
   display: grid;
   gap: 8px;
@@ -886,6 +890,22 @@ button.danger {
 .email-row span,
 .email-row small {
   display: block;
+}
+
+.email-row-number {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 24px;
+  margin: 0 8px 0 0 !important;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: #315f99 !important;
+  font-size: 12px !important;
+  font-weight: 900;
+  vertical-align: middle;
 }
 
 .email-row span {

@@ -13,6 +13,7 @@ const state = {
   emailMailbox: "compose",
   emailSearch: "",
   selectedEmailId: "",
+  emailPage: 1,
   leadPage: 1,
   assignmentWorkload: null,
   currentUser: null,
@@ -173,6 +174,7 @@ const ARCHIVE_STATUS = "archivado";
 const LEADS_PER_PAGE = 25;
 const CLIENTS_PER_PAGE = 25;
 const KANBAN_CLIENTS_PER_PAGE = 10;
+const EMAILS_PER_PAGE = 25;
 
 const MESSAGE_TEMPLATES = [
   {
@@ -1051,16 +1053,34 @@ function renderEmails(messages = state.emailMessages) {
     elements.emailList.innerHTML = `<p class="empty">No hay correos para esta bandeja.</p>`;
     return;
   }
-  elements.emailList.innerHTML = visible
-    .map((message) => {
+  const totalPages = Math.max(1, Math.ceil(visible.length / EMAILS_PER_PAGE));
+  if (state.emailPage > totalPages) state.emailPage = totalPages;
+  if (state.emailPage < 1) state.emailPage = 1;
+  const pageStart = (state.emailPage - 1) * EMAILS_PER_PAGE;
+  const pageMessages = visible.slice(pageStart, pageStart + EMAILS_PER_PAGE);
+  elements.emailList.innerHTML = `
+    <div class="client-pagination email-pagination">
+      <span>Mostrando ${pageStart + 1}-${Math.min(pageStart + EMAILS_PER_PAGE, visible.length)} de ${visible.length}</span>
+      <div>
+        ${Array.from({ length: totalPages })
+          .map((_, index) => {
+            const page = index + 1;
+            return `<button class="${page === state.emailPage ? "" : "secondary"}" type="button" data-email-page="${page}">Pagina ${page}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+    ${pageMessages
+    .map((message, index) => {
       const contact = message.contact || {};
       const company = message.company || {};
       const date = new Date(message.sent_at || message.received_at || message.created_at).toLocaleString("es-CO");
       const eventLabel = emailEventLabel(message.last_event_type || message.status);
+      const rowNumber = pageStart + index + 1;
       return `
         <button class="email-row" type="button" data-open-email="${attr(message.id)}">
           <div>
-            <strong>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${attr(message.subject || "(sin asunto)")}</strong>
+            <strong><span class="email-row-number">#${rowNumber}</span>${message.direction === "inbound" ? "Recibido" : "Enviado"} | ${attr(message.subject || "(sin asunto)")}</strong>
             <span>${attr(message.direction === "inbound" ? message.from_email : (message.to_emails || []).join(", "))}</span>
             <small>${attr(contact.full_name || "Contacto no vinculado")} | ${attr(company.name || "Empresa no vinculada")} | ${date} | ${eventLabel}</small>
           </div>
@@ -1068,7 +1088,26 @@ function renderEmails(messages = state.emailMessages) {
         </button>
       `;
     })
-    .join("");
+    .join("")}
+    <div class="client-pagination email-pagination">
+      <span>Pagina ${state.emailPage} de ${totalPages}</span>
+      <div>
+        ${Array.from({ length: totalPages })
+          .map((_, index) => {
+            const page = index + 1;
+            return `<button class="${page === state.emailPage ? "" : "secondary"}" type="button" data-email-page="${page}">Pagina ${page}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+  elements.emailList.querySelectorAll("[data-email-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.emailPage = Number(button.dataset.emailPage || 1);
+      state.selectedEmailId = "";
+      renderEmails(state.emailMessages);
+    });
+  });
   elements.emailList.querySelectorAll("[data-open-email]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedEmailId = button.dataset.openEmail;
@@ -2915,6 +2954,7 @@ function logout() {
   state.emailMailbox = "compose";
   state.emailSearch = "";
   state.selectedEmailId = "";
+  state.emailPage = 1;
   state.leadRows = [];
   state.leadPage = 1;
   state.assignmentWorkload = null;
@@ -2973,12 +3013,14 @@ elements.emailMailboxButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.emailMailbox = button.dataset.emailMailbox || "all";
     state.selectedEmailId = "";
+    state.emailPage = 1;
     renderEmails(state.emailMessages);
   });
 });
 elements.emailSearch.addEventListener("input", () => {
   state.emailSearch = elements.emailSearch.value;
   state.selectedEmailId = "";
+  state.emailPage = 1;
   renderEmails(state.emailMessages);
 });
 elements.emailOpportunity.addEventListener("change", fillEmailFromLead);
