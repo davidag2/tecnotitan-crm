@@ -148,6 +148,10 @@ function leadPrompt(opportunity) {
     '    "low_fit": "yes|no|unknown",',
     '    "reason": "short reason explaining the contact risk"',
     '  },',
+    '  "next_best_action": {',
+    '    "action": "send_email|use_official_pitch_email|review_linkedin|seek_intro|send_deck|do_not_contact",',
+    '    "reason": "short reason for the recommended next action"',
+    '  },',
     '  "opening_line": "one highly personalized opening line",',
     '  "recommended_subject": "natural subject line",',
     '  "email_body": "short professional outreach email with unsubscribe sentence if cold email",',
@@ -263,6 +267,16 @@ function normalizeContactRisk(risk) {
   };
 }
 
+function normalizeNextBestAction(action) {
+  const source = action && typeof action === "object" ? action : {};
+  const value = normalize(source.action);
+  const allowed = ["send_email", "use_official_pitch_email", "review_linkedin", "seek_intro", "send_deck", "do_not_contact"];
+  return {
+    action: allowed.includes(value) ? value : "",
+    reason: String(source.reason || "").trim(),
+  };
+}
+
 async function ensureContactTag(contactId, name, color = "#2563eb") {
   if (!contactId || !name) return null;
   const tag = await upsertRow("tags", { name, color }, ["name"]);
@@ -372,6 +386,7 @@ async function saveRunResult(opportunity, run) {
       investment_thesis_signals: normalizeInvestmentThesisSignals(intelligence.investment_thesis_signals),
       operational_pain_signals: normalizeOperationalPainSignals(intelligence.operational_pain_signals),
       contact_risk: normalizeContactRisk(intelligence.contact_risk),
+      next_best_action: normalizeNextBestAction(intelligence.next_best_action),
       signals: Array.isArray(intelligence.signals) ? intelligence.signals : [],
       risks: Array.isArray(intelligence.risks) ? intelligence.risks : [],
     };
@@ -424,6 +439,8 @@ async function addOrigamiNote(opportunity, profile, user) {
       profile.pitch_policy ? `Politica pitch: ${profile.pitch_policy}` : "",
       profile.official_pitch_url ? `Fuente pitch: ${profile.official_pitch_url}` : "",
       profile.pitch_detection_evidence ? `Evidencia pitch: ${profile.pitch_detection_evidence}` : "",
+      profile.next_best_action?.action ? `Siguiente accion: ${profile.next_best_action.action}` : "",
+      profile.next_best_action?.reason ? `Motivo siguiente accion: ${profile.next_best_action.reason}` : "",
     ]
       .filter(Boolean)
       .join("\n"),

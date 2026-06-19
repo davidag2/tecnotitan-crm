@@ -2995,6 +2995,71 @@ button.danger {
   padding-left: 18px;
 }
 
+.origami-next-action {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.origami-next-action strong {
+  color: var(--text);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.origami-next-action span {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1d4f91;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.origami-next-action p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.origami-next-action.use_official_pitch_email,
+.origami-next-action.send_deck {
+  border-color: #9fe2cf;
+  background: #e8f8f3;
+}
+
+.origami-next-action.use_official_pitch_email span,
+.origami-next-action.send_deck span {
+  color: #0f7a62;
+}
+
+.origami-next-action.seek_intro,
+.origami-next-action.review_linkedin {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.origami-next-action.seek_intro span,
+.origami-next-action.review_linkedin span {
+  color: #9a6300;
+}
+
+.origami-next-action.do_not_contact {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.origami-next-action.do_not_contact span {
+  color: #a33030;
+}
+
 .origami-risk-box {
   display: grid;
   gap: 8px;

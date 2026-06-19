@@ -2424,6 +2424,53 @@ function recommendedChannelLabel(value) {
   return labels[value] || labels.manual_review;
 }
 
+function nextBestAction(profile = {}, opportunity = {}) {
+  const stored = profile.next_best_action || {};
+  const allowed = ["send_email", "use_official_pitch_email", "review_linkedin", "seek_intro", "send_deck", "do_not_contact"];
+  const storedAction = normalizeFilterValue(stored.action);
+  if (allowed.includes(storedAction)) {
+    return { action: storedAction, reason: stored.reason || "" };
+  }
+
+  const contactRisk = profile.contact_risk || {};
+  const riskLevel = normalizeFilterValue(contactRisk.level);
+  const channel = recommendedChannel({ origami_profile: profile });
+  const fit = normalizeFilterValue(profile.cold_email_fit);
+  const contact = opportunity.contacts || {};
+
+  if (contactRisk.do_not_contact === true || riskLevel === "high" || normalizeFilterValue(contactRisk.no_pitches) === "yes") {
+    return { action: "do_not_contact", reason: contactRisk.reason || "Origami detecto alto riesgo de contacto." };
+  }
+  if (profile.official_pitch_email || channel === "official_pitch_email") {
+    return { action: "use_official_pitch_email", reason: "Existe un canal oficial de pitch o inbound." };
+  }
+  if (channel === "linkedin" || (!contact.email && contact.linkedin_url)) {
+    return { action: "review_linkedin", reason: "LinkedIn parece mejor punto de contexto o contacto." };
+  }
+  if (normalizeFilterValue(profile.pitch_policy) === "referral_only") {
+    return { action: "seek_intro", reason: "La politica o contexto sugiere buscar introduccion." };
+  }
+  if (opportunity.lead_type === "investor" && (fit === "high" || fit === "medium") && normalizeFilterValue(profile.accepts_inbound_deals) === "yes") {
+    return { action: "send_deck", reason: "La lead parece abierta a oportunidades de inversion." };
+  }
+  if (fit === "high" || fit === "medium") {
+    return { action: "send_email", reason: "Fit suficiente para enviar correo personalizado." };
+  }
+  return { action: "review_linkedin", reason: "Falta evidencia suficiente; conviene revisar manualmente." };
+}
+
+function nextBestActionLabel(value) {
+  const labels = {
+    send_email: "Enviar correo",
+    use_official_pitch_email: "Usar email oficial de pitch",
+    review_linkedin: "Revisar LinkedIn",
+    seek_intro: "Buscar intro",
+    send_deck: "Mandar deck",
+    do_not_contact: "No contactar",
+  };
+  return labels[value] || "Revisar LinkedIn";
+}
+
 function opennessLabel(value) {
   const normalized = normalizeFilterValue(value);
   if (normalized === "yes") return "Si";
@@ -3175,9 +3222,10 @@ function origamiStatusLabel(status) {
   return labels[status] || status || "No analizado";
 }
 
-function renderOrigamiSignals(profile) {
+function renderOrigamiSignals(profile, opportunity = {}) {
   const signals = Array.isArray(profile?.signals) ? profile.signals : [];
   const risks = Array.isArray(profile?.risks) ? profile.risks : [];
+  const action = nextBestAction(profile, opportunity);
   const contactRisk = profile?.contact_risk || {};
   const contactRiskLevel = normalizeFilterValue(contactRisk.level) || "unknown";
   const contactRiskFlags = [
@@ -3230,6 +3278,11 @@ function renderOrigamiSignals(profile) {
         <strong>Politica pitch</strong>
         <span>${escapeHtml(profile?.pitch_policy || "unknown")}</span>
       </article>
+    </div>
+    <div class="origami-next-action ${action.action}">
+      <strong>Siguiente accion sugerida</strong>
+      <span>${nextBestActionLabel(action.action)}</span>
+      <p>${escapeHtml(action.reason || "Recomendacion generada por Origami y las reglas del CRM.")}</p>
     </div>
     ${
       contactRiskLevel === "high" || contactRiskLevel === "medium" || contactRisk.do_not_contact === true
@@ -3385,7 +3438,7 @@ function renderOrigamiPanel(opportunity) {
       profile.summary || profile.personalization_angle
         ? `
           ${renderExecutiveLeadBrief(opportunity)}
-          ${renderOrigamiSignals(profile)}
+          ${renderOrigamiSignals(profile, opportunity)}
         `
         : `<p class="empty">Todavia no hay inteligencia Origami para esta lead.</p>`
     }
