@@ -330,6 +330,94 @@ small {
   text-transform: uppercase;
 }
 
+.apollo-performance {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.performance-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.performance-title h3,
+.performance-grid h4 {
+  margin: 0;
+}
+
+.performance-title p,
+.performance-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.performance-title > span {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.performance-kpis {
+  margin-bottom: 16px;
+}
+
+.performance-kpis strong {
+  font-size: 22px;
+}
+
+.performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.performance-grid article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.performance-table {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.performance-row {
+  min-width: 520px;
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(86px, 0.75fr));
+  gap: 8px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.performance-row.template-row {
+  grid-template-columns: minmax(190px, 1.5fr) repeat(2, minmax(92px, 0.75fr));
+}
+
+.performance-row span {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.performance-head {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
 .workload-card {
   display: grid;
   gap: 10px;
@@ -2292,7 +2380,8 @@ li {
   }
 
   .campaign-builder,
-  .campaign-stats {
+  .campaign-stats,
+  .performance-grid {
     grid-template-columns: 1fr;
   }
 }

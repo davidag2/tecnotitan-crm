@@ -40,6 +40,7 @@ const elements = {
   metrics: document.querySelector("#metrics"),
   executiveSummary: document.querySelector("#executive-summary"),
   executiveWeekly: document.querySelector("#executive-weekly"),
+  apolloPerformance: document.querySelector("#apollo-performance"),
   assignmentWorkload: document.querySelector("#assignment-workload"),
   messageTemplateFilter: document.querySelector("#message-template-filter"),
   messageTemplateCount: document.querySelector("#message-template-count"),
@@ -348,6 +349,15 @@ function roleLabel(role) {
   return "Usuario";
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function renderSessionUser() {
   const user = state.currentUser;
   if (!user) {
@@ -384,6 +394,7 @@ function renderMetrics(data) {
     )
     .join("");
   renderExecutiveDashboard(data.executiveWeekly || []);
+  renderApolloPerformance(data.apolloPerformance);
   renderAssignmentWorkload(data.assignmentWorkload);
 }
 
@@ -459,6 +470,120 @@ function renderExecutiveDashboard(rows) {
         `
       )
       .join("")}
+  `;
+}
+
+function formatMetricNumber(value, suffix = "") {
+  if (value === null || value === undefined || value === "") return "-";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return `${value}${suffix}`;
+  return `${number.toLocaleString("es-CO", { maximumFractionDigits: 2 })}${suffix}`;
+}
+
+function renderApolloPerformance(data) {
+  if (!elements.apolloPerformance) return;
+  if (state.currentUser?.role !== "admin") {
+    elements.apolloPerformance.innerHTML = "";
+    return;
+  }
+  if (!data) {
+    elements.apolloPerformance.innerHTML = `<p class="empty">No hay datos de performance Apollo disponibles.</p>`;
+    return;
+  }
+
+  const sinceLabel = data.since
+    ? new Date(data.since).toLocaleDateString("es-CO", { month: "short", day: "numeric" })
+    : "ultimos 30 dias";
+  const bestSegment = data.best_segment?.label || "Sin ganador aun";
+  const bestTemplate = data.best_template?.template || "Sin plantilla aun";
+  const segmentRows = data.segments?.length
+    ? data.segments
+        .map(
+          (row) => `
+            <div class="performance-row">
+              <span>${escapeHtml(row.label)}</span>
+              <span>${formatMetricNumber(row.sent)}</span>
+              <span>${formatMetricNumber(row.replies)} / ${formatMetricNumber(row.reply_rate, "%")}</span>
+              <span>${formatMetricNumber(row.bounced)} / ${formatMetricNumber(row.bounce_rate, "%")}</span>
+            </div>
+          `
+        )
+        .join("")
+    : `<p class="empty">Todavia no hay segmentos con envios.</p>`;
+  const templateRows = data.templates?.length
+    ? data.templates
+        .map(
+          (row) => `
+            <div class="performance-row template-row">
+              <span>${escapeHtml(row.template)}</span>
+              <span>${formatMetricNumber(row.searches)}</span>
+              <span>${formatMetricNumber(row.leads_saved)}</span>
+            </div>
+          `
+        )
+        .join("")
+    : `<p class="empty">Todavia no hay plantillas Apollo medidas.</p>`;
+
+  elements.apolloPerformance.innerHTML = `
+    <div class="performance-title">
+      <div>
+        <h3>Apollo credits + performance</h3>
+        <p>Lectura desde ${sinceLabel}: creditos consumidos, emails utiles y respuesta comercial.</p>
+      </div>
+      <span>30 dias</span>
+    </div>
+    <div class="executive-summary performance-kpis">
+      <article>
+        <span>Creditos Apollo usados</span>
+        <strong>${formatMetricNumber(data.credits_used)}</strong>
+      </article>
+      <article>
+        <span>Emails validos producidos</span>
+        <strong>${formatMetricNumber(data.valid_emails)}</strong>
+      </article>
+      <article>
+        <span>Creditos / lead usable</span>
+        <strong>${formatMetricNumber(data.credits_per_usable_lead)}</strong>
+      </article>
+      <article>
+        <span>Tasa de rebote</span>
+        <strong>${formatMetricNumber(data.bounce_rate, "%")}</strong>
+      </article>
+      <article>
+        <span>Tasa de respuesta</span>
+        <strong>${formatMetricNumber(data.reply_rate, "%")}</strong>
+      </article>
+      <article>
+        <span>Mejor segmento</span>
+        <strong>${escapeHtml(bestSegment)}</strong>
+      </article>
+    </div>
+    <div class="performance-grid">
+      <article>
+        <h4>Segmentos que mejor funcionan</h4>
+        <div class="performance-table">
+          <div class="performance-row performance-head">
+            <span>Segmento</span>
+            <span>Enviados</span>
+            <span>Respuestas</span>
+            <span>Rebotes</span>
+          </div>
+          ${segmentRows}
+        </div>
+      </article>
+      <article>
+        <h4>Plantillas Apollo por inventario</h4>
+        <div class="performance-table">
+          <div class="performance-row performance-head template-row">
+            <span>Plantilla</span>
+            <span>Busquedas</span>
+            <span>Leads guardadas</span>
+          </div>
+          ${templateRows}
+        </div>
+        <p class="performance-note">Mejor plantilla actual: ${escapeHtml(bestTemplate)}.</p>
+      </article>
+    </div>
   `;
 }
 
@@ -3162,6 +3287,7 @@ function logout() {
   elements.metrics.innerHTML = "";
   elements.executiveSummary.innerHTML = "";
   elements.executiveWeekly.innerHTML = "";
+  elements.apolloPerformance.innerHTML = "";
   elements.assignmentWorkload.innerHTML = "";
   elements.searchStatus.textContent = "";
   elements.userList.innerHTML = "";
