@@ -2,7 +2,7 @@ const { requireUser } = require("./_auth");
 const { createAgentRun, getRun, origamiConfigured } = require("./_origami");
 const { readJsonBody } = require("./_request");
 const { scoreWithOrigami } = require("./_scoring");
-const { insertRow, supabaseFetch, updateRows } = require("./_supabase");
+const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 
 function getOpportunityId(req) {
   const url = new URL(req.url, "https://tecnotitan.local");
@@ -31,6 +31,10 @@ function cleanText(value) {
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ""));
+}
+
+function normalize(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function leadPrompt(opportunity) {
@@ -259,6 +263,73 @@ function normalizeContactRisk(risk) {
   };
 }
 
+async function ensureContactTag(contactId, name, color = "#2563eb") {
+  if (!contactId || !name) return null;
+  const tag = await upsertRow("tags", { name, color }, ["name"]);
+  if (!tag?.id) return null;
+  return upsertRow("contact_tags", { contact_id: contactId, tag_id: tag.id }, ["contact_id", "tag_id"]);
+}
+
+function textBlob(opportunity, profile) {
+  const contact = opportunity.contacts || {};
+  const company = opportunity.companies || {};
+  return [
+    contact.full_name,
+    contact.title,
+    company.name,
+    company.industry,
+    company.domain,
+    profile.summary,
+    profile.personalization_angle,
+    profile.pitch_detection_evidence,
+    ...(Array.isArray(profile.signals) ? profile.signals : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function autoTagsForOrigami(opportunity, profile) {
+  const tags = [];
+  const blob = textBlob(opportunity, profile);
+  const thesis = profile.investment_thesis_signals || {};
+  const contactRisk = profile.contact_risk || {};
+  const isInvestor = opportunity.lead_type === "investor";
+
+  if (isInvestor && normalize(opportunity.target_region) === "usa" && /\b(vc|venture|capital|fund|partner|principal|investor)\b/i.test(blob)) {
+    tags.push({ name: "VC USA", color: "#2563eb" });
+  }
+  if (isInvestor && /\b(angel|operator investor|solo gp|syndicate)\b/i.test(blob)) {
+    tags.push({ name: "Angel", color: "#f59e0b" });
+  }
+  if (isInvestor && /\b(strategic|corporate venture|cvc|partnership|platform|ecosystem)\b/i.test(blob)) {
+    tags.push({ name: "Strategic investor", color: "#7c3aed" });
+  }
+  if (normalize(thesis.ai) === "yes") tags.push({ name: "AI thesis", color: "#1f5eff" });
+  if (profile.official_pitch_email) tags.push({ name: "Pitch email found", color: "#0f766e" });
+  if (
+    normalize(profile.accepts_cold_email) === "no" ||
+    normalize(profile.pitch_policy) === "no_unsolicited" ||
+    normalize(contactRisk.no_pitches) === "yes" ||
+    contactRisk.do_not_contact === true
+  ) {
+    tags.push({ name: "No cold email", color: "#6b7280" });
+  }
+
+  return tags;
+}
+
+async function applyOrigamiAutoTags(opportunity, profile) {
+  const contactId = opportunity.contacts?.id;
+  if (!contactId) return [];
+  const tags = autoTagsForOrigami(opportunity, profile);
+  const uniqueTags = [...new Map(tags.map((tag) => [normalize(tag.name), tag])).values()];
+  for (const tag of uniqueTags) {
+    await ensureContactTag(contactId, tag.name, tag.color).catch(() => null);
+  }
+  return uniqueTags;
+}
+
 async function saveRunResult(opportunity, run) {
   const status = normalizedStatus(run?.status);
   const patch = {
@@ -324,6 +395,9 @@ async function saveRunResult(opportunity, run) {
   }
 
   await updateRows("opportunities", patch, `id=eq.${encodeURIComponent(opportunity.id)}`);
+  if (status === "completed" && patch.origami_profile) {
+    await applyOrigamiAutoTags({ ...opportunity, ...patch }, patch.origami_profile);
+  }
   return { ...opportunity, ...patch };
 }
 
