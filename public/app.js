@@ -2161,6 +2161,25 @@ function activateCampaignSection(section = "create") {
   });
 }
 
+function campaignPreflightHtml(preflight = {}) {
+  const status = preflight.status || "warning";
+  const label = preflight.label || "Pre-flight pendiente";
+  const items = [...(preflight.issues || []), ...(preflight.warnings || [])].slice(0, 4);
+  const detail = items.length
+    ? items.map((item) => `<li><strong>${escapeHtml(item.label || "")}</strong><span>${escapeHtml(item.detail || "")}</span></li>`).join("")
+    : `<li><strong>Sistema listo</strong><span>Cola, dominio, fechas y reputacion pasan el chequeo.</span></li>`;
+  return `
+    <div class="campaign-preflight ${status}">
+      <div>
+        <span>Pre-flight</span>
+        <strong>${escapeHtml(label)}</strong>
+        <small>Cola ${Number(preflight.queued || 0)}/${Number(preflight.min_queue || 0)} | Inventario aprobado ${Number(preflight.approved_inventory || 0)} | Dominio hoy ${preflight.warmup_remaining_today ?? "sin dato"}</small>
+      </div>
+      <ul>${detail}</ul>
+    </div>
+  `;
+}
+
 function campaignCardHtml(campaign) {
   const counts = campaign.counts || {};
   const warmup = state.emailWarmups.find((item) => item.sender_key === campaign.sender_key);
@@ -2201,6 +2220,7 @@ function campaignCardHtml(campaign) {
           <small>${quality.label}</small>
         </div>
       </div>
+      ${campaignPreflightHtml(campaign.preflight)}
       <div class="campaign-action-bar">
         <button class="campaign-action start" type="button" data-campaign-status="${campaign.id}" data-next-status="active" ${canStart ? "" : "disabled"}>Iniciar</button>
         <button class="campaign-action pause" type="button" data-campaign-status="${campaign.id}" data-next-status="paused" ${canPause ? "" : "disabled"}>Pausar</button>

@@ -1449,6 +1449,109 @@ function campaignBounceRate(counts = {}) {
   return Number(counts.bounced || 0) / sent;
 }
 
+function preflightIssue(level, label, detail, metric = null) {
+  return { level, label, detail, metric };
+}
+
+function minimumPreflightQueue(campaign = {}) {
+  const dailyLimit = Number(campaign.daily_limit || 100);
+  const maxRecipients = Number(campaign.max_recipients || 100);
+  return Math.max(25, Math.min(100, dailyLimit, Math.ceil(maxRecipients * 0.1)));
+}
+
+async function approvedInventoryForCampaign(campaign) {
+  const regions = campaignLeadRegions(campaign.campaign_type, campaign.target_region);
+  const filters = [
+    "select=id,origami_status,origami_profile,contacts(id,email,email_status,contact_tags(tags(name)))",
+    `lead_type=eq.${encodeURIComponent(campaign.campaign_type)}`,
+    regionFilter(regions),
+    "deleted_at=is.null",
+    "limit=1000",
+  ].filter(Boolean);
+  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
+  return (payload || [])
+    .filter((opportunity) => opportunity.contacts?.email)
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "No contactar"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Email dudoso"))
+    .filter((opportunity) => !emailStatusLooksRisky(opportunity.contacts?.email_status))
+    .filter((opportunity) => origamiCampaignApproval(opportunity).approved).length;
+}
+
+async function campaignPreflight(campaign, counts = null) {
+  const currentCounts = counts || (await campaignCounts(campaign.id));
+  const warmup = await warmupStatus(campaign.sender_key).catch(() => null);
+  const approvedInventory = await approvedInventoryForCampaign(campaign).catch(() => 0);
+  const issues = [];
+  const warnings = [];
+  const minQueue = minimumPreflightQueue(campaign);
+  const queued = Number(currentCounts.queued || 0);
+  const sent = Number(currentCounts.sent || 0);
+  const bounced = Number(currentCounts.bounced || 0);
+  const bounceRate = campaignBounceRate(currentCounts);
+  const startAt = campaign.start_at ? new Date(campaign.start_at) : null;
+  const endAt = campaign.end_at ? new Date(campaign.end_at) : null;
+  const now = new Date();
+
+  if (campaign.status !== "active") {
+    issues.push(preflightIssue("danger", "Campana inactiva", `Estado actual: ${campaign.status || "sin estado"}.`));
+  }
+  if (!campaign.subject_template || !String(campaign.subject_template).trim()) {
+    issues.push(preflightIssue("danger", "Sin asunto", "La campana no tiene asunto configurado."));
+  }
+  if (!campaign.body_template || !String(campaign.body_template).trim()) {
+    issues.push(preflightIssue("danger", "Sin cuerpo", "La campana no tiene cuerpo de correo configurado."));
+  }
+  if (startAt && endAt && endAt <= startAt) {
+    issues.push(preflightIssue("danger", "Fechas invalidas", "La fecha final es anterior o igual al inicio."));
+  }
+  if (endAt && endAt <= now) {
+    issues.push(preflightIssue("danger", "Campana vencida", "La ventana de envio ya termino."));
+  }
+  if (queued < minQueue) {
+    const missing = Math.max(0, minQueue - queued);
+    issues.push(preflightIssue("danger", "Cola baja", `Hay ${queued} en cola; minimo recomendado ${minQueue}. Faltan ${missing}.`, { queued, min_queue: minQueue }));
+  }
+  if (approvedInventory + queued < minQueue) {
+    warnings.push(preflightIssue("warning", "Inventario aprobado bajo", `${approvedInventory} leads aprobadas disponibles fuera de cola.`, { approved_inventory: approvedInventory }));
+  }
+  if (sent >= Number(campaign.max_recipients || 100)) {
+    issues.push(preflightIssue("danger", "Objetivo agotado", "La campana ya alcanzo su maximo de destinatarios."));
+  }
+  if (sent >= Number(campaign.daily_limit || 100)) {
+    warnings.push(preflightIssue("warning", "Limite diario agotado", "La campana ya uso su cupo diario configurado."));
+  }
+  if (warmup && Number(warmup.remaining_today || 0) <= 0) {
+    warnings.push(preflightIssue("warning", "Cupo de dominio agotado", `${warmup.domain || campaign.sender_key} no tiene cupo restante hoy.`));
+  }
+  if (sent >= BOUNCE_CONTROL_MIN_SENT && bounceRate >= BOUNCE_PAUSE_RATE) {
+    issues.push(preflightIssue("danger", "Rebote alto", `Rebote ${Math.round(bounceRate * 1000) / 10}% (${bounced}/${sent}).`));
+  } else if (sent >= BOUNCE_CONTROL_MIN_SENT && bounceRate >= BOUNCE_THROTTLE_RATE) {
+    warnings.push(preflightIssue("warning", "Rebote en observacion", `Rebote ${Math.round(bounceRate * 1000) / 10}% (${bounced}/${sent}).`));
+  }
+  if (Number(currentCounts.complained || 0) > 0) {
+    issues.push(preflightIssue("danger", "Quejas spam", `${currentCounts.complained} queja(s) registradas.`));
+  }
+  if (Number(currentCounts.reputation_blocked || 0) > 0) {
+    warnings.push(preflightIssue("warning", "Bloqueos reputacion", `${currentCounts.reputation_blocked} destinatario(s) bloqueados.`));
+  }
+
+  const status = issues.length ? "blocked" : warnings.length ? "warning" : "ready";
+  const label = status === "ready" ? "Listo para enviar" : status === "warning" ? "Atencion antes de enviar" : "No listo";
+  return {
+    status,
+    label,
+    checked_at: new Date().toISOString(),
+    min_queue: minQueue,
+    queued,
+    approved_inventory: approvedInventory,
+    warmup_remaining_today: warmup?.remaining_today ?? null,
+    next_scheduled_at: currentCounts.next_scheduled_at,
+    issues,
+    warnings,
+  };
+}
+
 async function enforceBounceControl(campaign, counts = {}) {
   const sent = Number(counts.sent || 0);
   const bounced = Number(counts.bounced || 0);
@@ -1514,7 +1617,8 @@ async function listCampaigns(user) {
   );
   const campaigns = [];
   for (const campaign of payload || []) {
-    campaigns.push({ ...campaign, counts: await campaignCounts(campaign.id) });
+    const counts = await campaignCounts(campaign.id);
+    campaigns.push({ ...campaign, counts, preflight: await campaignPreflight(campaign, counts) });
   }
   return campaigns;
 }

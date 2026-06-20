@@ -1319,6 +1319,66 @@ button.danger {
   background: #fff2f2;
 }
 
+.campaign-preflight {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.6fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.campaign-preflight.ready {
+  border-color: #b7ead9;
+  background: #eefbf6;
+}
+
+.campaign-preflight.warning {
+  border-color: #ffe2a3;
+  background: #fff8e7;
+}
+
+.campaign-preflight.blocked {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.campaign-preflight > div span,
+.campaign-preflight li span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.campaign-preflight > div strong {
+  margin: 3px 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 780;
+}
+
+.campaign-preflight ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.campaign-preflight li {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.campaign-preflight li strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 780;
+}
+
 .campaign-action-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3645,6 +3705,11 @@ li {
   }
 
   .campaign-control-top {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-preflight,
+  .campaign-preflight li {
     grid-template-columns: 1fr;
   }
 
