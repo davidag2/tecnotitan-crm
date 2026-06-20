@@ -2297,6 +2297,81 @@ function renderCampaigns(campaigns = state.emailCampaigns) {
   bindCampaignListActions(elements.campaignArchiveList);
 }
 
+function readinessTone(ok, warning = false) {
+  if (ok) return "ready";
+  return warning ? "warning" : "blocked";
+}
+
+function readinessPill(label, value, tone) {
+  return `
+    <span class="readiness-pill ${tone}">
+      <i aria-hidden="true"></i>
+      <strong>${escapeHtml(label)}</strong>
+      <small>${escapeHtml(value)}</small>
+    </span>
+  `;
+}
+
+function campaignReadinessDashboard(campaigns = []) {
+  const openStatuses = new Set(["active", "paused"]);
+  const rows = (campaigns || []).filter((campaign) => openStatuses.has(campaign.status));
+  const ready = rows.filter((campaign) => campaign.preflight?.status === "ready").length;
+  const warning = rows.filter((campaign) => campaign.preflight?.status === "warning").length;
+  const blocked = rows.filter((campaign) => campaign.preflight?.status === "blocked").length;
+  const rowHtml = rows
+    .map((campaign) => {
+      const counts = campaign.counts || {};
+      const preflight = campaign.preflight || {};
+      const warmup = state.emailWarmups.find((item) => item.sender_key === campaign.sender_key) || {};
+      const minQueue = Number(preflight.min_queue || 0);
+      const queued = Number(counts.queued || 0);
+      const inventory = Number(preflight.approved_inventory || 0);
+      const origamiIssue = [...(preflight.issues || []), ...(preflight.warnings || [])].some((item) =>
+        /origami|inventario aprobado/i.test(`${item.label || ""} ${item.detail || ""}`)
+      );
+      const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin fecha";
+      const domainOk = Number(warmup.remaining_today ?? preflight.warmup_remaining_today ?? 0) > 0;
+      return `
+        <article class="campaign-readiness-card ${preflight.status || "warning"}">
+          <header>
+            <div>
+              <strong>${escapeHtml(campaign.name)}</strong>
+              <small>${escapeHtml(campaignSegmentLabel(campaign))} | ${escapeHtml(campaign.sender_key === "investors" ? "Inversionistas" : "Consultoria")}</small>
+            </div>
+            <span>${escapeHtml(preflight.label || "Pre-flight pendiente")}</span>
+          </header>
+          <div class="readiness-grid">
+            ${readinessPill("Lista", preflight.status === "ready" ? "Si" : "No", readinessTone(preflight.status === "ready", preflight.status === "warning"))}
+            ${readinessPill("Cola", `${queued}/${minQueue}`, readinessTone(queued >= minQueue, queued > 0))}
+            ${readinessPill("Inventario", `${inventory} aprobadas`, readinessTone(inventory + queued >= minQueue, inventory > 0))}
+            ${readinessPill("Origami", origamiIssue ? "Pendiente" : "OK", readinessTone(!origamiIssue, inventory > 0))}
+            ${readinessPill("Dominio", domainOk ? "Sano" : "Sin cupo", readinessTone(domainOk, true))}
+            ${readinessPill("Proximo", nextSend, readinessTone(Boolean(counts.next_scheduled_at), true))}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    <section class="campaign-readiness-panel">
+      <header>
+        <div>
+          <h3>Preparacion de campanas</h3>
+          <p>Semaforo operativo antes de enviar: cola, inventario aprobado, Origami, dominio y proximo envio.</p>
+        </div>
+        <div class="readiness-summary">
+          <span class="ready">${ready} listas</span>
+          <span class="warning">${warning} en atencion</span>
+          <span class="blocked">${blocked} no listas</span>
+        </div>
+      </header>
+      <div class="campaign-readiness-list">
+        ${rowHtml || `<p class="empty">No hay campanas abiertas para preparar.</p>`}
+      </div>
+    </section>
+  `;
+}
+
 function renderMultiCampaignManager(campaigns = state.emailCampaigns) {
   if (!elements.multiCampaignManager) return;
   const openStatuses = new Set(["active", "paused"]);
@@ -2378,6 +2453,7 @@ function renderMultiCampaignManager(campaigns = state.emailCampaigns) {
         )
         .join("")}
     </div>
+    ${campaignReadinessDashboard(campaigns)}
     <div class="multi-campaign-table">
       <div class="multi-campaign-row multi-head">
         <span>Campana</span>
