@@ -57,6 +57,8 @@ const elements = {
   statistics: document.querySelector("#statistics"),
   origamiConfigStatus: document.querySelector("#origami-config-status"),
   origamiPerformance: document.querySelector("#origami-performance"),
+  origamiSectionButtons: document.querySelectorAll("[data-origami-section]"),
+  origamiSectionPanels: document.querySelectorAll("[data-origami-section-panel]"),
   origamiPersonName: document.querySelector("#origami-person-name"),
   origamiPersonCompany: document.querySelector("#origami-person-company"),
   origamiPersonLinkedin: document.querySelector("#origami-person-linkedin"),
@@ -2158,6 +2160,15 @@ function activateCampaignSection(section = "create") {
   });
   elements.campaignSectionPanels?.forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.campaignSectionPanel === section);
+  });
+}
+
+function activateOrigamiSection(section = "intelligence") {
+  elements.origamiSectionButtons?.forEach((button) => {
+    button.classList.toggle("active", button.dataset.origamiSection === section);
+  });
+  elements.origamiSectionPanels?.forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.origamiSectionPanel === section);
   });
 }
 
@@ -5334,6 +5345,9 @@ elements.campaignSegment?.addEventListener("change", () => {
 });
 elements.campaignSectionButtons?.forEach((button) => {
   button.addEventListener("click", () => activateCampaignSection(button.dataset.campaignSection));
+});
+elements.origamiSectionButtons?.forEach((button) => {
+  button.addEventListener("click", () => activateOrigamiSection(button.dataset.origamiSection));
 });
 elements.campaignTemplate.addEventListener("change", applySelectedCampaignTemplate);
 elements.createCampaignButton.addEventListener("click", createCampaign);

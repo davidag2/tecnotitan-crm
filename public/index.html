@@ -341,13 +341,13 @@
 
         <section class="panel admin-only role-hidden tab-panel" id="origami-panel" data-tab-panel="origami">
           <nav class="origami-section-nav" aria-label="Secciones Origami">
-            <a href="#origami-intelligence">Inteligencia Origami</a>
-            <a href="#origami-performance-section">Panel de Performance</a>
-            <a href="#origami-person-section">Buscador personal</a>
-            <a href="#origami-jobs-section">Buscador de empleo</a>
+            <button class="active" type="button" data-origami-section="intelligence">Inteligencia Origami</button>
+            <button type="button" data-origami-section="performance">Panel de Performance</button>
+            <button type="button" data-origami-section="personal">Buscador personal</button>
+            <button type="button" data-origami-section="jobs">Buscador de empleo</button>
           </nav>
 
-          <section class="origami-section" id="origami-intelligence">
+          <section class="origami-section active" data-origami-section-panel="intelligence">
             <div class="panel-title">
               <span class="section-label">Seccion 1</span>
               <h2>Inteligencia Origami</h2>
@@ -369,7 +369,7 @@
             </div>
           </section>
 
-          <section class="origami-section" id="origami-performance-section">
+          <section class="origami-section" data-origami-section-panel="performance">
             <div class="panel-title">
               <span class="section-label">Seccion 2</span>
               <h2>Panel de Performance</h2>
@@ -378,7 +378,7 @@
             <div class="origami-performance" id="origami-performance"></div>
           </section>
 
-          <section class="origami-section origami-search-tool" id="origami-person-section">
+          <section class="origami-section origami-search-tool" data-origami-section-panel="personal">
             <div class="panel-title">
               <span class="section-label">Seccion 3</span>
               <h2>Buscador personal</h2>
@@ -402,7 +402,7 @@
             </div>
           </section>
 
-          <section class="origami-section origami-search-tool" id="origami-jobs-section">
+          <section class="origami-section origami-search-tool" data-origami-section-panel="jobs">
             <div class="panel-title">
               <span class="section-label">Seccion 4</span>
               <h2>Buscador de empleo</h2>
