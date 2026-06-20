@@ -3193,7 +3193,6 @@ button.danger {
 }
 
 .origami-search-tool {
-  display: grid;
   gap: 14px;
 }
 
