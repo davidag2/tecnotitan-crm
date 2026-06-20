@@ -5017,7 +5017,9 @@ async function processCampaign(campaignId, button) {
         campaign_id: campaignId,
       }),
     });
-    elements.campaignStatus.textContent = `Lote terminado: ${result.sent || 0} iniciales, ${result.followups_sent || 0} follow-ups, ${result.failed || 0} fallidos.`;
+    elements.campaignStatus.textContent = result.reserve_blocked
+      ? `Reserva minima activa: ${result.queued || 0}/${result.min_queue || 0}. ${result.message || "La campana espera mas inventario aprobado."}`
+      : `Lote terminado: ${result.sent || 0} iniciales, ${result.followups_sent || 0} follow-ups, ${result.failed || 0} fallidos.`;
     await Promise.all([reloadCampaignsOnly(), reloadEmailsOnly()]);
   } catch (error) {
     elements.campaignStatus.textContent = error.message;

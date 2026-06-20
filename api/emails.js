@@ -1552,6 +1552,35 @@ async function campaignPreflight(campaign, counts = null) {
   };
 }
 
+async function ensureCampaignReserve(user, campaign, counts, startAt = new Date()) {
+  const minQueue = minimumPreflightQueue(campaign);
+  const queued = Number(counts.queued || 0);
+  const sent = Number(counts.sent || 0);
+  if (sent > 0 || queued >= minQueue) {
+    return { ok: true, min_queue: minQueue, queued, added: 0 };
+  }
+  const maxRecipients = Number(campaign.max_recipients || minQueue);
+  const totalPrepared = queued + sent;
+  const remainingToQueue = Math.max(0, maxRecipients - totalPrepared);
+  const missing = Math.max(0, minQueue - queued);
+  let added = 0;
+  if (remainingToQueue > 0 && missing > 0) {
+    added = await addCampaignRecipients(user, campaign, Math.min(50, remainingToQueue, missing), startAt).catch(() => 0);
+  }
+  const nextCounts = added ? await campaignCounts(campaign.id) : counts;
+  const nextQueued = Number(nextCounts.queued || 0);
+  return {
+    ok: nextQueued >= minQueue,
+    min_queue: minQueue,
+    queued: nextQueued,
+    added,
+    counts: nextCounts,
+    message: nextQueued >= minQueue
+      ? `Reserva minima alcanzada: ${nextQueued}/${minQueue}.`
+      : `Reserva insuficiente: ${nextQueued}/${minQueue}. La campana espera mas inventario aprobado antes de despegar.`,
+  };
+}
+
 async function enforceBounceControl(campaign, counts = {}) {
   const sent = Number(counts.sent || 0);
   const bounced = Number(counts.bounced || 0);
@@ -2831,10 +2860,26 @@ async function processCampaign(user, body) {
   }
   const queuedAndSent = (counts.queued || 0) + (counts.sent || 0);
   const remainingToQueue = campaign.max_recipients ? Math.max(0, campaign.max_recipients - queuedAndSent) : 0;
-  if (remainingToQueue > 0 && (counts.queued || 0) < Math.max(5, campaign.batch_size || 1)) {
-    await addCampaignRecipients(user, campaign, Math.min(25, remainingToQueue), nowDate);
+  const minReserve = minimumPreflightQueue(campaign);
+  if (remainingToQueue > 0 && (counts.queued || 0) < Math.max(minReserve, campaign.batch_size || 1)) {
+    await addCampaignRecipients(user, campaign, Math.min(50, remainingToQueue), nowDate);
     counts = await campaignCounts(campaign.id);
   }
+  const reserve = await ensureCampaignReserve(user, campaign, counts, nowDate);
+  if (!reserve.ok && Number(counts.sent || 0) === 0) {
+    return {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      followups_sent: 0,
+      reserve_blocked: true,
+      min_queue: reserve.min_queue,
+      queued: reserve.queued,
+      added_to_queue: reserve.added,
+      message: reserve.message,
+    };
+  }
+  if (reserve.counts) counts = reserve.counts;
   const warmup = await warmupStatus(campaign.sender_key);
   const campaignRemainingToday = Math.max(0, campaign.daily_limit - counts.sent_today);
   const campaignRemainingTotal = campaign.max_recipients ? Math.max(0, campaign.max_recipients - counts.sent) : campaign.daily_limit;
