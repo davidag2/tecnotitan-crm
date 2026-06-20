@@ -340,28 +340,38 @@
         </section>
 
         <section class="panel admin-only role-hidden tab-panel" id="origami-panel" data-tab-panel="origami">
-          <div class="panel-title">
-            <h2>Inteligencia Origami</h2>
-            <p>Motor de investigacion para detectar senales, cold email fit y redactar correos personalizados.</p>
-          </div>
-          <div class="origami-overview">
-            <article>
-              <strong id="origami-config-status">Origami pendiente</strong>
-              <span>Configura ORIGAMI_API_KEY en Vercel para activar el analisis de leads.</span>
-            </article>
-            <article>
-              <strong>Uso recomendado</strong>
-              <span>Analiza primero leads Hot o inversionistas prioritarios antes de enviarlos a campana.</span>
-            </article>
-            <article>
-              <strong>Senales clave</strong>
-              <span>Apertura a cold email, tesis/foco, empresa, etapa, angulo de personalizacion y riesgo.</span>
-            </article>
-          </div>
-          <div class="origami-performance" id="origami-performance"></div>
-          <div class="origami-search-tool">
+          <section class="origami-section">
             <div class="panel-title">
-              <h3>Buscador personal</h3>
+              <h2>Seccion Inteligencia Origami</h2>
+              <p>Motor de investigacion para detectar senales, cold email fit y redactar correos personalizados.</p>
+            </div>
+            <div class="origami-overview">
+              <article>
+                <strong id="origami-config-status">Origami pendiente</strong>
+                <span>Configura ORIGAMI_API_KEY en Vercel para activar el analisis de leads.</span>
+              </article>
+              <article>
+                <strong>Uso recomendado</strong>
+                <span>Analiza primero leads Hot o inversionistas prioritarios antes de enviarlos a campana.</span>
+              </article>
+              <article>
+                <strong>Senales clave</strong>
+                <span>Apertura a cold email, tesis/foco, empresa, etapa, angulo de personalizacion y riesgo.</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="origami-section">
+            <div class="panel-title">
+              <h2>Seccion Panel de Performance</h2>
+              <p>Metricas para entender que tan bien funciona Origami en aprobacion, canales y respuestas.</p>
+            </div>
+            <div class="origami-performance" id="origami-performance"></div>
+          </section>
+
+          <section class="origami-section origami-search-tool">
+            <div class="panel-title">
+              <h2>Buscador personal</h2>
               <p>Busca una persona por nombre, empresa o LinkedIn antes de crearla como lead.</p>
             </div>
             <div class="origami-search-form">
@@ -380,10 +390,11 @@
             <div class="origami-search-results" id="origami-person-search-results">
               <p class="empty">No hay busquedas personales todavia.</p>
             </div>
-          </div>
-          <div class="origami-search-tool">
+          </section>
+
+          <section class="origami-section origami-search-tool">
             <div class="panel-title">
-              <h3>Buscador de empleo para Oscar</h3>
+              <h2>Buscador de empleo</h2>
               <p>Encuentra vacantes, empresas, reclutadores, emails de HR, LinkedIn y mensajes personalizados.</p>
             </div>
             <div class="origami-search-form">
@@ -405,7 +416,7 @@
             <div class="origami-search-results" id="origami-job-search-results">
               <p class="empty">No hay busquedas laborales todavia.</p>
             </div>
-          </div>
+          </section>
         </section>
 
         <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">

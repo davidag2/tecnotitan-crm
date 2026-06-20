@@ -3103,12 +3103,25 @@ button.danger {
   font-size: 13px;
 }
 
+.origami-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.origami-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.origami-section > .panel-title {
+  margin-bottom: 0;
+}
+
 .origami-search-tool {
   display: grid;
   gap: 14px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
 }
 
 .origami-search-form {
@@ -3120,11 +3133,13 @@ button.danger {
 .origami-search-form textarea,
 .origami-search-form button,
 #origami-person-search-status,
+#origami-job-search-status,
 .origami-search-results {
   grid-column: 1 / -1;
 }
 
-#origami-person-search-status {
+#origami-person-search-status,
+#origami-job-search-status {
   min-height: 18px;
   color: var(--muted);
   font-size: 13px;
