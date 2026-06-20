@@ -2539,14 +2539,14 @@ async function prepareWarehouse(options = {}) {
         source_mix: options.origamiOnly ? "origami" : "balanced",
         search_batches: options.origamiOnly ? 0 : 10,
         reveal_limit: options.origamiOnly ? 0 : 25,
-        analyze_limit: 10,
+        analyze_limit: options.origamiOnly ? 25 : 50,
         origami_sourcing: true,
         origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 250,
         origami_source_query: options.origamiOnly ? elements.origamiSourceQuery?.value.trim() : "",
       }),
     });
     const summary = (result.campaigns || [])
-      .map((item) => `${item.name}: plan ${item.apollo_target || 0} Apollo / ${item.origami_target || 0} Origami, ${item.origami_sourced || 0} guardadas, +${item.queued_added || 0} en cola`)
+      .map((item) => `${item.name}: plan ${item.apollo_target || 0} Apollo / ${item.origami_target || 0} Origami, ${item.analyzed_with_email || 0} emails a Origami, +${item.queued_added || 0} en cola`)
       .join(" | ");
     if (elements.warehouseStatus) elements.warehouseStatus.textContent = summary || "Warehouse actualizado.";
     const [inventory, campaigns] = await Promise.all([

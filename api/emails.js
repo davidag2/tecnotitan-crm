@@ -2159,17 +2159,48 @@ async function warehouseCandidates(campaign, { withEmail = true, limit = 50 } = 
 
 async function warehouseAnalyzeCandidates(campaign, limit = 25) {
   const regions = campaignLeadRegions(campaign.campaign_type, campaign.target_region);
-  const filters = [
-    "select=id,origami_status",
+  const maxLimit = Math.max(1, Math.min(500, Number(limit || 25)));
+  const baseFilters = [
     `lead_type=eq.${encodeURIComponent(campaign.campaign_type)}`,
     regionFilter(regions),
     "deleted_at=is.null",
     "origami_status=neq.completed",
     "order=score.desc",
-    `limit=${Math.max(1, Math.min(100, Number(limit || 25)))}`,
   ].filter(Boolean);
-  const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
-  return payload || [];
+  const withEmailFilters = [
+    "select=id,origami_status,score,contacts!inner(id,email,email_status,contact_tags(tags(name)))",
+    ...baseFilters,
+    "contacts.email=not.is.null",
+    `limit=${maxLimit}`,
+  ];
+  const fallbackFilters = [
+    "select=id,origami_status,score,contacts(id,email,email_status,contact_tags(tags(name)))",
+    ...baseFilters,
+    `limit=${maxLimit}`,
+  ];
+  const [{ payload: withEmailPayload }, { payload: fallbackPayload }] = await Promise.all([
+    supabaseFetch(`/opportunities?${withEmailFilters.join("&")}`).catch(() => ({ payload: [] })),
+    supabaseFetch(`/opportunities?${fallbackFilters.join("&")}`).catch(() => ({ payload: [] })),
+  ]);
+  const seen = new Set();
+  return [...(withEmailPayload || []), ...(fallbackPayload || [])]
+    .filter((opportunity) => {
+      if (!opportunity.id || seen.has(opportunity.id)) return false;
+      seen.add(opportunity.id);
+      return true;
+    })
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "No contactar"))
+    .filter((opportunity) => !hasContactTag(opportunity.contacts, "Email dudoso"))
+    .sort((a, b) => {
+      const aHasEmail = a.contacts?.email ? 1 : 0;
+      const bHasEmail = b.contacts?.email ? 1 : 0;
+      if (aHasEmail !== bHasEmail) return bHasEmail - aHasEmail;
+      const aVerified = emailStatusLooksRisky(a.contacts?.email_status) ? 0 : 1;
+      const bVerified = emailStatusLooksRisky(b.contacts?.email_status) ? 0 : 1;
+      if (aVerified !== bVerified) return bVerified - aVerified;
+      return Number(b.score || 0) - Number(a.score || 0);
+    });
 }
 
 function origamiRunStatus(status) {
@@ -2615,7 +2646,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
   const balancedOrigamiTarget = sourceMix === "balanced" ? targetQueue - balancedApolloTarget : 50;
   const searchBatches = clampNumber(body.search_batches, 0, 20, Math.ceil(balancedApolloTarget / 25));
   const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
-  const analyzeLimit = clampNumber(body.analyze_limit, 0, 25, 10);
+  const analyzeLimit = clampNumber(body.analyze_limit, 0, 75, 25);
   const useOrigamiSourcing = body.origami_sourcing !== false;
   const origamiSourceCount = clampNumber(body.origami_source_count, 0, 500, balancedOrigamiTarget);
   const refreshedOrigami = await refreshOrigamiSourceSearches(user, 5).catch(() => []);
@@ -2635,6 +2666,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
     let searches = 0;
     let revealed = 0;
     let analyzed = 0;
+    let analyzedWithEmail = 0;
     let queued = 0;
     let origamiSourced = 0;
     const templateKeys = campaignTemplateKeys(campaign.campaign_type, campaign.target_region, campaign.segment_key, campaign.search_templates);
@@ -2669,6 +2701,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
       if (candidate.origami_status === "completed") continue;
       await analyzeOpportunity(candidate.id, user).catch(() => null);
       analyzed += 1;
+      if (candidate.contacts?.email) analyzedWithEmail += 1;
     }
 
     const afterAnalysis = await campaignRecipientSummary(campaign.id);
@@ -2689,6 +2722,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
       origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
       revealed,
       analyzed,
+      analyzed_with_email: analyzedWithEmail,
       queued_added: queued,
       before,
       after,
@@ -3482,7 +3516,7 @@ module.exports = async function handler(req, res) {
         res.status(401).json({ error: "Cron no autorizado." });
         return;
       }
-      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 500, source_mix: "balanced", reveal_limit: 25, analyze_limit: 15 }));
+      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 500, source_mix: "balanced", reveal_limit: 25, analyze_limit: 50 }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
