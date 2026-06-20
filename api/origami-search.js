@@ -28,7 +28,7 @@ function extractResultText(run) {
 
 function extractJson(text) {
   const match = String(text || "").match(/BEGIN_TECNOTITAN_PERSON_JSON\s*([\s\S]*?)\s*END_TECNOTITAN_PERSON_JSON/i);
-  const raw = match?.[1] || "";
+  const raw = match?.[1] || String(text || "").match(/\{[\s\S]*\}/)?.[0] || "";
   if (!raw.trim()) return null;
   try {
     return JSON.parse(raw);
@@ -40,6 +40,14 @@ function extractJson(text) {
 function tableIdFromRun(run) {
   const tables = run?.response?.tables || run?.tables || [];
   return tables?.[0]?.id || tables?.[0]?.tableId || null;
+}
+
+function compactResultText(text) {
+  return String(text || "")
+    .replace(/BEGIN_TECNOTITAN_PERSON_JSON[\s\S]*?END_TECNOTITAN_PERSON_JSON/gi, "")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function personPrompt(search) {
@@ -113,7 +121,7 @@ function personPrompt(search) {
 
 async function listSearches() {
   const { payload } = await supabaseFetch(
-    "/origami_people_searches?select=id,query_name,query_company,query_linkedin_url,query_notes,search_purpose,status,agent_id,run_id,result_profile,email_draft,error,created_at,updated_at,completed_at&order=created_at.desc&limit=25"
+    "/origami_people_searches?select=id,query_name,query_company,query_linkedin_url,query_notes,search_purpose,status,agent_id,run_id,result_profile,email_draft,raw_response,error,created_at,updated_at,completed_at&order=created_at.desc&limit=25"
   );
   const searches = payload || [];
   const staleCutoff = Date.now() - 2 * 60 * 1000;
@@ -122,7 +130,13 @@ async function listSearches() {
     const updatedAt = new Date(search.updated_at || search.created_at || 0).getTime();
     const isStaleOrphan = search.status === "running" && (!search.agent_id || !search.run_id) && Number.isFinite(updatedAt) && updatedAt < staleCutoff;
     if (!isStaleOrphan) {
-      repaired.push(search);
+      repaired.push({
+        ...search,
+        result_profile:
+          search.status === "completed" && search.raw_response && !search.result_profile?.raw_summary
+            ? { ...(search.result_profile || {}), raw_summary: compactResultText(search.raw_response) }
+            : search.result_profile,
+      });
       continue;
     }
     repaired.push(
@@ -158,6 +172,7 @@ async function saveRunResult(search, run) {
       company_website: profile.company_website || "",
       linkedin_url: profile.linkedin_url || "",
       summary: profile.summary || "",
+      raw_summary: compactResultText(resultText),
       fit_for_tecnotitan: profile.fit_for_tecnotitan || "unknown",
       cold_email_fit: profile.cold_email_fit || "unknown",
       cold_email_fit_reason: profile.cold_email_fit_reason || "",
@@ -177,6 +192,8 @@ async function saveRunResult(search, run) {
       signals: Array.isArray(profile.signals) ? profile.signals : [],
       risks: Array.isArray(profile.risks) ? profile.risks : [],
       confidence: profile.confidence || "low",
+      agent_id: run?.agentId || run?.agent_id || search.agent_id || "",
+      run_id: run?.id || search.run_id || "",
     };
     patch.email_draft = {
       recommended_subject: profile.recommended_subject || "",
@@ -254,6 +271,7 @@ async function createSearch(body, user) {
       status: normalizedStatus(run?.status),
       agent_id: agent.id || run.agentId || run.agent_id || null,
       run_id: run.id || null,
+      error: null,
       updated_at: new Date().toISOString(),
     },
     `id=eq.${encodeURIComponent(search.id)}`

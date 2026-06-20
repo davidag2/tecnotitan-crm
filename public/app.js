@@ -459,6 +459,11 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function shortId(value) {
+  const text = String(value || "");
+  return text.length > 12 ? `${text.slice(0, 8)}...${text.slice(-4)}` : text;
+}
+
 function renderSessionUser() {
   const user = state.currentUser;
   if (!user) {
@@ -994,6 +999,8 @@ function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
       const draft = search.email_draft || {};
       const signals = Array.isArray(profile.signals) ? profile.signals : [];
       const risks = Array.isArray(profile.risks) ? profile.risks : [];
+      const rawSummary = String(profile.raw_summary || "").trim();
+      const hasStructuredProfile = Boolean(profile.summary);
       return `
         <article class="origami-search-card">
           <header>
@@ -1004,7 +1011,7 @@ function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
             <span class="status-badge">${escapeHtml(origamiStatusLabel(search.status))}</span>
           </header>
           ${
-            profile.summary
+            hasStructuredProfile
               ? `
                 <p>${escapeHtml(profile.summary)}</p>
                 <div class="origami-search-meta">
@@ -1027,8 +1034,14 @@ function renderOrigamiPeopleSearches(searches = state.origamiPeopleSearches) {
                 ${signals.length ? `<ul>${signals.slice(0, 4).map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>` : ""}
                 ${risks.length ? `<small>Riesgos: ${risks.map(escapeHtml).join(" | ")}</small>` : ""}
               `
-              : `<p class="empty">${search.status === "running" ? "Origami sigue investigando..." : escapeHtml(search.error || "Sin resultado todavia.")}</p>`
+              : rawSummary
+                ? `<pre>${escapeHtml(rawSummary)}</pre>`
+                : `<p class="empty">${search.status === "running" ? "Origami sigue investigando..." : escapeHtml(search.error || "Sin resultado todavia.")}</p>`
           }
+          <div class="origami-search-meta">
+            ${search.agent_id ? `<span>Agent: ${escapeHtml(shortId(search.agent_id))}</span>` : ""}
+            ${search.run_id ? `<span>Run: ${escapeHtml(shortId(search.run_id))}</span>` : ""}
+          </div>
           ${
             draft.email_body || draft.recommended_subject
               ? `
@@ -1082,6 +1095,7 @@ function copyOrigamiPeopleSearch(id) {
     `Evidencia pitch: ${profile.pitch_detection_evidence || ""}`,
     `Canal recomendado: ${profile.recommended_channel || ""}`,
     `Angulo: ${profile.personalization_angle || ""}`,
+    profile.raw_summary ? `Respuesta Origami: ${profile.raw_summary}` : "",
     draft.recommended_subject ? `Asunto: ${draft.recommended_subject}` : "",
     draft.email_body || "",
   ]
