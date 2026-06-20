@@ -2623,8 +2623,30 @@ async function refreshOrigamiSourceSearches(user, limit = 5) {
   return results;
 }
 
+async function runningOrigamiSourceForCampaign(campaignId) {
+  if (!campaignId) return null;
+  const { payload } = await supabaseFetch(
+    "/lead_searches?select=id,name,status,filters,created_at,updated_at&search_template=eq.origami_sourcing&status=eq.running&order=created_at.desc&limit=50"
+  );
+  return (payload || []).find((search) => {
+    const filters = search.filters || {};
+    return filters.campaign_id === campaignId || filters.origami_source?.campaign?.id === campaignId;
+  }) || null;
+}
+
 async function sourceLeadsWithOrigami(user, campaign, body = {}) {
   if (!origamiConfigured()) return { started: false, reason: "ORIGAMI_API_KEY no configurada.", saved: 0 };
+  const runningSearch = await runningOrigamiSourceForCampaign(campaign.id).catch(() => null);
+  if (runningSearch) {
+    return {
+      started: false,
+      status: "running",
+      lead_search_id: runningSearch.id,
+      requested: Number(runningSearch.filters?.target_count || body.origami_source_count || body.count || 0),
+      saved: 0,
+      reason: "Ya existe una busqueda Origami sourcing corriendo para esta campana.",
+    };
+  }
   const targetCount = clampNumber(body.origami_source_count || body.count, 1, 500, 50);
   const query = String(body.origami_source_query || body.query || "").trim();
   const leadSearch = await insertRow("lead_searches", {
@@ -2644,10 +2666,24 @@ async function sourceLeadsWithOrigami(user, campaign, body = {}) {
     results_saved: 0,
     created_by: user.db_user_id || null,
   });
-  const result = await createAgentRun({
-    name: `Tecnotitan lead sourcing - ${campaign.name}`.slice(0, 90),
-    prompt: origamiSourcePrompt({ campaign, targetCount, query }),
-  });
+  let result;
+  try {
+    result = await createAgentRun({
+      name: `Tecnotitan lead sourcing - ${campaign.name}`.slice(0, 90),
+      prompt: origamiSourcePrompt({ campaign, targetCount, query }),
+    });
+  } catch (error) {
+    await updateRows(
+      "lead_searches",
+      {
+        status: "failed",
+        filters: { ...(leadSearch.filters || {}), error: error.message, failed_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(leadSearch.id)}`
+    ).catch(() => null);
+    throw error;
+  }
   const agent = result.agent || result.data?.agent || {};
   const run = result.run || result.data?.run || result;
   const filters = {
