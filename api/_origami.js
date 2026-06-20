@@ -50,14 +50,13 @@ async function getCreditBalance() {
 
 async function createAgentRun({ name, prompt, workspaceId = null, focusTableIds = [] }) {
   const resolvedWorkspaceId = workspaceId || ORIGAMI_WORKSPACE_ID || null;
-  const resolvedFocusTableIds = focusTableIds.length ? focusTableIds : ORIGAMI_SOURCE_TABLE_ID ? [ORIGAMI_SOURCE_TABLE_ID] : [];
   const { payload } = await origamiFetch("/api/v2/agents", {
     method: "POST",
     body: JSON.stringify({
       name,
       prompt,
       workspaceId: resolvedWorkspaceId,
-      focusTableIds: resolvedFocusTableIds,
+      focusTableIds,
     }),
   });
   return payload;
@@ -76,6 +75,7 @@ module.exports = {
   getCreditBalance,
   getRun,
   origamiConfigured,
+  sourceTableId: () => ORIGAMI_SOURCE_TABLE_ID,
   sourceTableConfigured: () => Boolean(ORIGAMI_SOURCE_TABLE_ID),
   workspaceConfigured: () => Boolean(ORIGAMI_WORKSPACE_ID),
 };

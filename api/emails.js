@@ -1,6 +1,6 @@
 const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
-const { createAgentRun, getRun, origamiConfigured } = require("./_origami");
+const { createAgentRun, getRun, origamiConfigured, sourceTableId } = require("./_origami");
 const { scoreLead } = require("./_scoring");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
@@ -2678,6 +2678,7 @@ async function sourceLeadsWithOrigami(user, campaign, body = {}) {
     result = await createAgentRun({
       name: `Tecnotitan lead sourcing - ${campaign.name}`.slice(0, 90),
       prompt: origamiSourcePrompt({ campaign, targetCount, query }),
+      focusTableIds: sourceTableId() ? [sourceTableId()] : [],
     });
   } catch (error) {
     await updateRows(
