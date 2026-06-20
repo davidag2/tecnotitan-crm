@@ -1113,7 +1113,15 @@ async function refreshOrigamiPeopleSearch(id, manual = false) {
   state.origamiPeopleSearches = result.searches || [];
   renderOrigamiPeopleSearches();
   if (elements.origamiPersonSearchStatus) {
-    elements.origamiPersonSearchStatus.textContent = manual ? "Busqueda actualizada." : "Origami sigue trabajando...";
+    const status = result.search?.status || "";
+    elements.origamiPersonSearchStatus.textContent =
+      status === "completed"
+        ? "Busqueda Origami lista."
+        : status === "failed"
+          ? result.search?.error || "La busqueda Origami fallo."
+          : manual
+            ? "Busqueda actualizada."
+            : "Origami sigue trabajando...";
   }
   return result.search;
 }

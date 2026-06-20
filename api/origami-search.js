@@ -11,7 +11,7 @@ function normalizedStatus(status) {
   const value = String(status || "").toLowerCase();
   if (!value) return "running";
   if (["running", "queued", "pending", "cancelling"].includes(value)) return "running";
-  if (["failed", "error", "cancelled", "canceled"].includes(value)) return "failed";
+  if (["failed", "error", "cancelled", "canceled", "errored", "timed_out", "incomplete", "step_cap_hit"].includes(value)) return "failed";
   if (["needs_input"].includes(value)) return "needs_input";
   if (["completed", "complete", "done", "succeeded", "success", "finished"].includes(value)) return "completed";
   return "completed";
@@ -113,9 +113,23 @@ function personPrompt(search) {
 
 async function listSearches() {
   const { payload } = await supabaseFetch(
-    "/origami_people_searches?select=id,query_name,query_company,query_linkedin_url,query_notes,search_purpose,status,result_profile,email_draft,error,created_at,updated_at,completed_at&order=created_at.desc&limit=25"
+    "/origami_people_searches?select=id,query_name,query_company,query_linkedin_url,query_notes,search_purpose,status,agent_id,run_id,result_profile,email_draft,error,created_at,updated_at,completed_at&order=created_at.desc&limit=25"
   );
-  return payload || [];
+  const searches = payload || [];
+  const staleCutoff = Date.now() - 2 * 60 * 1000;
+  const repaired = [];
+  for (const search of searches) {
+    const updatedAt = new Date(search.updated_at || search.created_at || 0).getTime();
+    const isStaleOrphan = search.status === "running" && (!search.agent_id || !search.run_id) && Number.isFinite(updatedAt) && updatedAt < staleCutoff;
+    if (!isStaleOrphan) {
+      repaired.push(search);
+      continue;
+    }
+    repaired.push(
+      await markSearchFailed(search, "La busqueda no alcanzo a crear una corrida en Origami. Intenta de nuevo.").catch(() => search)
+    );
+  }
+  return repaired;
 }
 
 async function loadSearch(id) {
@@ -179,6 +193,20 @@ async function saveRunResult(search, run) {
   return rows?.[0] || { ...search, ...patch };
 }
 
+async function markSearchFailed(search, message) {
+  const rows = await updateRows(
+    "origami_people_searches",
+    {
+      status: "failed",
+      error: message || "Origami no pudo iniciar esta busqueda.",
+      updated_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    },
+    `id=eq.${encodeURIComponent(search.id)}`
+  );
+  return rows?.[0] || { ...search, status: "failed", error: message };
+}
+
 async function waitForInitialResult(search, maxPolls = 2) {
   let latest = search;
   for (let index = 0; index < maxPolls; index += 1) {
@@ -204,12 +232,22 @@ async function createSearch(body, user) {
     status: "running",
     created_by: user.db_user_id || null,
   });
-  const result = await createAgentRun({
-    name: `Tecnotitan person search - ${queryName}`.slice(0, 90),
-    prompt: personPrompt(search),
-  });
+  let result;
+  try {
+    result = await createAgentRun({
+      name: `Tecnotitan person search - ${queryName}`.slice(0, 90),
+      prompt: personPrompt(search),
+    });
+  } catch (error) {
+    await markSearchFailed(search, error.message).catch(() => null);
+    throw error;
+  }
   const agent = result.agent || result.data?.agent || {};
   const run = result.run || result.data?.run || result;
+  if (!(agent.id || run.agentId || run.agent_id) || !run.id) {
+    const failed = await markSearchFailed(search, "Origami no devolvio agent_id/run_id para esta busqueda. Intenta de nuevo.");
+    return failed;
+  }
   const rows = await updateRows(
     "origami_people_searches",
     {
@@ -228,7 +266,9 @@ async function refreshSearch(id) {
   if (!origamiConfigured()) throw new Error("ORIGAMI_API_KEY no esta configurada en Vercel.");
   const search = await loadSearch(id);
   if (!search) throw new Error("No se encontro la busqueda Origami.");
-  if (!search.agent_id || !search.run_id) throw new Error("Esta busqueda no tiene un run de Origami asociado.");
+  if (!search.agent_id || !search.run_id) {
+    return markSearchFailed(search, "Esta busqueda no tiene una corrida de Origami asociada. Intenta crear una busqueda nueva.");
+  }
   const { run } = await getRun(search.agent_id, search.run_id);
   return saveRunResult(search, run);
 }
