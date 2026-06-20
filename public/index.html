@@ -340,9 +340,17 @@
         </section>
 
         <section class="panel admin-only role-hidden tab-panel" id="origami-panel" data-tab-panel="origami">
-          <section class="origami-section">
+          <nav class="origami-section-nav" aria-label="Secciones Origami">
+            <a href="#origami-intelligence">Inteligencia Origami</a>
+            <a href="#origami-performance-section">Panel de Performance</a>
+            <a href="#origami-person-section">Buscador personal</a>
+            <a href="#origami-jobs-section">Buscador de empleo</a>
+          </nav>
+
+          <section class="origami-section" id="origami-intelligence">
             <div class="panel-title">
-              <h2>Seccion Inteligencia Origami</h2>
+              <span class="section-label">Seccion 1</span>
+              <h2>Inteligencia Origami</h2>
               <p>Motor de investigacion para detectar senales, cold email fit y redactar correos personalizados.</p>
             </div>
             <div class="origami-overview">
@@ -361,16 +369,18 @@
             </div>
           </section>
 
-          <section class="origami-section">
+          <section class="origami-section" id="origami-performance-section">
             <div class="panel-title">
-              <h2>Seccion Panel de Performance</h2>
+              <span class="section-label">Seccion 2</span>
+              <h2>Panel de Performance</h2>
               <p>Metricas para entender que tan bien funciona Origami en aprobacion, canales y respuestas.</p>
             </div>
             <div class="origami-performance" id="origami-performance"></div>
           </section>
 
-          <section class="origami-section origami-search-tool">
+          <section class="origami-section origami-search-tool" id="origami-person-section">
             <div class="panel-title">
+              <span class="section-label">Seccion 3</span>
               <h2>Buscador personal</h2>
               <p>Busca una persona por nombre, empresa o LinkedIn antes de crearla como lead.</p>
             </div>
@@ -392,8 +402,9 @@
             </div>
           </section>
 
-          <section class="origami-section origami-search-tool">
+          <section class="origami-section origami-search-tool" id="origami-jobs-section">
             <div class="panel-title">
+              <span class="section-label">Seccion 4</span>
               <h2>Buscador de empleo</h2>
               <p>Encuentra vacantes, empresas, reclutadores, emails de HR, LinkedIn y mensajes personalizados.</p>
             </div>
