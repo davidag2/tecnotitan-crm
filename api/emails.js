@@ -2297,6 +2297,10 @@ function origamiSourcePrompt({ campaign, targetCount, query }) {
     `Requested candidates: ${targetCount}`,
     `User sourcing query: ${query || defaultQuery}`,
     "",
+    "If a focus table is attached to this run, treat it as the primary lead inventory.",
+    "Read the existing table rows first, select the strongest campaign-ready leads, and return them as the JSON output.",
+    "Do not create a new workspace. Do not duplicate rows already present in the focus table. Use the table data as the source of truth when available.",
+    "",
     "For each lead, find specific evidence for at least one of these:",
     "- invests in AI, B2B SaaS, automation, emerging markets, LATAM, seed or pre-seed;",
     "- accepts cold email, founder submissions, startup pitches, inbound deals or has a public pitch email/form;",
@@ -2628,9 +2632,12 @@ async function runningOrigamiSourceForCampaign(campaignId) {
   const { payload } = await supabaseFetch(
     "/lead_searches?select=id,name,status,filters,created_at,updated_at&search_template=eq.origami_sourcing&status=eq.running&order=created_at.desc&limit=50"
   );
+  const staleMs = 60 * 60 * 1000;
   return (payload || []).find((search) => {
     const filters = search.filters || {};
-    return filters.campaign_id === campaignId || filters.origami_source?.campaign?.id === campaignId;
+    const referenceDate = new Date(search.updated_at || search.created_at || 0).getTime();
+    const isFresh = Number.isFinite(referenceDate) && Date.now() - referenceDate < staleMs;
+    return isFresh && (filters.campaign_id === campaignId || filters.origami_source?.campaign?.id === campaignId);
   }) || null;
 }
 
@@ -2756,14 +2763,18 @@ async function prepareCampaignWarehouse(user, body = {}) {
     let analyzedWithEmail = 0;
     let queued = 0;
     let origamiSourced = 0;
+    let origamiSourceStatus = "skipped";
+    let origamiSourceReason = "";
     const templateKeys = campaignTemplateKeys(campaign.campaign_type, campaign.target_region, campaign.segment_key, campaign.search_templates);
 
     if (useOrigamiSourcing && origamiSourceCount > 0 && missing > 0) {
       const sourceResult = await sourceLeadsWithOrigami(user, campaign, {
         count: origamiSourceCount,
         query: body.origami_source_query,
-      }).catch(() => null);
+      }).catch((error) => ({ started: false, status: "failed", reason: error.message }));
       origamiSourced = Number(sourceResult?.saved || 0);
+      origamiSourceStatus = sourceResult?.status || (sourceResult?.started ? "started" : "not_started");
+      origamiSourceReason = sourceResult?.reason || "";
     }
 
     for (let index = 0; index < searchBatches && missing > 0; index += 1) {
@@ -2807,6 +2818,8 @@ async function prepareCampaignWarehouse(user, body = {}) {
       queue_batch: queueBatch,
       searches,
       origami_sourced: origamiSourced,
+      origami_source_status: origamiSourceStatus,
+      origami_source_reason: origamiSourceReason,
       origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
       revealed,
       analyzed,
