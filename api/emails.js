@@ -794,8 +794,16 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes,
   const endAt = options.endAt ? options.endAt.getTime() : null;
   const windowStartMinutes = options.windowStartMinutes ?? 9 * 60 + 15;
   const windowEndMinutes = options.windowEndMinutes ?? 11 * 60 + 45;
+  const dailyLimit = Math.max(0, Number(options.dailyLimit || 0));
+  let scheduledToday = 0;
   return leads.reduce((rows, lead, index) => {
-    if (index > 0) {
+    if (dailyLimit && scheduledToday >= dailyLimit) {
+      const nextDay = new Date(scheduledAt);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      nextDay.setUTCHours(0, 0, 0, 0);
+      scheduledAt = nextDay.getTime();
+      scheduledToday = 0;
+    } else if (index > 0) {
       scheduledAt += randomInteger(minDelayMinutes, maxDelayMinutes) * 60 * 1000;
     }
     const strategicAt = strategicSendTime(scheduledAt, lead, { windowStartMinutes, windowEndMinutes });
@@ -810,6 +818,7 @@ function scheduleRecipients(campaignId, leads, minDelayMinutes, maxDelayMinutes,
       status: "queued",
       scheduled_at: strategicAt.toISOString(),
     });
+    scheduledToday += 1;
     return rows;
   }, []);
 }
@@ -2138,6 +2147,7 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
     ...scheduleRecipients(campaign.id, allowedLeads, campaign.min_delay_minutes || 4, campaign.max_delay_minutes || 9, {
       startAt,
       endAt: campaign.end_at ? new Date(campaign.end_at) : null,
+      dailyLimit: campaign.daily_limit || 100,
       windowStartMinutes: campaign.send_window_start_minutes || 7 * 60,
       windowEndMinutes: campaign.send_window_end_minutes || 17 * 60 + 45,
     }),
@@ -2263,7 +2273,7 @@ function origamiSourcePrompt({ campaign, targetCount, query }) {
   const segment = campaignSegment(campaign.segment_key, campaign.campaign_type);
   const defaultQuery =
     campaign.campaign_type === "investor"
-      ? `${targetCount} pre-seed and seed investors who invest in AI, applied software, B2B SaaS, automation or LATAM/emerging markets. Prioritize people/firms open to founder pitches or cold email.`
+      ? `${targetCount} pre-seed and seed investors who invest in applied AI, AI implementation, B2B SaaS, vertical software, automation, CRM/workflow software, emerging markets, LATAM, Colombia, SMB digitization or AI services becoming software. Prioritize people/firms open to founder pitches, inbound deals, startup submissions, AI infrastructure/application theses and cold email.`
       : `${targetCount} LATAM companies likely to need AI implementation, CRM automation, sales ops, data integration or internal software consulting.`;
   const regionHint = campaign.target_region === "usa" ? "USA, especially California and major tech hubs" : campaign.target_region === "europe" ? "Europe" : campaign.target_region === "latam" ? "Latin America" : "USA, LATAM and Europe";
   return [
@@ -2275,6 +2285,9 @@ function origamiSourcePrompt({ campaign, targetCount, query }) {
     "Tecnotitan context:",
     "- Colombian applied technology company building practical AI implementation, CRM, sales automation, integrations and internal software.",
     "- Investor pitch: AI implementation platform for LATAM.",
+    "- Core premise: companies in LATAM do not need more slideware; they need operating systems that turn sales, marketing, support and internal workflows into measurable AI-powered execution.",
+    "- Strong fit investors: pre-seed/seed, AI applications, B2B SaaS, vertical SaaS, future of work, automation, SMB software, emerging markets, LATAM, Colombia, founder-led operators, angels with AI/software background.",
+    "- Avoid weak fit: late-stage-only funds, biotech-only, consumer-only, crypto-only unless they explicitly invest in AI or B2B software, investors who discourage unsolicited pitches.",
     "- Consulting pitch: convert manual workflows and scattered data into working systems.",
     "",
     `Campaign name: ${campaign.name}`,
@@ -2288,6 +2301,12 @@ function origamiSourcePrompt({ campaign, targetCount, query }) {
     "- invests in AI, B2B SaaS, automation, emerging markets, LATAM, seed or pre-seed;",
     "- accepts cold email, founder submissions, startup pitches, inbound deals or has a public pitch email/form;",
     "- role is relevant: partner, investor, principal, angel, founder, corporate development, accelerator lead.",
+    "- has public thesis or portfolio overlap with applied AI, operational software, sales automation, workflow automation, vertical SaaS, Colombian/LATAM startups or AI implementation.",
+    "",
+    "Quality bar:",
+    "- Prefer fewer but stronger leads over filling the list with generic investors.",
+    "- A lead is campaign-ready only if cold_email_fit is high or medium and pitch_policy is not no_unsolicited.",
+    "- If you find official pitch emails like pitch@, deals@, startups@, submissions@, investment@, use those when they are the right channel.",
     "",
     "Return at most the requested number of leads. Include exactly one JSON object between these markers:",
     "BEGIN_TECNOTITAN_ORIGAMI_SOURCE_JSON",
@@ -2669,15 +2688,18 @@ async function sourceLeadsWithOrigami(user, campaign, body = {}) {
 async function prepareCampaignWarehouse(user, body = {}) {
   requireCampaignAdmin(user);
   const campaignId = String(body.campaign_id || "").trim();
-  const targetQueue = clampNumber(body.target_queue || body.target_per_campaign, 1, 1000, 250);
-  const sourceMix = String(body.source_mix || "balanced").toLowerCase();
-  const balancedApolloTarget = sourceMix === "balanced" ? Math.floor(targetQueue / 2) : 50;
-  const balancedOrigamiTarget = sourceMix === "balanced" ? targetQueue - balancedApolloTarget : 50;
-  const searchBatches = clampNumber(body.search_batches, 0, 20, Math.ceil(balancedApolloTarget / 25));
+  const targetQueue = clampNumber(body.target_queue || body.target_per_campaign, 1, 1000, 500);
+  const sourceMix = String(body.source_mix || "origami_primary").toLowerCase();
+  const isOrigamiPrimary = ["origami_primary", "origami-first", "origami_first"].includes(sourceMix);
+  const balancedApolloTarget = sourceMix === "balanced" ? Math.floor(targetQueue / 2) : isOrigamiPrimary ? 500 : 50;
+  const balancedOrigamiTarget = sourceMix === "balanced" ? targetQueue - balancedApolloTarget : isOrigamiPrimary ? 500 : 50;
+  const apolloSourceCount = clampNumber(body.apollo_source_count, 0, 1000, balancedApolloTarget);
+  const searchBatches = clampNumber(body.search_batches, 0, 40, Math.ceil(apolloSourceCount / 25));
   const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
   const analyzeLimit = clampNumber(body.analyze_limit, 0, 75, 25);
   const useOrigamiSourcing = body.origami_sourcing !== false;
   const origamiSourceCount = clampNumber(body.origami_source_count, 0, 500, balancedOrigamiTarget);
+  const queueBatch = clampNumber(body.queue_batch, 1, 500, isOrigamiPrimary ? 500 : 100);
   const refreshedOrigami = await refreshOrigamiSourceSearches(user, 5).catch(() => []);
   const campaignFilters = [
     "select=*",
@@ -2736,7 +2758,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
     const afterAnalysis = await campaignRecipientSummary(campaign.id);
     const queueMissing = Math.max(0, targetQueue - Number(afterAnalysis.queued || 0) - Number(afterAnalysis.sent || 0));
     if (queueMissing > 0) {
-      queued = await addCampaignRecipients(user, campaign, Math.min(25, queueMissing), campaign.start_at ? new Date(campaign.start_at) : new Date()).catch(() => 0);
+      queued = await addCampaignRecipients(user, campaign, Math.min(queueBatch, queueMissing), campaign.start_at ? new Date(campaign.start_at) : new Date()).catch(() => 0);
     }
     const after = await campaignRecipientSummary(campaign.id);
     results.push({
@@ -2744,8 +2766,9 @@ async function prepareCampaignWarehouse(user, body = {}) {
       name: campaign.name,
       target_queue: targetQueue,
       source_mix: sourceMix,
-      apollo_target: searchBatches * 25,
+      apollo_target: apolloSourceCount,
       origami_target: origamiSourceCount,
+      queue_batch: queueBatch,
       searches,
       origami_sourced: origamiSourced,
       origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
@@ -3561,7 +3584,15 @@ module.exports = async function handler(req, res) {
         res.status(401).json({ error: "Cron no autorizado." });
         return;
       }
-      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), { target_queue: 500, source_mix: "balanced", reveal_limit: 25, analyze_limit: 50 }));
+      res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), {
+        target_queue: 500,
+        source_mix: "origami_primary",
+        origami_source_count: 500,
+        apollo_source_count: 500,
+        reveal_limit: 25,
+        analyze_limit: 50,
+        queue_batch: 500,
+      }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

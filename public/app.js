@@ -2612,12 +2612,14 @@ async function prepareWarehouse(options = {}) {
       body: JSON.stringify({
         action: "prepare_warehouse",
         target_queue: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
-        source_mix: options.origamiOnly ? "origami" : "balanced",
-        search_batches: options.origamiOnly ? 0 : 10,
+        source_mix: options.origamiOnly ? "origami" : "origami_primary",
+        search_batches: options.origamiOnly ? 0 : 20,
         reveal_limit: options.origamiOnly ? 0 : 25,
         analyze_limit: options.origamiOnly ? 25 : 50,
         origami_sourcing: true,
-        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 250,
+        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
+        apollo_source_count: options.origamiOnly ? 0 : 500,
+        queue_batch: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
         origami_source_query: options.origamiOnly ? elements.origamiSourceQuery?.value.trim() : "",
       }),
     });
