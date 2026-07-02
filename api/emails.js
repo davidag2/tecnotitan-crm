@@ -188,6 +188,8 @@ const WARMUP_STAGE_DAYS = 7;
 const BOUNCE_CONTROL_MIN_SENT = 20;
 const BOUNCE_THROTTLE_RATE = 0.03;
 const BOUNCE_PAUSE_RATE = 0.05;
+const DAILY_QUOTA_START_DATE = "2026-07-03";
+const DAILY_QUOTA_PREFIX = "Tecnotitan Daily Quota";
 
 const CAMPAIGN_SEGMENTS = {
   all_investors: {
@@ -244,6 +246,28 @@ function campaignSegment(key, campaignType = "investor") {
     };
   }
   return CAMPAIGN_SEGMENTS[key] || CAMPAIGN_SEGMENTS.all_investors;
+}
+
+function localDateKey(date = new Date(), timeZone = "America/Bogota") {
+  const parts = zonedParts(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function localDateTimeIso(dateKey, hour, minute = 0) {
+  return `${dateKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function nextLocalDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+}
+
+function dailyQuotaTargetDateKey({ tomorrow = false } = {}) {
+  const today = localDateKey(new Date(), "America/Bogota");
+  if (today < DAILY_QUOTA_START_DATE) return DAILY_QUOTA_START_DATE;
+  const base = today;
+  return tomorrow ? nextLocalDateKey(base) : base;
 }
 
 function hasClearSignature(text) {
@@ -1996,7 +2020,7 @@ async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCo
   let pool = await campaignLeadPool(campaignType, targetRegion);
   let searches = 0;
   const templateKeys = campaignTemplateKeys(campaignType, targetRegion, segmentKey, searchTemplates);
-  const maxSearches = Math.min(40, Math.ceil(Math.max(0, desiredCount - pool.length) / 25));
+  const maxSearches = Math.min(40, Math.max(4, Math.ceil(Math.max(0, desiredCount - pool.length) / 25)));
   while (pool.length < desiredCount && searches < maxSearches) {
     const templateKey = templateKeys[searches % templateKeys.length] || "consulting_client:latam";
     searches += 1;
@@ -2010,7 +2034,7 @@ async function buildCampaignLeadPool(user, campaignType, targetRegion, desiredCo
 
   if (pool.length >= desiredCount) return pool.slice(0, desiredCount);
 
-  const candidates = await campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, desiredCount * 2);
+  const candidates = await campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, desiredCount * 3);
   for (const candidate of candidates) {
     if (pool.length >= desiredCount) break;
     const enriched = await revealCampaignLeadEmail(candidate).catch(() => null);
@@ -2051,7 +2075,7 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
     user,
     campaign.campaign_type,
     campaign.target_region,
-    Math.min(count * 3, 100),
+    Math.min(Math.max(count * 5, 100), 250),
     campaign.segment_key,
     campaign.search_templates
   );
@@ -2753,6 +2777,112 @@ async function prepareCampaignWarehouse(user, body = {}) {
   }
 
   return { prepared_at: new Date().toISOString(), campaigns: results };
+}
+
+function dailyQuotaTemplates(type) {
+  if (type === "investor") {
+    return {
+      subject: "Tecnotitan | AI implementation platform for LATAM",
+      body:
+        "Hi {{primer_nombre}},\n\nI am David Arias, founder of Tecnotitan. We are building an applied technology company from Colombia for companies that need AI implementation, not more slideware.\n\nAcross Latin America, many companies have manual workflows, scattered data and pressure to adopt AI without the internal product capacity to turn ideas into working systems.\n\nTecnotitan starts with paid implementation work, captures repeated use cases and turns them into reusable software, operating playbooks and sector knowledge. The model is service revenue today, scalable SaaS and licensing tomorrow.\n\nWe are raising a US$500K pre-seed to fund paid pilots, product engineering and a repeatable AI delivery platform.\n\nI noticed your connection to {{industria}} in {{pais}} and thought Tecnotitan could be relevant to your view on AI, B2B software and emerging markets.\n\nIf this is close to your investment focus, I would be glad to send the deck or schedule a 20-minute conversation.\n\nBest regards,\nDavid Arias\nFounder, Tecnotitan\ntecnotitan.com",
+    };
+  }
+  return {
+    subject: "Ideas de automatizacion para {{empresa}}",
+    body:
+      "Hola {{primer_nombre}},\n\nSoy David Arias, fundador de Tecnotitan. Vi que {{empresa}} trabaja en {{industria}} en {{pais}} y creo que podria existir una oportunidad concreta para mejorar procesos comerciales u operativos con software, automatizacion e IA aplicada.\n\nTecnotitan ayuda a empresas en America Latina a convertir tareas repetitivas, datos dispersos y flujos manuales en sistemas internos mas claros, medibles y escalables.\n\nSi tiene sentido para ti, puedo compartirte 2 o 3 ideas especificas para {{empresa}} en una llamada breve de 15 minutos.\n\nSaludos,\nDavid Arias\nFundador, Tecnotitan\ntecnotitan.com",
+  };
+}
+
+async function archiveCampaignsExcept(user, keepNames = []) {
+  requireCampaignAdmin(user);
+  const keep = new Set(keepNames);
+  const { payload } = await supabaseFetch("/email_campaigns?select=id,name,status&limit=1000");
+  const rows = (payload || []).filter((campaign) => !keep.has(campaign.name) && campaign.status !== "archived");
+  let archived = 0;
+  for (const campaign of rows) {
+    await updateRows(
+      "email_campaigns",
+      { status: "archived", updated_at: new Date().toISOString() },
+      `id=eq.${encodeURIComponent(campaign.id)}`
+    ).catch(() => null);
+    archived += 1;
+  }
+  return archived;
+}
+
+async function findCampaignByName(name) {
+  const { payload } = await supabaseFetch(
+    `/email_campaigns?select=*&name=eq.${encodeURIComponent(name)}&limit=1`
+  );
+  return payload?.[0] || null;
+}
+
+async function ensureDailyQuotaCampaign(user, spec, dateKey) {
+  const name = `${DAILY_QUOTA_PREFIX} ${dateKey} - ${spec.label}`;
+  const existing = await findCampaignByName(name);
+  if (existing) {
+    if (existing.status !== "active") {
+      await updateRows("email_campaigns", { status: "active", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(existing.id)}`);
+    }
+    const counts = await campaignCounts(existing.id);
+    const missing = Math.max(0, 50 - Number(counts.queued || 0) - Number(counts.sent || 0));
+    if (missing > 0) {
+      await addCampaignRecipients(user, { ...existing, status: "active" }, missing, parseScheduleDate(localDateTimeIso(dateKey, 7), "America/Bogota"));
+    }
+    return { ...existing, status: "active", counts: await campaignCounts(existing.id), created: false, name };
+  }
+
+  const template = dailyQuotaTemplates(spec.type);
+  const campaign = await createCampaign(user, {
+    name,
+    campaign_type: spec.type,
+    sender_key: spec.sender,
+    segment_key: spec.segment,
+    target_region: spec.region,
+    daily_limit: 50,
+    queue_size: 50,
+    max_recipients: 50,
+    initial_queue_size: 50,
+    batch_size: 5,
+    min_delay_minutes: 5,
+    max_delay_minutes: 10,
+    start_at: localDateTimeIso(dateKey, 7),
+    end_at: localDateTimeIso(dateKey, 23, 30),
+    schedule_timezone: "America/Bogota",
+    send_window_start_minutes: 7 * 60,
+    send_window_end_minutes: 17 * 60 + 45,
+    subject_template: template.subject,
+    body_template: template.body,
+    followup_enabled: true,
+    attach_investor_deck: false,
+  });
+  return { ...campaign, created: true, name };
+}
+
+async function ensureDailyQuotaCampaigns(user, options = {}) {
+  requireCampaignAdmin(user);
+  const dateKey = String(options.date_key || "").trim() || dailyQuotaTargetDateKey({ tomorrow: Boolean(options.tomorrow) });
+  const specs = [
+    { label: "Investors", type: "investor", sender: "investors", segment: "all_investors", region: "" },
+    { label: "Consultoria", type: "consulting_client", sender: "consulting", segment: "consulting_latam", region: "latam" },
+  ];
+  const keepNames = specs.map((spec) => `${DAILY_QUOTA_PREFIX} ${dateKey} - ${spec.label}`);
+  const archived = await archiveCampaignsExcept(user, keepNames);
+  const campaigns = [];
+  for (const spec of specs) {
+    campaigns.push(await ensureDailyQuotaCampaign(user, spec, dateKey));
+  }
+  return {
+    ok: true,
+    mode: "daily_quota_50_50",
+    date_key: dateKey,
+    archived_campaigns: archived,
+    target_total: 100,
+    target_investors: 50,
+    target_consulting: 50,
+    campaigns,
+  };
 }
 
 async function createCampaign(user, body) {
@@ -3533,6 +3663,19 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  if (req.method === "GET" && req.query.cron === "daily_quota") {
+    try {
+      if (!isAuthorizedCron(req)) {
+        res.status(401).json({ error: "Cron no autorizado." });
+        return;
+      }
+      res.status(200).json(await ensureDailyQuotaCampaigns(systemCampaignUser()));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
   if (req.method === "GET" && req.query.cron === "warehouse") {
     try {
       if (!isAuthorizedCron(req)) {
@@ -3589,6 +3732,10 @@ module.exports = async function handler(req, res) {
       }
       if (req.body?.action === "prepare_warehouse") {
         res.status(200).json(await prepareCampaignWarehouse(user, req.body));
+        return;
+      }
+      if (req.body?.action === "activate_daily_quota") {
+        res.status(200).json(await ensureDailyQuotaCampaigns(user, { tomorrow: req.body.tomorrow !== false, date_key: req.body.date_key }));
         return;
       }
       if (req.body?.action === "update_campaign_status") {

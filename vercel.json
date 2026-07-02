@@ -9,6 +9,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/emails?cron=daily_quota",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/emails?cron=warehouse",
       "schedule": "0 14,19 * * *"
     }
