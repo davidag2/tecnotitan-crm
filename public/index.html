@@ -52,7 +52,6 @@
           <a href="#correos" data-tab="correos">Correos</a>
           <a class="admin-only role-hidden" href="#campanas" data-tab="campanas">Campanas</a>
           <a href="#apollo" data-tab="apollo">Apollo</a>
-          <a class="admin-only role-hidden" href="#origami" data-tab="origami">Origami</a>
           <a class="admin-only role-hidden" href="#busquedas" data-tab="busquedas">Busquedas</a>
           <a class="admin-only role-hidden" href="#usuarios" data-tab="usuarios">Usuarios</a>
           <a href="#pipeline" data-tab="pipeline">Pipeline</a>
@@ -258,20 +257,9 @@
                 <div class="warehouse-header">
                   <div>
                     <h3>Warehouse de leads</h3>
-                    <p>Prepara leads antes de la campana: Apollo, email, Origami y cola lista para envio.</p>
+                    <p>Prepara leads antes de la campana: Apollo, revelado de email y cola lista para envio.</p>
                   </div>
                   <button id="prepare-warehouse-button" class="secondary" type="button">Preparar bodega</button>
-                </div>
-                <div class="origami-sourcing-box">
-                  <div>
-                    <strong>Origami sourcing</strong>
-                    <p>Pide leads nuevas por inteligencia, ejemplo: inversionistas pre-seed en California abiertos a cold pitch AI.</p>
-                  </div>
-                  <div class="origami-sourcing-controls">
-                    <input id="origami-source-count" type="number" min="1" max="500" value="250" aria-label="Cantidad Origami">
-                    <input id="origami-source-query" type="text" value="pre-seed investors in California open to cold AI founder pitches" aria-label="Consulta Origami">
-                    <button id="origami-source-button" class="secondary" type="button">Sourcing Origami</button>
-                  </div>
                 </div>
                 <span id="warehouse-status"></span>
                 <div id="lead-inventory">
@@ -336,97 +324,6 @@
             <button id="create-user" type="button">Crear usuario</button>
           </div>
           <div class="user-list" id="user-list"></div>
-        </section>
-
-        <section class="panel admin-only role-hidden tab-panel" id="origami-panel" data-tab-panel="origami">
-          <nav class="origami-section-nav" aria-label="Secciones Origami">
-            <button class="active" type="button" data-origami-section="intelligence">Inteligencia Origami</button>
-            <button type="button" data-origami-section="performance">Panel de Performance</button>
-            <button type="button" data-origami-section="personal">Buscador personal</button>
-            <button type="button" data-origami-section="jobs">Buscador de empleo</button>
-          </nav>
-
-          <section class="origami-section active" data-origami-section-panel="intelligence">
-            <div class="panel-title">
-              <span class="section-label">Seccion 1</span>
-              <h2>Inteligencia Origami</h2>
-              <p>Motor de investigacion para detectar senales, cold email fit y redactar correos personalizados.</p>
-            </div>
-            <div class="origami-overview">
-              <article>
-                <strong id="origami-config-status">Origami pendiente</strong>
-                <span>Configura ORIGAMI_API_KEY en Vercel para activar el analisis de leads.</span>
-              </article>
-              <article>
-                <strong>Uso recomendado</strong>
-                <span>Analiza primero leads Hot o inversionistas prioritarios antes de enviarlos a campana.</span>
-              </article>
-              <article>
-                <strong>Senales clave</strong>
-                <span>Apertura a cold email, tesis/foco, empresa, etapa, angulo de personalizacion y riesgo.</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="origami-section" data-origami-section-panel="performance">
-            <div class="panel-title">
-              <span class="section-label">Seccion 2</span>
-              <h2>Panel de Performance</h2>
-              <p>Metricas para entender que tan bien funciona Origami en aprobacion, canales y respuestas.</p>
-            </div>
-            <div class="origami-performance" id="origami-performance"></div>
-          </section>
-
-          <section class="origami-section origami-search-tool" data-origami-section-panel="personal">
-            <div class="panel-title">
-              <span class="section-label">Seccion 3</span>
-              <h2>Buscador personal</h2>
-              <p>Busca una persona por nombre, empresa o LinkedIn antes de crearla como lead.</p>
-            </div>
-            <div class="origami-search-form">
-              <input id="origami-person-name" type="text" placeholder="Nombre de la persona">
-              <input id="origami-person-company" type="text" placeholder="Empresa o fondo">
-              <input id="origami-person-linkedin" type="url" placeholder="LinkedIn opcional">
-              <select id="origami-person-purpose">
-                <option value="investor">Inversionista / pitch</option>
-                <option value="consulting">Consultoria B2B</option>
-                <option value="lead_research">Investigacion general</option>
-              </select>
-              <textarea id="origami-person-notes" rows="3" placeholder="Notas opcionales: pais, contexto, por que te interesa, posible angulo"></textarea>
-              <button id="origami-person-search-button" type="button">Buscar con Origami</button>
-            </div>
-            <span id="origami-person-search-status"></span>
-            <div class="origami-search-results" id="origami-person-search-results">
-              <p class="empty">No hay busquedas personales todavia.</p>
-            </div>
-          </section>
-
-          <section class="origami-section origami-search-tool" data-origami-section-panel="jobs">
-            <div class="panel-title">
-              <span class="section-label">Seccion 4</span>
-              <h2>Buscador de empleo</h2>
-              <p>Encuentra vacantes, empresas, reclutadores, emails de HR, LinkedIn y mensajes personalizados.</p>
-            </div>
-            <div class="origami-search-form">
-              <input id="origami-job-role" type="text" placeholder="Cargo objetivo, ejemplo: analista de datos">
-              <input id="origami-job-locations" type="text" placeholder="Ubicaciones, ejemplo: Colombia, remoto, USA">
-              <input id="origami-job-keywords" type="text" placeholder="Keywords: Python, ventas, soporte, IA">
-              <select id="origami-job-seniority">
-                <option value="">Seniority opcional</option>
-                <option value="junior">Junior</option>
-                <option value="mid">Mid-level</option>
-                <option value="senior">Senior</option>
-                <option value="entry_level">Entry level</option>
-              </select>
-              <textarea id="origami-job-profile" rows="3" placeholder="Perfil de Oscar: experiencia, estudios, habilidades, idiomas"></textarea>
-              <textarea id="origami-job-notes" rows="3" placeholder="Notas opcionales: tipo de empresa, salario, modalidad, restricciones"></textarea>
-              <button id="origami-job-search-button" type="button">Buscar empleos con Origami</button>
-            </div>
-            <span id="origami-job-search-status"></span>
-            <div class="origami-search-results" id="origami-job-search-results">
-              <p class="empty">No hay busquedas laborales todavia.</p>
-            </div>
-          </section>
         </section>
 
         <section class="panel tab-panel" id="apollo" data-tab-panel="apollo">
@@ -598,7 +495,7 @@
         <section class="panel tab-panel" id="revision-manual-panel" data-tab-panel="revision">
           <div class="panel-title">
             <h2>Revision manual</h2>
-            <p>Leads que Origami dejo con low, unknown, formulario obligatorio o senales debiles antes de campana.</p>
+            <p>Leads que requieren validacion humana antes de entrar a una campana.</p>
           </div>
           <div class="lead-list" id="manual-review">
             <p class="empty">No hay leads pendientes de revision manual.</p>
@@ -722,20 +619,6 @@
           </article>
 
         <article class="detail-notes">
-          <div class="origami-detail-header">
-            <div>
-              <h3>Inteligencia Origami</h3>
-              <p>Investiga la lead y genera un correo personalizado con senales publicas.</p>
-            </div>
-            <div class="origami-actions">
-              <button id="analyze-origami" type="button">Analizar con Origami</button>
-              <button id="refresh-origami" class="secondary" type="button">Actualizar</button>
-            </div>
-          </div>
-          <div id="detail-origami"></div>
-        </article>
-
-        <article class="detail-notes">
           <h3>Historial de pipeline</h3>
           <div id="detail-pipeline-events"></div>
         </article>
@@ -771,19 +654,6 @@
         <article class="detail-notes">
           <h3>Contactos asociados</h3>
           <div id="company-detail-contacts"></div>
-        </article>
-
-        <article class="detail-notes">
-          <div class="origami-detail-header">
-            <div>
-              <h3>Inteligencia Origami de empresa</h3>
-              <p>Analiza la empresa o firma completa: mercado, dolores, señales comerciales y mejor abordaje.</p>
-            </div>
-            <div class="origami-actions">
-              <button id="analyze-company-origami" type="button">Analizar empresa</button>
-            </div>
-          </div>
-          <div id="company-detail-origami"></div>
         </article>
 
         <article class="detail-notes">

@@ -513,6 +513,8 @@ async function refreshOpportunity(id, user) {
 async function handler(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
+  res.status(410).json({ configured: false, error: "Origami esta desactivado. Apollo es la fuente unica de leads." });
+  return;
 
   try {
     const id = getOpportunityId(req);
@@ -546,4 +548,6 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports.analyzeOpportunity = analyzeOpportunity;
+module.exports.analyzeOpportunity = async function disabledOrigamiAnalysis() {
+  throw new Error("Origami esta desactivado. Apollo es la fuente unica de leads.");
+};

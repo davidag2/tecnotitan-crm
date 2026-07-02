@@ -167,6 +167,8 @@ function buildPerformance({ recipients, opportunities, since }) {
 module.exports = async function handler(req, res) {
   const user = requireAdmin(req, res);
   if (!user) return;
+  res.status(410).json({ error: "Origami esta desactivado. Apollo es la fuente unica de leads." });
+  return;
 
   try {
     const days = Math.max(7, Math.min(180, Number(req.query.days || 90)));

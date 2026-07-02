@@ -2358,9 +2358,6 @@ function campaignReadinessDashboard(campaigns = []) {
       const minQueue = Number(preflight.min_queue || 0);
       const queued = Number(counts.queued || 0);
       const inventory = Number(preflight.approved_inventory || 0);
-      const origamiIssue = [...(preflight.issues || []), ...(preflight.warnings || [])].some((item) =>
-        /origami|inventario aprobado/i.test(`${item.label || ""} ${item.detail || ""}`)
-      );
       const nextSend = counts.next_scheduled_at ? new Date(counts.next_scheduled_at).toLocaleString("es-CO") : "Sin fecha";
       const domainOk = Number(warmup.remaining_today ?? preflight.warmup_remaining_today ?? 0) > 0;
       return `
@@ -2375,8 +2372,8 @@ function campaignReadinessDashboard(campaigns = []) {
           <div class="readiness-grid">
             ${readinessPill("Lista", preflight.status === "ready" ? "Si" : "No", readinessTone(preflight.status === "ready", preflight.status === "warning"))}
             ${readinessPill("Cola", `${queued}/${minQueue}`, readinessTone(queued >= minQueue, queued > 0))}
-            ${readinessPill("Inventario", `${inventory} aprobadas`, readinessTone(inventory + queued >= minQueue, inventory > 0))}
-            ${readinessPill("Origami", origamiIssue ? "Pendiente" : "OK", readinessTone(!origamiIssue, inventory > 0))}
+            ${readinessPill("Inventario", `${inventory} listas`, readinessTone(inventory + queued >= minQueue, inventory > 0))}
+            ${readinessPill("Apollo", inventory > 0 ? "OK" : "Sin cola", readinessTone(inventory > 0 || queued > 0, queued > 0))}
             ${readinessPill("Dominio", domainOk ? "Sano" : "Sin cupo", readinessTone(domainOk, true))}
             ${readinessPill("Proximo", nextSend, readinessTone(Boolean(counts.next_scheduled_at), true))}
           </div>
@@ -2389,7 +2386,7 @@ function campaignReadinessDashboard(campaigns = []) {
       <header>
         <div>
           <h3>Preparacion de campanas</h3>
-          <p>Semaforo operativo antes de enviar: cola, inventario aprobado, Origami, dominio y proximo envio.</p>
+          <p>Semaforo operativo antes de enviar: cola, inventario Apollo, dominio y proximo envio.</p>
         </div>
         <div class="readiness-summary">
           <span class="ready">${ready} listas</span>
@@ -2586,10 +2583,10 @@ function renderLeadInventory(inventory = state.leadInventory) {
   const alertClass = totals.status === "listo" ? "is-ready" : totals.status === "bajo" ? "is-low" : "is-empty";
   const statusCopy =
     totals.status === "sin_inventario"
-      ? "No hay leads aprobadas por Origami para envio automatico."
+      ? "No hay leads con email valido listas para envio automatico."
       : totals.status === "bajo"
-        ? "Hay pocas leads aprobadas por Origami; conviene analizar mas antes de una campana grande."
-        : "Hay leads con email y aprobacion Origami listas para entrar en campanas.";
+        ? "Hay pocas leads con email valido; conviene traer mas desde Apollo antes de una campana grande."
+        : "Hay leads Apollo con email valido listas para entrar en campanas.";
 
   elements.leadInventory.innerHTML = `
     <div class="inventory-status ${alertClass}">
@@ -2603,8 +2600,6 @@ function renderLeadInventory(inventory = state.leadInventory) {
       <article><b>${totals.sent_tagged}</b><span>Correo enviado</span></article>
       <article><b>${totals.blocked}</b><span>No contactar</span></article>
       <article><b>${totals.bounced_or_suppressed}</b><span>Rebote/suprimido</span></article>
-      <article><b>${totals.origami_pending || 0}</b><span>Pendiente Origami</span></article>
-      <article><b>${totals.origami_rejected || 0}</b><span>No apta Origami</span></article>
     </div>
     <div class="inventory-breakdown">
       ${focusRows
@@ -2612,7 +2607,7 @@ function renderLeadInventory(inventory = state.leadInventory) {
           (item) => `
             <div>
               <strong>${item.label}</strong>
-              <span>${item.available_for_campaign} aptas | ${item.with_email} con email | ${item.origami_pending || 0} pendientes Origami</span>
+              <span>${item.available_for_campaign} listas | ${item.with_email} con email | ${item.blocked || 0} bloqueadas</span>
             </div>
           `
         )
@@ -2627,36 +2622,30 @@ function renderLeadInventory(inventory = state.leadInventory) {
 
 async function prepareWarehouse(options = {}) {
   if (!elements.prepareWarehouseButton) return;
-  const button = options.origamiOnly ? elements.origamiSourceButton : elements.prepareWarehouseButton;
+  const button = elements.prepareWarehouseButton;
   const originalText = button?.textContent || "";
   if (button) {
     button.disabled = true;
-    button.textContent = options.origamiOnly ? "Buscando..." : "Preparando...";
+    button.textContent = "Preparando...";
   }
   if (elements.warehouseStatus) {
-    elements.warehouseStatus.textContent = options.origamiOnly
-      ? "Origami esta buscando leads nuevas y creando inventario inteligente..."
-      : "Warehouse trabajando: Apollo, emails, Origami y cola de campana...";
+    elements.warehouseStatus.textContent = "Warehouse trabajando: Apollo, revelado de emails y cola de campana...";
   }
   try {
     const result = await api("/api/emails", {
       method: "POST",
       body: JSON.stringify({
         action: "prepare_warehouse",
-        target_queue: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
-        source_mix: options.origamiOnly ? "origami" : "origami_primary",
-        search_batches: options.origamiOnly ? 0 : 20,
-        reveal_limit: options.origamiOnly ? 0 : 25,
-        analyze_limit: options.origamiOnly ? 25 : 50,
-        origami_sourcing: true,
-        origami_source_count: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
-        apollo_source_count: options.origamiOnly ? 0 : 500,
-        queue_batch: options.origamiOnly ? Number(elements.origamiSourceCount?.value || 250) : 500,
-        origami_source_query: options.origamiOnly ? elements.origamiSourceQuery?.value.trim() : "",
+        target_queue: 500,
+        source_mix: "apollo",
+        search_batches: 20,
+        reveal_limit: 25,
+        apollo_source_count: 500,
+        queue_batch: 500,
       }),
     });
     const summary = (result.campaigns || [])
-      .map((item) => `${item.name}: plan ${item.apollo_target || 0} Apollo / ${item.origami_target || 0} Origami, ${item.analyzed_with_email || 0} emails a Origami, +${item.queued_added || 0} en cola`)
+      .map((item) => `${item.name}: plan ${item.apollo_target || 0} Apollo, ${item.searches || 0} busquedas, ${item.revealed || 0} emails revelados, +${item.queued_added || 0} en cola`)
       .join(" | ");
     if (elements.warehouseStatus) elements.warehouseStatus.textContent = summary || "Warehouse actualizado.";
     const [inventory, campaigns] = await Promise.all([
@@ -4595,10 +4584,7 @@ async function loadPublicData() {
   const templates = await api("/api/templates");
   const status = templates;
   state.templates = templates.templates;
-  state.origamiConfigured = Boolean(status.origamiConfigured);
-  if (elements.origamiConfigStatus) {
-    elements.origamiConfigStatus.textContent = state.origamiConfigured ? "Origami conectado" : "Origami pendiente";
-  }
+  state.origamiConfigured = false;
   renderTemplates();
   renderMessageTemplates();
 
@@ -4623,7 +4609,7 @@ async function loadPrivateData() {
 
   try {
     showApp();
-    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, origamiSearches, origamiJobs, origamiPerformance, statistics] = await Promise.all([
+    const [dashboard, leads, users, followups, searchHistory, emails, campaigns, exclusions, inventory, statistics] = await Promise.all([
       api("/api/dashboard"),
       api(`/api/leads${leadFilterQuery()}`),
       api("/api/users").catch(() => ({ users: [] })),
@@ -4633,9 +4619,6 @@ async function loadPrivateData() {
       api("/api/emails?mode=campaigns").catch(() => ({ campaigns: [] })),
       api("/api/emails?mode=exclusions").catch(() => ({ exclusions: [] })),
       api("/api/emails?mode=lead_inventory").catch(() => ({ inventory: null })),
-      api("/api/origami-search").catch(() => ({ searches: [] })),
-      api("/api/origami-jobs").catch(() => ({ searches: [] })),
-      api("/api/origami-performance").catch(() => null),
       api("/api/statistics").catch(() => null),
     ]);
     state.currentUser = dashboard.user;
@@ -4647,9 +4630,9 @@ async function loadPrivateData() {
     state.emailWarmups = campaigns.warmups || [];
     state.emailExclusions = exclusions.exclusions || [];
     state.leadInventory = inventory.inventory || null;
-    state.origamiPeopleSearches = origamiSearches.searches || [];
-    state.origamiJobSearches = origamiJobs.searches || [];
-    state.origamiPerformance = origamiPerformance;
+    state.origamiPeopleSearches = [];
+    state.origamiJobSearches = [];
+    state.origamiPerformance = null;
     state.statistics = statistics;
     const leadRows = leads.leads || [];
     const collections = splitLeadCollections(leadRows);
@@ -4669,9 +4652,6 @@ async function loadPrivateData() {
     renderWarmups(state.emailWarmups);
     renderExclusions(state.emailExclusions);
     renderStatistics(state.statistics);
-    renderOrigamiPerformance(state.origamiPerformance);
-    renderOrigamiPeopleSearches();
-    renderOrigamiJobSearches();
     applyRoleVisibility();
     setStatus("Conectado a Supabase y Apollo desde Vercel.", "ok");
   } catch (error) {

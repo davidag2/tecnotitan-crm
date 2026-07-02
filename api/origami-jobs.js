@@ -208,6 +208,8 @@ async function refreshSearch(id) {
 module.exports = async function handler(req, res) {
   const user = requireAdmin(req, res);
   if (!user) return;
+  res.status(410).json({ configured: false, searches: [], error: "Origami esta desactivado. Apollo es la fuente unica de leads." });
+  return;
   try {
     if (req.method === "GET") {
       res.status(200).json({ configured: origamiConfigured(), searches: await listSearches() });

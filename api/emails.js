@@ -1,10 +1,9 @@
 const { requireUser } = require("./_auth");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
-const { createAgentRun, getRun, origamiConfigured, sourceTableId } = require("./_origami");
 const { scoreLead } = require("./_scoring");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
 const { runApolloSearch } = require("./apollo-search");
-const { analyzeOpportunity } = require("./origami");
+const { createAgentRun, getRun, origamiConfigured, sourceTableId } = require("./_origami");
 const crypto = require("crypto");
 const dns = require("dns").promises;
 const fs = require("fs");
@@ -1776,32 +1775,7 @@ function inventoryStatus(bucket) {
 }
 
 function origamiCampaignApproval(opportunity = {}) {
-  const profile = opportunity.origami_profile || {};
-  const status = String(opportunity.origami_status || "").toLowerCase();
-  const coldEmailFit = String(profile.cold_email_fit || "unknown").toLowerCase();
-  const recommendedChannel = String(profile.recommended_channel || "manual_review").toLowerCase();
-  const pitchPolicy = String(profile.pitch_policy || "unknown").toLowerCase();
-  const acceptsColdEmail = String(profile.accepts_cold_email || "unknown").toLowerCase();
-  const acceptsPitches = String(profile.accepts_pitches || "unknown").toLowerCase();
-  const acceptsFounderSubmissions = String(profile.accepts_founder_submissions || "unknown").toLowerCase();
-  const acceptsInboundDeals = String(profile.accepts_inbound_deals || "unknown").toLowerCase();
-  const contactRisk = profile.contact_risk || {};
-  const contactRiskLevel = String(contactRisk.level || "unknown").toLowerCase();
-  const issues = [];
-
-  if (status !== "completed") issues.push("Origami no ha aprobado esta lead todavia.");
-  if (!["high", "medium"].includes(coldEmailFit)) issues.push(`Cold email fit no apto: ${coldEmailFit || "unknown"}.`);
-  if (contactRisk.do_not_contact === true || contactRiskLevel === "high") {
-    issues.push(`Origami marco riesgo alto de contacto: ${contactRisk.reason || "no conviene escribir"}.`);
-  }
-  if (acceptsColdEmail === "no") issues.push("Origami detecto que no acepta cold emails.");
-  if ([acceptsPitches, acceptsFounderSubmissions, acceptsInboundDeals].every((value) => value === "no")) {
-    issues.push("Origami no detecto apertura a pitches, submissions ni inbound deals.");
-  }
-  if (recommendedChannel === "manual_review") issues.push("Origami recomienda revision manual antes de enviar.");
-  if (pitchPolicy === "no_unsolicited") issues.push("Origami detecto politica no unsolicited.");
-
-  return { approved: issues.length === 0, issues };
+  return { approved: true, issues: [] };
 }
 
 async function leadInventory(user) {
@@ -1845,10 +1819,7 @@ async function leadInventory(user) {
     const blocked = (email && excludedEmails.has(email)) || noContactTagged || doubtfulTagged || emailStatusLooksRisky(opportunity.contacts?.email_status);
     const bouncedOrSuppressed = email && unhealthyEmails.has(email);
     const duplicateEmail = email && seenOpportunityEmails.has(email);
-    const origamiApproval = origamiCampaignApproval(opportunity);
-    const origamiPending = opportunity.origami_status !== "completed";
-    const origamiRejected = !origamiPending && !origamiApproval.approved;
-    const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail && origamiApproval.approved;
+    const available = hasEmail && !sentTagged && !blocked && !bouncedOrSuppressed && !duplicateEmail;
 
     if (email) seenOpportunityEmails.add(email);
 
@@ -1859,8 +1830,6 @@ async function leadInventory(user) {
       if (sentTagged) bucket.sent_tagged += 1;
       if (blocked) bucket.blocked += 1;
       if (bouncedOrSuppressed) bucket.bounced_or_suppressed += 1;
-      if (origamiPending) bucket.origami_pending += 1;
-      if (origamiRejected) bucket.origami_rejected += 1;
       if (available) bucket.available_for_campaign += 1;
     }
 
@@ -1909,7 +1878,6 @@ async function campaignLeadPool(campaignType, targetRegion) {
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   const seen = new Set();
   return (payload || [])
-    .filter((opportunity) => origamiCampaignApproval(opportunity).approved)
     .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
     .filter((opportunity) => opportunity.contacts?.email)
     .filter((opportunity) => {
@@ -1937,7 +1905,6 @@ async function campaignLeadCandidatesWithoutEmail(campaignType, targetRegion, li
   ].filter(Boolean);
   const { payload } = await supabaseFetch(`/opportunities?${filters.join("&")}`);
   return (payload || [])
-    .filter((opportunity) => origamiCampaignApproval(opportunity).approved)
     .filter((opportunity) => !hasContactTag(opportunity.contacts, "Correo enviado"))
     .filter((opportunity) => !opportunity.contacts?.email)
     .filter((opportunity) => opportunity.contacts?.apollo_enrichment_status !== "not_available");
@@ -2095,21 +2062,6 @@ async function addCampaignRecipients(user, campaign, count, startAt = new Date()
     const email = normalizeEmail(lead.contacts?.email);
     if (!email || existingEmails.has(email) || openEmails.has(email)) continue;
     existingEmails.add(email);
-    const origamiApproval = origamiCampaignApproval(lead);
-    if (!origamiApproval.approved) {
-      blockedRecipients.push({
-        campaign_id: campaign.id,
-        opportunity_id: lead.id,
-        contact_id: lead.contact_id,
-        company_id: lead.company_id,
-        email,
-        status: "skipped",
-        reputation_status: "blocked",
-        reputation_issues: origamiApproval.issues,
-        last_error: origamiApproval.issues.join(" "),
-      });
-      continue;
-    }
     const exclusion = await findExclusion(email);
     if (exclusion) {
       blockedRecipients.push({
@@ -2733,18 +2685,11 @@ async function prepareCampaignWarehouse(user, body = {}) {
   requireCampaignAdmin(user);
   const campaignId = String(body.campaign_id || "").trim();
   const targetQueue = clampNumber(body.target_queue || body.target_per_campaign, 1, 1000, 500);
-  const sourceMix = String(body.source_mix || "origami_primary").toLowerCase();
-  const isOrigamiPrimary = ["origami_primary", "origami-first", "origami_first"].includes(sourceMix);
-  const balancedApolloTarget = sourceMix === "balanced" ? Math.floor(targetQueue / 2) : isOrigamiPrimary ? 500 : 50;
-  const balancedOrigamiTarget = sourceMix === "balanced" ? targetQueue - balancedApolloTarget : isOrigamiPrimary ? 500 : 50;
-  const apolloSourceCount = clampNumber(body.apollo_source_count, 0, 1000, balancedApolloTarget);
+  const sourceMix = "apollo";
+  const apolloSourceCount = clampNumber(body.apollo_source_count || targetQueue, 0, 1000, targetQueue);
   const searchBatches = clampNumber(body.search_batches, 0, 40, Math.ceil(apolloSourceCount / 25));
   const revealLimit = clampNumber(body.reveal_limit, 0, 50, 25);
-  const analyzeLimit = clampNumber(body.analyze_limit, 0, 75, 25);
-  const useOrigamiSourcing = body.origami_sourcing !== false;
-  const origamiSourceCount = clampNumber(body.origami_source_count, 0, 500, balancedOrigamiTarget);
-  const queueBatch = clampNumber(body.queue_batch, 1, 500, isOrigamiPrimary ? 500 : 100);
-  const refreshedOrigami = await refreshOrigamiSourceSearches(user, 5).catch(() => []);
+  const queueBatch = clampNumber(body.queue_batch, 1, 500, 100);
   const campaignFilters = [
     "select=*",
     campaignId ? `id=eq.${encodeURIComponent(campaignId)}` : "status=eq.active",
@@ -2760,23 +2705,8 @@ async function prepareCampaignWarehouse(user, body = {}) {
     const missing = Math.max(0, targetQueue - Number(before.queued || 0) - Number(before.sent || 0));
     let searches = 0;
     let revealed = 0;
-    let analyzed = 0;
-    let analyzedWithEmail = 0;
     let queued = 0;
-    let origamiSourced = 0;
-    let origamiSourceStatus = "skipped";
-    let origamiSourceReason = "";
     const templateKeys = campaignTemplateKeys(campaign.campaign_type, campaign.target_region, campaign.segment_key, campaign.search_templates);
-
-    if (useOrigamiSourcing && origamiSourceCount > 0 && missing > 0) {
-      const sourceResult = await sourceLeadsWithOrigami(user, campaign, {
-        count: origamiSourceCount,
-        query: body.origami_source_query,
-      }).catch((error) => ({ started: false, status: "failed", reason: error.message }));
-      origamiSourced = Number(sourceResult?.saved || 0);
-      origamiSourceStatus = sourceResult?.status || (sourceResult?.started ? "started" : "not_started");
-      origamiSourceReason = sourceResult?.reason || "";
-    }
 
     for (let index = 0; index < searchBatches && missing > 0; index += 1) {
       const templateKey = templateKeys[index % templateKeys.length] || "investor:usa:vcs";
@@ -2794,15 +2724,6 @@ async function prepareCampaignWarehouse(user, body = {}) {
       if (enriched?.contacts?.email) revealed += 1;
     }
 
-    const analyzeCandidates = await warehouseAnalyzeCandidates(campaign, analyzeLimit * 3 || 25);
-    for (const candidate of analyzeCandidates) {
-      if (analyzed >= analyzeLimit) break;
-      if (candidate.origami_status === "completed") continue;
-      await analyzeOpportunity(candidate.id, user).catch(() => null);
-      analyzed += 1;
-      if (candidate.contacts?.email) analyzedWithEmail += 1;
-    }
-
     const afterAnalysis = await campaignRecipientSummary(campaign.id);
     const queueMissing = Math.max(0, targetQueue - Number(afterAnalysis.queued || 0) - Number(afterAnalysis.sent || 0));
     if (queueMissing > 0) {
@@ -2815,16 +2736,16 @@ async function prepareCampaignWarehouse(user, body = {}) {
       target_queue: targetQueue,
       source_mix: sourceMix,
       apollo_target: apolloSourceCount,
-      origami_target: origamiSourceCount,
+      origami_target: 0,
       queue_batch: queueBatch,
       searches,
-      origami_sourced: origamiSourced,
-      origami_source_status: origamiSourceStatus,
-      origami_source_reason: origamiSourceReason,
-      origami_refreshed: refreshedOrigami.reduce((sum, item) => sum + Number(item.saved || 0), 0),
+      origami_sourced: 0,
+      origami_source_status: "disabled",
+      origami_source_reason: "Origami desactivado: Apollo es la fuente unica de leads.",
+      origami_refreshed: 0,
       revealed,
-      analyzed,
-      analyzed_with_email: analyzedWithEmail,
+      analyzed: 0,
+      analyzed_with_email: 0,
       queued_added: queued,
       before,
       after,
@@ -2982,22 +2903,6 @@ async function processCampaign(user, body) {
   let followupsSent = 0;
   for (const recipient of recipients || []) {
     const opportunity = recipient.opportunities || {};
-    const origamiApproval = origamiCampaignApproval(opportunity);
-    if (!origamiApproval.approved) {
-      await updateRows(
-        "email_campaign_recipients",
-        {
-          status: "skipped",
-          reputation_status: "blocked",
-          reputation_issues: origamiApproval.issues,
-          last_error: origamiApproval.issues.join(" "),
-          updated_at: new Date().toISOString(),
-        },
-        `id=eq.${encodeURIComponent(recipient.id)}`
-      );
-      failed += 1;
-      continue;
-    }
     const templateData = { opportunity, contact: opportunity.contacts, company: opportunity.companies, variant_seed: `${campaign.id}:${recipient.id}` };
     const subject = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "subject_template"), templateData);
     const text = renderTemplate(personalizedCampaignTemplate(campaign, templateData, "body_template"), templateData);
@@ -3355,7 +3260,7 @@ function campaignManagerRecommendations({ campaigns, warmups, totalCounts, recen
   if (recentTotals.replied > 0) recommendations.push(`Hay ${recentTotals.replied} respuesta(s) nuevas en 24h. Prioridad: revisar inbox y mover interesados a Kanban.`);
   if (recentTotals.sent === 0 && activeCampaigns.length) recommendations.push("No hubo envios en 24h aunque hay campanas activas. Revisar inventario aprobado, cupo diario o fecha de inicio.");
   if (investorInventory && Number(investorInventory.available_for_campaign || 0) < 25) {
-    recommendations.push(`Inventario inversionista apto bajo: ${investorInventory.available_for_campaign}. Necesita mas Apollo + Origami antes de escalar.`);
+    recommendations.push(`Inventario inversionista apto bajo: ${investorInventory.available_for_campaign}. Necesita mas busquedas Apollo y revelado de emails antes de escalar.`);
   }
   for (const warmup of warmups || []) {
     if (warmup.remaining_today <= 0) recommendations.push(`${warmup.domain}: cupo diario agotado. No se enviara mas desde ese dominio hoy.`);
@@ -3441,7 +3346,7 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
     "Inventario para campanas",
     ...(inventory?.by_type || []).map(
       (row) =>
-        `- ${row.label || row.type}: ${row.available_for_campaign || 0} aptas, ${row.with_email || 0} con email, ${row.origami_pending || 0} pendientes Origami, ${row.origami_rejected || 0} no aptas`
+        `- ${row.label || row.type}: ${row.available_for_campaign || 0} listas, ${row.with_email || 0} con email, ${row.blocked || 0} bloqueadas/no contactar`
     ),
     ...(inventory?.by_region || []).map(
       (row) =>
@@ -3636,8 +3541,8 @@ module.exports = async function handler(req, res) {
       }
       res.status(200).json(await prepareCampaignWarehouse(systemCampaignUser(), {
         target_queue: 500,
-        source_mix: "origami_primary",
-        origami_source_count: 500,
+        source_mix: "apollo",
+        origami_source_count: 0,
         apollo_source_count: 500,
         reveal_limit: 25,
         analyze_limit: 50,

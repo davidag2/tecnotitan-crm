@@ -210,6 +210,8 @@ async function analyzeCompany(company, opportunities, user) {
 module.exports = async function handler(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
+  res.status(410).json({ error: "Origami esta desactivado. Apollo es la fuente unica de leads." });
+  return;
 
   try {
     if (req.method !== "POST") {
