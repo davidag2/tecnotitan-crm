@@ -2729,7 +2729,8 @@ async function prepareCampaignWarehouse(user, body = {}) {
 
   for (const campaign of campaigns) {
     const before = await campaignRecipientSummary(campaign.id);
-    const missing = Math.max(0, targetQueue - Number(before.queued || 0) - Number(before.sent || 0));
+    const effectiveTargetQueue = Math.min(targetQueue, Number(campaign.max_recipients || targetQueue));
+    const missing = Math.max(0, effectiveTargetQueue - Number(before.queued || 0) - Number(before.sent || 0));
     let searches = 0;
     let revealed = 0;
     let queued = 0;
@@ -2752,7 +2753,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
     }
 
     const afterAnalysis = await campaignRecipientSummary(campaign.id);
-    const queueMissing = Math.max(0, targetQueue - Number(afterAnalysis.queued || 0) - Number(afterAnalysis.sent || 0));
+    const queueMissing = Math.max(0, effectiveTargetQueue - Number(afterAnalysis.queued || 0) - Number(afterAnalysis.sent || 0));
     if (queueMissing > 0) {
       queued = await addCampaignRecipients(user, campaign, Math.min(queueBatch, queueMissing), campaign.start_at ? new Date(campaign.start_at) : new Date()).catch(() => 0);
     }
@@ -2760,7 +2761,7 @@ async function prepareCampaignWarehouse(user, body = {}) {
     results.push({
       campaign_id: campaign.id,
       name: campaign.name,
-      target_queue: targetQueue,
+      target_queue: effectiveTargetQueue,
       source_mix: sourceMix,
       apollo_target: apolloSourceCount,
       origami_target: 0,
