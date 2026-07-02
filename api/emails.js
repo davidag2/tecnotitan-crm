@@ -1488,6 +1488,9 @@ function preflightIssue(level, label, detail, metric = null) {
 function minimumPreflightQueue(campaign = {}) {
   const dailyLimit = Number(campaign.daily_limit || 100);
   const maxRecipients = Number(campaign.max_recipients || 100);
+  if (String(campaign.name || "").startsWith(DAILY_QUOTA_PREFIX)) {
+    return Math.max(1, Math.min(5, dailyLimit, maxRecipients));
+  }
   return Math.max(25, Math.min(100, dailyLimit, Math.ceil(maxRecipients * 0.1)));
 }
 
@@ -2825,11 +2828,6 @@ async function ensureDailyQuotaCampaign(user, spec, dateKey) {
     if (existing.status !== "active") {
       await updateRows("email_campaigns", { status: "active", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(existing.id)}`);
     }
-    const counts = await campaignCounts(existing.id);
-    const missing = Math.max(0, 50 - Number(counts.queued || 0) - Number(counts.sent || 0));
-    if (missing > 0) {
-      await addCampaignRecipients(user, { ...existing, status: "active" }, missing, parseScheduleDate(localDateTimeIso(dateKey, 7), "America/Bogota"));
-    }
     return { ...existing, status: "active", counts: await campaignCounts(existing.id), created: false, name };
   }
 
@@ -2856,6 +2854,7 @@ async function ensureDailyQuotaCampaign(user, spec, dateKey) {
     body_template: template.body,
     followup_enabled: true,
     attach_investor_deck: false,
+    skip_initial_queue: true,
   });
   return { ...campaign, created: true, name };
 }
@@ -2945,7 +2944,9 @@ async function createCampaign(user, body) {
     status: "active",
   });
 
-  await addCampaignRecipients(user, campaign, desiredQueue, startAt || new Date());
+  if (!body.skip_initial_queue) {
+    await addCampaignRecipients(user, campaign, desiredQueue, startAt || new Date());
+  }
 
   return { ...campaign, counts: await campaignCounts(campaign.id) };
 }
@@ -2986,7 +2987,8 @@ async function processCampaign(user, body) {
   const remainingToQueue = campaign.max_recipients ? Math.max(0, campaign.max_recipients - queuedAndSent) : 0;
   const minReserve = minimumPreflightQueue(campaign);
   if (remainingToQueue > 0 && (counts.queued || 0) < Math.max(minReserve, campaign.batch_size || 1)) {
-    await addCampaignRecipients(user, campaign, Math.min(50, remainingToQueue), nowDate);
+    const queueBatch = String(campaign.name || "").startsWith(DAILY_QUOTA_PREFIX) ? 10 : 50;
+    await addCampaignRecipients(user, campaign, Math.min(queueBatch, remainingToQueue), nowDate);
     counts = await campaignCounts(campaign.id);
   }
   const reserve = await ensureCampaignReserve(user, campaign, counts, nowDate);
