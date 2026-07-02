@@ -191,6 +191,10 @@ const BOUNCE_PAUSE_RATE = 0.05;
 const DAILY_QUOTA_START_DATE = "2026-07-03";
 const DAILY_QUOTA_PREFIX = "Tecnotitan Daily Quota";
 
+function isDailyQuotaCampaign(campaign) {
+  return String(campaign?.name || "").startsWith(DAILY_QUOTA_PREFIX);
+}
+
 const CAMPAIGN_SEGMENTS = {
   all_investors: {
     key: "all_investors",
@@ -3401,7 +3405,7 @@ function campaignManagerRecommendations({ campaigns, warmups, totalCounts, recen
   return recommendations.length ? recommendations : ["Sistema sin alertas criticas. Mantener monitoreo diario."];
 }
 
-function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso, inventory }) {
+function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso, inventory, scopeLabel = "campanas" }) {
   const recentTotals = campaigns.reduce((totals, campaign) => {
     const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
     for (const key of Object.keys(totals)) totals[key] += Number(recent[key] || 0);
@@ -3432,7 +3436,7 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
   const recentBounceRate = percent(recentTotals.bounced, recentTotals.sent + recentTotals.followups_sent);
   const recommendations = campaignManagerRecommendations({ campaigns, warmups, totalCounts, recentTotals, inventory });
   const lines = [
-    `Reporte diario de campanas Tecnotitan`,
+    `Reporte diario de ${scopeLabel} Tecnotitan`,
     `Fecha de envio: ${campaignReportDate()}`,
     `Ventana analizada: ultimas 24 horas desde ${new Date(sinceIso).toLocaleString("es-CO", { timeZone: "America/Bogota" })}`,
     "",
@@ -3461,7 +3465,7 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
     `- Quejas spam: ${recentTotals.complained}`,
     `- Creditos Apollo usados: ${apolloCredits}`,
     "",
-    "Acumulado total de campanas",
+    `Acumulado total de ${scopeLabel}`,
     `- Campanas totales: ${campaigns.length}`,
     `- En cola: ${totalCounts.queued}`,
     `- Enviados: ${totalCounts.sent}`,
@@ -3472,19 +3476,6 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
     `- Rebotes: ${totalCounts.bounced}`,
     `- Fallidos/errores: ${totalCounts.failed}`,
     `- Bloqueados por reputacion/no contactar: ${totalCounts.blocked}`,
-    "",
-    "Calentamiento por remitente",
-    ...warmups.map((warmup) => `- ${warmup.domain}: etapa ${warmup.stage}, limite ${warmup.daily_limit}/dia, usados hoy ${warmup.sent_today}, restantes ${warmup.remaining_today}`),
-    "",
-    "Inventario para campanas",
-    ...(inventory?.by_type || []).map(
-      (row) =>
-        `- ${row.label || row.type}: ${row.available_for_campaign || 0} listas, ${row.with_email || 0} con email, ${row.blocked || 0} bloqueadas/no contactar`
-    ),
-    ...(inventory?.by_region || []).map(
-      (row) =>
-        `- Region ${row.label || row.region}: ${row.available_for_campaign || 0} aptas, cobertura email ${row.email_coverage_pct || 0}%, estado ${row.status}`
-    ),
     "",
     "Detalle por campana",
   ];
@@ -3512,21 +3503,30 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
 async function sendDailyCampaignReport() {
   const user = systemCampaignUser();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const campaigns = await listCampaigns(user);
-  const warmups = await listWarmups(user);
-  const [{ payload: recentRecipients }, { payload: apolloLogs }, inventory] = await Promise.all([
+  const allCampaigns = await listCampaigns(user);
+  const campaigns = allCampaigns.filter(isDailyQuotaCampaign);
+  const senderKeys = new Set(campaigns.map((campaign) => campaign.sender_key));
+  const warmups = (await listWarmups(user)).filter((warmup) => senderKeys.has(warmup.sender_key));
+  const [{ payload: recentRecipients }, { payload: apolloLogs }] = await Promise.all([
     supabaseFetch(
       `/email_campaign_recipients?select=campaign_id,status,sent_at,last_followup_sent_at,delivered_at,opened_at,clicked_at,bounced_at,failed_at,complained_at,reply_received_at,updated_at&updated_at=gte.${encodeURIComponent(since)}&limit=10000`
     ),
-    supabaseFetch(`/apollo_sync_logs?select=operation,credits_used,created_at&created_at=gte.${encodeURIComponent(since)}&limit=10000`),
-    leadInventory(user).catch(() => null),
+    supabaseFetch(`/apollo_sync_logs?select=operation,credits_used,created_at&operation=eq.campaign_email_reveal&created_at=gte.${encodeURIComponent(since)}&limit=10000`),
   ]);
   const recentByCampaign = countRecentCampaignActivity(recentRecipients || [], since);
-  const text = buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs: apolloLogs || [], sinceIso: since, inventory });
+  const text = buildCampaignReport({
+    campaigns,
+    warmups,
+    recentByCampaign,
+    apolloLogs: apolloLogs || [],
+    sinceIso: since,
+    inventory: null,
+    scopeLabel: "nueva campana diaria Apollo 50 Investors + 50 Consultoria",
+  });
   const message = await sendEmail(user, {
     sender_key: "consulting",
     to: "info@tecnotitan.com",
-    subject: `Reporte diario de campanas Tecnotitan - ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`,
+    subject: `Reporte diario nueva campana Tecnotitan - ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`,
     text,
     include_unsubscribe: false,
   });
