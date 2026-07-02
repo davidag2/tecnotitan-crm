@@ -13,7 +13,8 @@ module.exports = async function handler(req, res) {
     resendSendersConfigured: Boolean(process.env.RESEND_FROM_CONSULTING || process.env.RESEND_FROM_INVESTORS),
     resendWebhookConfigured: Boolean(process.env.RESEND_WEBHOOK_TOKEN),
     loginConfigured: Boolean(
-      process.env.CRM_USERS_JSON || (process.env.CRM_USERNAME && process.env.CRM_PASSWORD_HASH && process.env.CRM_SESSION_SECRET)
+      process.env.CRM_SESSION_SECRET &&
+        (process.env.CRM_LOGIN_PIN || process.env.CRM_PIN || process.env.CRM_USERS_JSON || process.env.CRM_PASSWORD_HASH)
     ),
   });
 };

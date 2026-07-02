@@ -20,11 +20,10 @@
         </div>
         <div>
           <h1>Tecnotitan Marketing Super App</h1>
-          <p>Ingresa con tu usuario autorizado para gestionar leads y oportunidades.</p>
+          <p>Ingresa el PIN autorizado para gestionar leads, campanas y oportunidades.</p>
         </div>
         <div class="login-form">
-          <input id="username-input" type="text" autocomplete="username" placeholder="Usuario">
-          <input id="password-input" type="password" autocomplete="current-password" placeholder="Contrasena">
+          <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="PIN de 6 digitos">
           <button id="login-button" type="button">Entrar</button>
         </div>
         <p class="login-status" id="login-status">Sistema privado de Tecnotitan.</p>

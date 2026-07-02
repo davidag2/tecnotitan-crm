@@ -1,4 +1,4 @@
-const { createSession, verifyCredentials } = require("./_auth");
+const { createSession, verifyCredentials, verifyPin } = require("./_auth");
 const { readJsonBody } = require("./_request");
 
 module.exports = async function handler(req, res) {
@@ -8,10 +8,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { username, password } = await readJsonBody(req);
-    const user = await verifyCredentials(username, password);
+    const { username, password, pin } = await readJsonBody(req);
+    const user = pin ? verifyPin(pin) : await verifyCredentials(username, password);
     if (!user) {
-      res.status(401).json({ error: "Usuario o contrasena incorrectos." });
+      res.status(401).json({ error: pin ? "PIN incorrecto." : "Usuario o contrasena incorrectos." });
       return;
     }
 

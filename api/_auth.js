@@ -109,6 +109,25 @@ async function verifyCredentials(username, password) {
   return verifyPassword(password, user.password_hash) ? publicUser(user) : null;
 }
 
+function configuredLoginPin() {
+  return String(process.env.CRM_LOGIN_PIN || process.env.CRM_PIN || "224477").trim();
+}
+
+function verifyPin(pin) {
+  const submittedPin = String(pin || "").trim();
+  const expectedPin = configuredLoginPin();
+  if (!/^\d{6}$/.test(submittedPin) || !/^\d{6}$/.test(expectedPin)) return null;
+  if (!timingSafeEqual(submittedPin, expectedPin)) return null;
+
+  const configuredAdmin = configuredUsers().find((item) => item.role === "admin") || {};
+  return {
+    username: configuredAdmin.username || process.env.CRM_USERNAME || "david",
+    name: configuredAdmin.name || "David Arias",
+    email: configuredAdmin.email || "david@tecnotitan.com",
+    role: "admin",
+  };
+}
+
 function requireUser(req, res) {
   const token = tokenFromRequest(req);
   const user = verifySession(token);
@@ -141,4 +160,4 @@ function requireAdmin(req, res) {
   return user;
 }
 
-module.exports = { createSession, requireAdmin, requireUser, verifyCredentials };
+module.exports = { createSession, requireAdmin, requireUser, verifyCredentials, verifyPin };

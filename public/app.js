@@ -163,8 +163,7 @@ const elements = {
   newUserPassword: document.querySelector("#new-user-password"),
   newUserRole: document.querySelector("#new-user-role"),
   createUser: document.querySelector("#create-user"),
-  usernameInput: document.querySelector("#username-input"),
-  passwordInput: document.querySelector("#password-input"),
+  pinInput: document.querySelector("#pin-input"),
   loginButton: document.querySelector("#login-button"),
   logoutButton: document.querySelector("#logout-button"),
   sessionUser: document.querySelector("#session-user"),
@@ -5220,19 +5219,22 @@ async function enrichLead(opportunityId, button) {
 async function login() {
   elements.loginButton.disabled = true;
   try {
+    const pin = elements.pinInput.value.trim();
+    if (!/^\d{6}$/.test(pin)) {
+      setLoginStatus("Ingresa un PIN de 6 digitos.", "warning");
+      return;
+    }
     const payload = await api("/api/login", {
       method: "POST",
       body: JSON.stringify({
-        username: elements.usernameInput.value.trim(),
-        password: elements.passwordInput.value,
+        pin,
       }),
       headers: { Authorization: "" },
     });
     state.token = payload.token;
     state.currentUser = payload.user;
     sessionStorage.setItem("tecnotitan_crm_session", state.token);
-    elements.passwordInput.value = "";
-    elements.usernameInput.value = "";
+    elements.pinInput.value = "";
     showApp();
     setStatus("Sesion iniciada.", "ok");
     await loadPrivateData();
@@ -5311,9 +5313,11 @@ function logout() {
 }
 
 localStorage.removeItem("tecnotitan_crm_username");
-elements.usernameInput.value = "";
 elements.loginButton.addEventListener("click", login);
-elements.passwordInput.addEventListener("keydown", (event) => {
+elements.pinInput.addEventListener("input", () => {
+  elements.pinInput.value = elements.pinInput.value.replace(/\D/g, "").slice(0, 6);
+});
+elements.pinInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") login();
 });
 elements.logoutButton.addEventListener("click", logout);
