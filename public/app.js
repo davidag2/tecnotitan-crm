@@ -470,7 +470,7 @@ function renderSessionUser() {
     return;
   }
 
-  elements.sessionUser.textContent = `${user.name || user.username} · ${roleLabel(user.role)}`;
+  elements.sessionUser.textContent = `${user.name || user.username} Â· ${roleLabel(user.role)}`;
 }
 
 function renderMetrics(data) {
@@ -1394,7 +1394,7 @@ function renderFollowupList(container, rows) {
         <button class="followup-row" type="button" data-open-detail="${row.id}">
           <strong>${contact.full_name || "Contacto sin nombre"}</strong>
           <span>${company.name || "Empresa no disponible"}</span>
-          <small>${row.next_follow_up_at} · ${row.next_follow_up_type || "Seguimiento"}</small>
+          <small>${row.next_follow_up_at} Â· ${row.next_follow_up_type || "Seguimiento"}</small>
         </button>
       `;
     })
@@ -1639,8 +1639,8 @@ function renderUsers() {
         <article class="user-row">
           <div>
             <strong>${user.name}</strong>
-            <span>${user.username || "sin usuario"} · ${user.email}</span>
-            <small>${roleLabel(user.role)} · ${user.is_active ? "Activo" : "Inactivo"}${userWorkloadSummary(user.id)}</small>
+            <span>${user.username || "sin usuario"} Â· ${user.email}</span>
+            <small>${roleLabel(user.role)} Â· ${user.is_active ? "Activo" : "Inactivo"}${userWorkloadSummary(user.id)}</small>
           </div>
           <div class="user-actions">
             <select data-user-role="${user.id}">
@@ -1687,7 +1687,7 @@ function renderTemplates() {
         <button class="template ${template.lead_type === "investor" ? "investor" : ""} ${template.key === state.selectedTemplate ? "selected" : ""}" data-key="${template.key}">
           <strong>${template.name}</strong>
           <span>${template.description}</span>
-          <small>${template.lead_type} · ${template.target_region}</small>
+          <small>${template.lead_type} Â· ${template.target_region}</small>
         </button>
       `
     )
@@ -2034,6 +2034,7 @@ function emailEventLabel(eventType) {
     complained: "Queja spam",
     suppressed: "Suprimido",
     received: "Respuesta",
+    automatic_reply: "Respuesta automatica",
   };
   return labels[eventType] || eventType || "Sin tracking";
 }
@@ -3164,7 +3165,7 @@ function renderLeads(leads) {
             <span>${contact.title || "Cargo no disponible"}</span>
             <span class="cold-email-badge ${emailFit}">${coldEmailFitLabel(emailFit)}</span>
             <span class="channel-badge ${channel}">${recommendedChannelLabel(channel)}</span>
-            <small>${company.name || "Empresa no disponible"} · ${contact.country || company.country || "Sin pais"}</small>
+            <small>${company.name || "Empresa no disponible"} Â· ${contact.country || company.country || "Sin pais"}</small>
             <div class="lead-actions admin-only">
               <select data-assign="${lead.id}">
                 ${assignmentOptions(lead.owner_user_id)}
@@ -3937,7 +3938,7 @@ function renderLeadDetail(detail) {
     (detailContactState.apolloHasDirectPhone ? "Disponible en Apollo, solicitar telefono" : "");
 
   elements.detailTitle.textContent = contact.full_name || "Lead sin nombre";
-  elements.detailSubtitle.textContent = `${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} · ${opportunity.target_region}`;
+  elements.detailSubtitle.textContent = `${opportunity.lead_type === "investor" ? "Inversionista" : "Consultoria"} Â· ${opportunity.target_region}`;
   elements.detailContact.innerHTML = [
     line("Cargo", contact.title),
     line("Senioridad", contact.seniority),
@@ -3990,7 +3991,7 @@ function renderLeadDetail(detail) {
           (note) => `
             <article class="note-row">
               <p>${note.body}</p>
-              <small>${note.users?.name || "Usuario"} · ${new Date(note.created_at).toLocaleString("es-CO")}</small>
+              <small>${note.users?.name || "Usuario"} Â· ${new Date(note.created_at).toLocaleString("es-CO")}</small>
             </article>
           `
         )
@@ -4001,8 +4002,8 @@ function renderLeadDetail(detail) {
         .map(
           (event) => `
             <article class="note-row">
-              <p>${event.from_status || "inicio"} → ${event.to_status}</p>
-              <small>${event.users?.name || "Usuario"} · ${new Date(event.changed_at).toLocaleString("es-CO")}</small>
+              <p>${event.from_status || "inicio"} â†’ ${event.to_status}</p>
+              <small>${event.users?.name || "Usuario"} Â· ${new Date(event.changed_at).toLocaleString("es-CO")}</small>
             </article>
           `
         )
@@ -4014,7 +4015,7 @@ function renderLeadDetail(detail) {
           (activity) => `
             <article class="note-row">
               <p>${activity.subject || activity.activity_type}</p>
-              <small>${activity.users?.name || "Usuario"} Â· ${new Date(activity.activity_at).toLocaleString("es-CO")}</small>
+              <small>${activity.users?.name || "Usuario"} Ã‚Â· ${new Date(activity.activity_at).toLocaleString("es-CO")}</small>
             </article>
           `
         )
@@ -5424,3 +5425,4 @@ loadPublicData()
     showLogin();
     setLoginStatus(error.message, "warning");
   });
+
