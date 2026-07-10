@@ -191,7 +191,16 @@ const BOUNCE_PAUSE_RATE = 0.05;
 const DAILY_QUOTA_START_DATE = "2026-07-03";
 const DAILY_QUOTA_PREFIX = "Tecnotitan Daily Quota";
 
+function dailyQuotaCampaignName(label) {
+  return `${DAILY_QUOTA_PREFIX} - ${label}`;
+}
+
 function isDailyQuotaCampaign(campaign) {
+  const name = String(campaign?.name || "");
+  return name === dailyQuotaCampaignName("Investors") || name === dailyQuotaCampaignName("Consultoria");
+}
+
+function isDailyQuotaCampaignFamily(campaign) {
   return String(campaign?.name || "").startsWith(DAILY_QUOTA_PREFIX);
 }
 
@@ -283,7 +292,7 @@ function subjectLooksNatural(subject) {
   const value = String(subject || "").trim();
   if (value.length < 6 || value.length > 95) return false;
   if (/[!]{2,}/.test(value)) return false;
-  if (/[A-ZÁÉÍÓÚÑ]{10,}/.test(value)) return false;
+  if (/[A-ZÃÃ‰ÃÃ“ÃšÃ‘]{10,}/.test(value)) return false;
   const spamWords = /\b(gratis|urgente|oferta|promocion|compra ahora|gana dinero|garantizado)\b/i;
   return !spamWords.test(value);
 }
@@ -306,10 +315,10 @@ function personalizationSignals(subject, text, data) {
 
 function reputationIssues({ subject, text, sender, senderKey, opportunity, contact, company, duplicateFingerprint }) {
   const issues = [];
-  if (!subjectLooksNatural(subject)) issues.push("Asunto poco natural o con señales de spam.");
+  if (!subjectLooksNatural(subject)) issues.push("Asunto poco natural o con seÃ±ales de spam.");
   if (String(text || "").trim().length < 220) issues.push("Texto demasiado corto para prospeccion personalizada.");
   if (personalizationSignals(subject, text, { opportunity, contact, company }) < 2) {
-    issues.push("Faltan señales de personalizacion reales.");
+    issues.push("Faltan seÃ±ales de personalizacion reales.");
   }
   if (linkCount(text) > 1) issues.push("Demasiados enlaces en el cuerpo.");
   if (!hasClearSignature(text)) issues.push("Falta firma clara con David Arias y Tecnotitan.");
@@ -676,9 +685,8 @@ async function storeTrackingEvent(req, event) {
 }
 
 function todayStartIso() {
-  const now = new Date();
-  now.setUTCHours(0, 0, 0, 0);
-  return now.toISOString();
+  const [year, month, day] = localDateKey(new Date(), "America/Bogota").split("-").map(Number);
+  return zonedTimeToUtc({ year, month, day, hour: 0, minute: 0 }, "America/Bogota").toISOString();
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -704,7 +712,7 @@ const COUNTRY_TIME_ZONES = {
   "estados unidos": "America/New_York",
   spain: "Europe/Madrid",
   espana: "Europe/Madrid",
-  españa: "Europe/Madrid",
+  espaÃ±a: "Europe/Madrid",
   france: "Europe/Paris",
   germany: "Europe/Berlin",
   italy: "Europe/Rome",
@@ -1121,7 +1129,7 @@ function classifyInboundReply(text, leadType) {
       followup: false,
     };
   }
-  if (/\b(meeting|call|calendar|calendly|schedule|zoom|teams|meet|reunion|reunión|llamada|agenda|agendar|conversar)\b/i.test(value)) {
+  if (/\b(meeting|call|calendar|calendly|schedule|zoom|teams|meet|reunion|reuniÃ³n|llamada|agenda|agendar|conversar)\b/i.test(value)) {
     return {
       task: "Agendar reunion",
       pipeline_status: "reunion_agendada",
@@ -1130,7 +1138,7 @@ function classifyInboundReply(text, leadType) {
       followup: true,
     };
   }
-  if (/\b(deck|pitch deck|investor deck|send.*deck|send.*info|presentation|presentacion|presentación|brochure|more information|mas informacion|más información)\b/i.test(value)) {
+  if (/\b(deck|pitch deck|investor deck|send.*deck|send.*info|presentation|presentacion|presentaciÃ³n|brochure|more information|mas informacion|mÃ¡s informaciÃ³n)\b/i.test(value)) {
     return {
       task: leadType === "investor" ? "Enviar deck" : "Responder con informacion",
       pipeline_status: "calificado",
@@ -1139,7 +1147,7 @@ function classifyInboundReply(text, leadType) {
       followup: true,
     };
   }
-  if (/\b(interested|interesting|tell me more|looks good|sounds good|open to|let's talk|lets talk|me interesa|interesado|interesante|cuentame|cuéntame|hablemos)\b/i.test(value)) {
+  if (/\b(interested|interesting|tell me more|looks good|sounds good|open to|let's talk|lets talk|me interesa|interesado|interesante|cuentame|cuÃ©ntame|hablemos)\b/i.test(value)) {
     return {
       task: "Responder interesado",
       pipeline_status: "calificado",
@@ -2733,7 +2741,9 @@ async function prepareCampaignWarehouse(user, body = {}) {
 
   for (const campaign of campaigns) {
     const before = await campaignRecipientSummary(campaign.id);
-    const effectiveTargetQueue = Math.min(targetQueue, Number(campaign.max_recipients || targetQueue));
+    const effectiveTargetQueue = isDailyQuotaCampaign(campaign)
+      ? Number(campaign.max_recipients || targetQueue)
+      : Math.min(targetQueue, Number(campaign.max_recipients || targetQueue));
     const missing = Math.max(0, effectiveTargetQueue - Number(before.queued || 0) - Number(before.sent || 0));
     let searches = 0;
     let revealed = 0;
@@ -2826,14 +2836,50 @@ async function findCampaignByName(name) {
   return payload?.[0] || null;
 }
 
+async function findReusableDailyQuotaCampaign(spec, permanentName) {
+  const permanent = await findCampaignByName(permanentName);
+  if (permanent) return permanent;
+
+  const { payload } = await supabaseFetch(
+    `/email_campaigns?select=*&campaign_type=eq.${encodeURIComponent(spec.type)}&sender_key=eq.${encodeURIComponent(spec.sender)}&order=created_at.desc&limit=100`
+  );
+  return (payload || []).find(isDailyQuotaCampaignFamily) || null;
+}
+
 async function ensureDailyQuotaCampaign(user, spec, dateKey) {
-  const name = `${DAILY_QUOTA_PREFIX} ${dateKey} - ${spec.label}`;
-  const existing = await findCampaignByName(name);
+  const name = dailyQuotaCampaignName(spec.label);
+  const existing = await findReusableDailyQuotaCampaign(spec, name);
   if (existing) {
-    if (existing.status !== "active") {
-      await updateRows("email_campaigns", { status: "active", updated_at: new Date().toISOString() }, `id=eq.${encodeURIComponent(existing.id)}`);
-    }
-    return { ...existing, status: "active", counts: await campaignCounts(existing.id), created: false, name };
+    const counts = await campaignCounts(existing.id);
+    const remainingToday = Math.max(0, 50 - Number(counts.sent_today || 0));
+    const queued = Number(counts.queued || 0);
+    const maxRecipients = Number(counts.sent || 0) + Math.max(queued, remainingToday);
+    const template = dailyQuotaTemplates(spec.type);
+    const startAt = parseScheduleDate(localDateTimeIso(dateKey, 7), "America/Bogota");
+    const endAt = parseScheduleDate(localDateTimeIso(dateKey, 23, 30), "America/Bogota");
+    const rows = await updateRows(
+      "email_campaigns",
+      {
+        name,
+        status: "active",
+        daily_limit: 50,
+        batch_size: 5,
+        min_delay_minutes: 5,
+        max_delay_minutes: 10,
+        max_recipients: maxRecipients,
+        start_at: startAt.toISOString(),
+        end_at: endAt.toISOString(),
+        schedule_timezone: "America/Bogota",
+        send_window_start_minutes: 7 * 60,
+        send_window_end_minutes: 17 * 60 + 45,
+        subject_template: template.subject,
+        body_template: template.body,
+        updated_at: new Date().toISOString(),
+      },
+      `id=eq.${encodeURIComponent(existing.id)}`
+    );
+    const campaign = rows[0] || { ...existing, name, status: "active", max_recipients: maxRecipients };
+    return { ...campaign, counts: await campaignCounts(existing.id), created: false, reused: true, name };
   }
 
   const template = dailyQuotaTemplates(spec.type);
@@ -2871,12 +2917,12 @@ async function ensureDailyQuotaCampaigns(user, options = {}) {
     { label: "Investors", type: "investor", sender: "investors", segment: "all_investors", region: "" },
     { label: "Consultoria", type: "consulting_client", sender: "consulting", segment: "consulting_latam", region: "latam" },
   ];
-  const keepNames = specs.map((spec) => `${DAILY_QUOTA_PREFIX} ${dateKey} - ${spec.label}`);
-  const archived = await archiveCampaignsExcept(user, keepNames);
   const campaigns = [];
   for (const spec of specs) {
     campaigns.push(await ensureDailyQuotaCampaign(user, spec, dateKey));
   }
+  const keepNames = specs.map((spec) => dailyQuotaCampaignName(spec.label));
+  const archived = await archiveCampaignsExcept(user, keepNames);
   return {
     ok: true,
     mode: "daily_quota_50_50",
@@ -3754,3 +3800,4 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: error.message });
   }
 };
+
