@@ -1,4 +1,5 @@
 const { requireUser } = require("./_auth");
+const { automaticReplyReason } = require("./_email-classification");
 const { emailStatus, resendFetch, senderFor } = require("./_resend");
 const { scoreLead } = require("./_scoring");
 const { insertRow, supabaseFetch, updateRows, upsertRow } = require("./_supabase");
@@ -1259,6 +1260,8 @@ async function storeInbound(event) {
   const { contact, opportunity, company_id: companyId } = await findLeadByEmail(fromEmail);
   const subject = full?.subject || meta.subject || "";
   const textBody = full?.text || htmlToText(full?.html) || "";
+  const automaticReply = automaticReplyReason({ subject, text: textBody, headers: full?.headers || meta.headers });
+  const receivedAt = full?.created_at || meta.created_at || event.created_at || new Date().toISOString();
   const thread = await findOrCreateThread({ opportunity, subject });
 
   const existing = meta.email_id
@@ -1273,6 +1276,8 @@ async function storeInbound(event) {
     company_id: companyId || null,
     direction: "inbound",
     status: "received",
+    last_event_type: automaticReply ? "automatic_reply" : "received",
+    last_event_at: receivedAt,
     provider_message_id: meta.email_id || full?.id || null,
     message_id: full?.message_id || meta.message_id || null,
     in_reply_to: headerText(full?.in_reply_to || meta.in_reply_to),
@@ -1285,12 +1290,12 @@ async function storeInbound(event) {
     text_body: textBody,
     html_body: full?.html || null,
     snippet: snippet(textBody || subject),
-    raw_payload: { event, email: full },
+    raw_payload: { event, email: full, classification: automaticReply || "human_reply" },
     attachments: full?.attachments || meta.attachments || [],
-    received_at: full?.created_at || meta.created_at || event.created_at || new Date().toISOString(),
+    received_at: receivedAt,
   });
   await touchThread(thread.id, subject);
-  const negativeReason = negativeReplyReason(textBody || subject);
+  const negativeReason = automaticReply ? "" : negativeReplyReason(textBody || subject);
   if (negativeReason) {
     await upsertExclusion({
       email: fromEmail,
@@ -1302,15 +1307,17 @@ async function storeInbound(event) {
       note: snippet(textBody || subject),
     });
   }
-  const replyAction = await applyInboundReplyAction({
-    opportunity,
-    contact,
-    companyId,
-    fromEmail,
-    text: textBody,
-    subject,
-  });
-  if (fromEmail) {
+  const replyAction = automaticReply
+    ? null
+    : await applyInboundReplyAction({
+        opportunity,
+        contact,
+        companyId,
+        fromEmail,
+        text: textBody,
+        subject,
+      });
+  if (fromEmail && !automaticReply) {
     await updateRows(
       "email_campaign_recipients",
       {
@@ -1327,11 +1334,11 @@ async function storeInbound(event) {
       contact_id: contact?.id || null,
       company_id: companyId || null,
       activity_type: "email_inbound",
-      subject: `Email recibido: ${subject || "(sin asunto)"}`,
+      subject: `${automaticReply ? "Respuesta automatica" : "Email recibido"}: ${subject || "(sin asunto)"}`,
       body: snippet(textBody || subject),
     });
   }
-  return { ...row, reply_action: replyAction };
+  return { ...row, reply_action: replyAction, automatic_reply: Boolean(automaticReply) };
 }
 
 async function storeSuppressionEvent(event) {
