@@ -204,6 +204,17 @@ function isDailyQuotaCampaignFamily(campaign) {
   return String(campaign?.name || "").startsWith(DAILY_QUOTA_PREFIX);
 }
 
+function currentDailyQuotaCampaigns(campaigns = []) {
+  return ["investors", "consulting"]
+    .map((senderKey) => {
+      const matches = campaigns.filter(
+        (campaign) => campaign.sender_key === senderKey && isDailyQuotaCampaignFamily(campaign)
+      );
+      return matches.find(isDailyQuotaCampaign) || matches[0] || null;
+    })
+    .filter(Boolean);
+}
+
 const CAMPAIGN_SEGMENTS = {
   all_investors: {
     key: "all_investors",
@@ -3546,11 +3557,66 @@ function buildCampaignReport({ campaigns, warmups, recentByCampaign, apolloLogs,
   return lines.join("\n");
 }
 
+function buildDailyQuotaReport({ campaigns, warmups, recentByCampaign, apolloLogs, sinceIso }) {
+  const recentTotals = campaigns.reduce((totals, campaign) => {
+    const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
+    for (const key of Object.keys(totals)) totals[key] += Number(recent[key] || 0);
+    return totals;
+  }, emptyRecentStats());
+  const apolloCredits = sumStats(apolloLogs, "credits_used");
+  const warmupBySender = new Map((warmups || []).map((warmup) => [warmup.sender_key, warmup]));
+  const totalSent = recentTotals.sent + recentTotals.followups_sent;
+  const lines = [
+    "Reporte diario Tecnotitan: campanas actuales",
+    `Fecha de envio: ${campaignReportDate()}`,
+    `Periodo: ultimas 24 horas desde ${new Date(sinceIso).toLocaleString("es-CO", { timeZone: "America/Bogota" })}`,
+    "",
+    "Resumen ejecutivo",
+    `- Campanas incluidas: ${campaigns.length} (Investors y Consultoria)`,
+    `- Correos enviados: ${totalSent}`,
+    `- Entregados: ${recentTotals.delivered}`,
+    `- Aperturas: ${recentTotals.opened}`,
+    `- Respuestas: ${recentTotals.replied}`,
+    `- Rebotes: ${recentTotals.bounced}`,
+    `- Errores: ${recentTotals.failed}`,
+    `- Creditos Apollo usados: ${apolloCredits}`,
+    `- Tasa de respuesta: ${percent(recentTotals.replied, totalSent)}%`,
+    `- Tasa de rebote: ${percent(recentTotals.bounced, totalSent)}%`,
+  ];
+
+  for (const campaign of campaigns) {
+    const counts = campaign.counts || {};
+    const recent = recentByCampaign.get(campaign.id) || emptyRecentStats();
+    const warmup = warmupBySender.get(campaign.sender_key);
+    const label = campaign.sender_key === "investors" ? "Investors" : "Consultoria";
+    const sentRecent = Number(recent.sent || 0) + Number(recent.followups_sent || 0);
+    lines.push(
+      "",
+      label,
+      `- Estado: ${campaign.status} | Enviados hoy: ${counts.sent_today || 0}/50 | En cola: ${counts.queued || 0}`,
+      `- Ultimas 24h: enviados ${sentRecent}, entregados ${recent.delivered}, aperturas ${recent.opened}, respuestas ${recent.replied}, rebotes ${recent.bounced}, errores ${recent.failed}`,
+      `- Tasas 24h: respuesta ${percent(recent.replied, sentRecent)}% | rebote ${percent(recent.bounced, sentRecent)}%`,
+      `- Proximo envio: ${counts.next_scheduled_at || "sin pendientes"} | Cupo restante del dominio: ${warmup?.remaining_today ?? "no disponible"}`
+    );
+  }
+
+  if (campaigns.length < 2) {
+    lines.push("", "Alerta: falta una de las dos campanas operativas. Revisar el cron daily_quota.");
+  } else if (totalSent === 0) {
+    lines.push("", "Alerta: no hubo envios en las ultimas 24 horas. Revisar cola, cupo del dominio y Apollo.");
+  } else if (percent(recentTotals.bounced, totalSent) >= 5) {
+    lines.push("", "Alerta: la tasa de rebote de las ultimas 24 horas es igual o superior al 5%.");
+  }
+
+  lines.push("", "Reporte generado automaticamente por Tecnotitan CRM.");
+  return lines.join("\n");
+}
+
 async function sendDailyCampaignReport() {
   const user = systemCampaignUser();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const allCampaigns = await listCampaigns(user);
-  const campaigns = allCampaigns.filter(isDailyQuotaCampaign);
+  const campaigns = currentDailyQuotaCampaigns(allCampaigns);
   const senderKeys = new Set(campaigns.map((campaign) => campaign.sender_key));
   const warmups = (await listWarmups(user)).filter((warmup) => senderKeys.has(warmup.sender_key));
   const [{ payload: recentRecipients }, { payload: apolloLogs }] = await Promise.all([
@@ -3560,14 +3626,12 @@ async function sendDailyCampaignReport() {
     supabaseFetch(`/apollo_sync_logs?select=operation,credits_used,created_at&operation=eq.campaign_email_reveal&created_at=gte.${encodeURIComponent(since)}&limit=10000`),
   ]);
   const recentByCampaign = countRecentCampaignActivity(recentRecipients || [], since);
-  const text = buildCampaignReport({
+  const text = buildDailyQuotaReport({
     campaigns,
     warmups,
     recentByCampaign,
     apolloLogs: apolloLogs || [],
     sinceIso: since,
-    inventory: null,
-    scopeLabel: "nueva campana diaria Apollo 50 Investors + 50 Consultoria",
   });
   const message = await sendEmail(user, {
     sender_key: "consulting",
