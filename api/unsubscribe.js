@@ -39,7 +39,6 @@ async function upsertUnsubscribe(email) {
   await updateRows(
     "email_campaign_recipients",
     {
-      reply_received_at: new Date().toISOString(),
       next_followup_at: null,
       suppressed_at: new Date().toISOString(),
       last_error: "Unsubscribed",
@@ -95,3 +94,4 @@ module.exports = async function handler(req, res) {
     res.status(500).send("No pudimos procesar la baja en este momento.");
   }
 };
+
