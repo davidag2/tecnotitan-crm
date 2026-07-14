@@ -724,7 +724,6 @@ const COUNTRY_TIME_ZONES = {
   "estados unidos": "America/New_York",
   spain: "Europe/Madrid",
   espana: "Europe/Madrid",
-  espaÃ±a: "Europe/Madrid",
   france: "Europe/Paris",
   germany: "Europe/Berlin",
   italy: "Europe/Rome",
